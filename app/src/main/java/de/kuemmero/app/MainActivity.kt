@@ -61,7 +61,7 @@ fun KuemmeroApp() {
                         Text("KÜMMERO")
                     }
                 )
-            }
+            },
             containerColor = Color(0xFFF1F8F3),
         ) { padding ->
 
