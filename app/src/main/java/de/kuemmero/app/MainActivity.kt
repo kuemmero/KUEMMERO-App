@@ -63,6 +63,28 @@ private fun erstelleBackup(context: Context): String {
         )
     }.toString(2)
 }
+private fun stelleBackupWiederHer(
+    context: Context,
+    backupText: String
+) {
+    val backup = JSONObject(backupText)
+
+    val prefs = context.getSharedPreferences(
+        PREFS_NAME,
+        Context.MODE_PRIVATE
+    )
+
+    prefs.edit()
+        .putString(
+            STUNDENSATZ_KEY,
+            backup.getString("stundensatz")
+        )
+        .putString(
+            AUFTRAEGE_KEY,
+            backup.getJSONArray("auftraege").toString()
+        )
+        .apply()
+}
 
 private fun speichereAuftraege(
     context: Context,
@@ -123,6 +145,25 @@ fun KuemmeroApp() {
     uri?.let {
         context.contentResolver.openOutputStream(it)?.use { output ->
             output.write(erstelleBackup(context).toByteArray())
+        }
+        val restoreLauncher = rememberLauncherForActivityResult(
+    contract = ActivityResultContracts.OpenDocument()
+) { uri ->
+    uri?.let {
+        context.contentResolver.openInputStream(it)?.use { input ->
+            val backupText = input.bufferedReader().use { reader ->
+                reader.readText()
+            }
+
+            stelleBackupWiederHer(context, backupText)
+
+            stundensatz =
+                context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+                    .getString(STUNDENSATZ_KEY, "42.00") ?: "42.00"
+
+            auftraege = ladeAuftraege(context)
+        }
+    }
         }
     }
     }
@@ -235,6 +276,18 @@ fun KuemmeroApp() {
         modifier = Modifier.fillMaxWidth()
     ) {
         Text("Daten sichern")
+    }
+                }
+                item {
+    Button(
+        onClick = {
+            restoreLauncher.launch(
+                arrayOf("application/json", "text/plain")
+            )
+        },
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Text("Daten wiederherstellen")
     }
                 }
 
