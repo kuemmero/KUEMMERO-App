@@ -17,6 +17,7 @@ data class Auftrag(
     val stunden: Double,
     val material: Double,
     val fahrt: Double
+    val stundensatz: Double
 )
 
 class MainActivity : ComponentActivity() {
@@ -39,16 +40,15 @@ fun KuemmeroApp() {
     var stunden by remember { mutableStateOf("") }
     var material by remember { mutableStateOf("") }
     var fahrt by remember { mutableStateOf("") }
-
-    var auftraege by remember {
-        mutableStateOf(listOf<Auftrag>())
+    var stundensatz by remember { mutableStateOf("42,00") }
+    var auftraege by remember {mutableStateOf(listOf<Auftrag>())
     }
 
     val arbeitsstunden = stunden.toDoubleOrNull() ?: 0.0
     val materialKosten = material.toDoubleOrNull() ?: 0.0
     val fahrtKosten = fahrt.toDoubleOrNull() ?: 0.0
 
-    val arbeitskosten = arbeitsstunden * 42.0
+    val arbeitskosten = arbeitsstunden * stundensatz.replace(",", ".").toDoubleOrNull() ?: 0.0
     val gesamt = arbeitskosten + materialKosten + fahrtKosten
 
     MaterialTheme {
@@ -123,7 +123,12 @@ fun KuemmeroApp() {
                 }
 
                 item {
-                    Text("Stundensatz: 42,00 €")
+                    OutlinedTextField(
+    value = stundensatz,
+    onValueChange = { stundensatz = it },
+    label = { Text("Stundensatz (€ / Stunde)") },
+    modifier = Modifier.fillMaxWidth()
+)
                 }
 
                 item {
@@ -144,7 +149,8 @@ fun KuemmeroApp() {
                                     leistung = leistung,
                                     stunden = arbeitsstunden,
                                     material = materialKosten,
-                                    fahrt = fahrtKosten
+                                    fahrt = fahrtKosten,
+                                    stundensatz = stundensatz.replace(",", ".").toDoubleOrNull() ?: 0.0
                                 )
 
                                 kunde = ""
@@ -190,7 +196,7 @@ fun KuemmeroApp() {
 
                             Text(
                                 "Gesamt: %.2f €".format(
-                                    auftrag.stunden * 42 +
+                                    auftrag.stunden * auftrag.stundensatz +
                                     auftrag.material +
                                     auftrag.fahrt
                                 )
