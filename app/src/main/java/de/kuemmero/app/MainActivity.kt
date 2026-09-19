@@ -146,7 +146,10 @@ fun KuemmeroApp() {
         context.contentResolver.openOutputStream(it)?.use { output ->
             output.write(erstelleBackup(context).toByteArray())
         }
-        val restoreLauncher = rememberLauncherForActivityResult(
+    }
+}
+
+val restoreLauncher = rememberLauncherForActivityResult(
     contract = ActivityResultContracts.OpenDocument()
 ) { uri ->
     uri?.let {
@@ -164,9 +167,7 @@ fun KuemmeroApp() {
             auftraege = ladeAuftraege(context)
         }
     }
-        }
-    }
-    }
+}
 
     val arbeitsstunden = stunden.replace(",-", "").replace(",", ".").toDoubleOrNull() ?: 0.0
     val fahrtKosten = fahrt.replace(",-", "").replace(",", ".").toDoubleOrNull() ?: 0.0
