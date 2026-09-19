@@ -94,6 +94,12 @@ fun KuemmeroApp() {
     var stunden by remember { mutableStateOf("") }
     var material by remember { mutableStateOf("") }
     var fahrt by remember { mutableStateOf("") }
+    var stundensatz by remember {
+    mutableStateOf(
+        context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            .getString(STUNDENSATZ_KEY, "42.00") ?: "42.00"
+    )
+    }
     var auftraege by remember { mutableStateOf(ladeAuftraege(context)) }
 
     val arbeitsstunden = stunden.replace(",-", "").replace(",", ".").toDoubleOrNull() ?: 0.0
