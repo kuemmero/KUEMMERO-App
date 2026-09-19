@@ -47,23 +47,6 @@ private fun ladeAuftraege(context: Context): List<Auftrag> {
 
 private const val STUNDENSATZ_KEY = "stundensatz"
 
-private fun ladeAuftraege(context: Context): List<Auftrag> {
-    val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-    val json = JSONArray(prefs.getString(AUFTRAEGE_KEY, "[]"))
-
-    return List(json.length()) { i ->
-        val obj = json.getJSONObject(i)
-
-        Auftrag(
-            kunde = obj.getString("kunde"),
-            leistung = obj.getString("leistung"),
-            stunden = obj.getDouble("stunden"),
-            material = obj.getDouble("material"),
-            fahrt = obj.getDouble("fahrt"),
-            stundensatz = obj.getDouble("stundensatz")
-        )
-    }
-}
 
 private fun speichereAuftraege(
     context: Context,
