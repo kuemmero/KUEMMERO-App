@@ -16,7 +16,7 @@ data class Auftrag(
     val leistung: String,
     val stunden: Double,
     val material: Double,
-    val fahrt: Double
+    val fahrt: Double,
     val stundensatz: Double
 )
 
