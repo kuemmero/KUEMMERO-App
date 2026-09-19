@@ -135,21 +135,23 @@ private fun erstelleAngebotPdf(
 canvas.drawText("KÜMMERO", 40f, 60f, paint)
 
 paint.textSize = 14f
-canvas.drawText("Haus & Alltag – wir kümmern uns.", 40f, 88f, paint)
-canvas.drawText("Hausmeisterservice & Seniorenbetreuung", 40f, 108f, paint)
-canvas.drawText("Markus Becker", 40f, 128f, paint)
-canvas.drawText("Königsberger Straße 16", 40f, 148f, paint)
-canvas.drawText("58675 Hemer", 40f, 168f, paint)
-canvas.drawText("Tel.: +49 176 16712509", 40f, 188f, paint)
-canvas.drawText("E-Mail: kuemmero@web.de", 40f, 208f, paint
+canvas.drawText("Haus & Alltag – wir kümmern uns.", 40f, 92f, paint)
+canvas.drawText("Hausmeisterservice & Seniorenbetreuung", 40f, 112f, paint)
+canvas.drawText("Markus Becker", 40f, 132f, paint)
+canvas.drawText("Königsberger Straße 16", 40f, 152f, paint)
+canvas.drawText("58675 Hemer", 40f, 172f, paint)
+canvas.drawText("Tel.: +49 176 16712509", 40f, 192f, paint)
+canvas.drawText("E-Mail: kuemmero@web.de", 40f, 212f, paint)
 
-    paint.textSize = 14f
-    canvas.drawText("Angebotsnummer: $angebotsnummer", 40f, 180f, paint)
-    canvas.drawText("Datum: $datum", 40f, 198f, paint)
-    canvas.drawText("Kunde: $kunde", 40f, 235f, paint)
+paint.textSize = 20f
+canvas.drawText("ANGEBOT", 40f, 250f, paint)
 
-    canvas.drawText("Leistung:", 40f, 275f, paint)
-    canvas.drawText(leistung, 40f, 298f, paint)
+paint.textSize = 14f
+canvas.drawText("Angebotsnummer: $angebotsnummer", 40f, 285f, paint)
+canvas.drawText("Datum: $datum", 40f, 305f, paint)
+canvas.drawText("Kunde: $kunde", 40f, 340f, paint)
+canvas.drawText("Leistung:", 40f, 380f, paint)
+canvas.drawText(leistung, 40f, 403f, paint)
 
     canvas.drawText(
         "Arbeitszeit: %.2f Std. × %.2f € = %.2f €"
