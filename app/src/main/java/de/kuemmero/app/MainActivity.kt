@@ -128,6 +128,8 @@ fun KuemmeroApp() {
     
     val context = LocalContext.current
     var kunde by remember { mutableStateOf("") }
+    var angebotsnummer by remember { mutableStateOf("") }
+    var datum by remember { mutableStateOf(java.text.SimpleDateFormat("dd.MM.yyyy", java.util.Locale.GERMANY).format(java.util.Date())) }
     var leistung by remember { mutableStateOf("") }
     var stunden by remember { mutableStateOf("") }
     var material by remember { mutableStateOf("") }
@@ -202,7 +204,23 @@ val restoreLauncher = rememberLauncherForActivityResult(
                         style = MaterialTheme.typography.titleMedium
                     )
                 }
+item {
+    OutlinedTextField(
+        value = angebotsnummer,
+        onValueChange = { angebotsnummer = it },
+        label = { Text("Angebotsnummer") },
+        modifier = Modifier.fillMaxWidth()
+    )
+}
 
+item {
+    OutlinedTextField(
+        value = datum,
+        onValueChange = { datum = it },
+        label = { Text("Datum") },
+        modifier = Modifier.fillMaxWidth()
+    )
+}
                 item {
                     OutlinedTextField(
                         value = kunde,
