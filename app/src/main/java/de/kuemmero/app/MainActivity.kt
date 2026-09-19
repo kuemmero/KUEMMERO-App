@@ -2,6 +2,9 @@ package de.kuemmero.app
 
 import android.os.Bundle
 import android.content.Context
+import android.content.Intent
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import org.json.JSONArray
 import org.json.JSONObject
 import androidx.activity.ComponentActivity
@@ -46,7 +49,20 @@ private fun ladeAuftraege(context: Context): List<Auftrag> {
 }
 
 private const val STUNDENSATZ_KEY = "stundensatz"
+private fun erstelleBackup(context: Context): String {
+    val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
 
+    return JSONObject().apply {
+        put(
+            "stundensatz",
+            prefs.getString(STUNDENSATZ_KEY, "42.00") ?: "42.00"
+        )
+        put(
+            "auftraege",
+            JSONArray(prefs.getString(AUFTRAEGE_KEY, "[]"))
+        )
+    }.toString(2)
+}
 
 private fun speichereAuftraege(
     context: Context,
@@ -101,6 +117,15 @@ fun KuemmeroApp() {
     )
     }
     var auftraege by remember { mutableStateOf(ladeAuftraege(context)) }
+    val backupLauncher = rememberLauncherForActivityResult(
+    contract = ActivityResultContracts.CreateDocument("application/json")
+) { uri ->
+    uri?.let {
+        context.contentResolver.openOutputStream(it)?.use { output ->
+            output.write(erstelleBackup(context).toByteArray())
+        }
+    }
+    }
 
     val arbeitsstunden = stunden.replace(",-", "").replace(",", ".").toDoubleOrNull() ?: 0.0
     val fahrtKosten = fahrt.replace(",-", "").replace(",", ".").toDoubleOrNull() ?: 0.0
@@ -202,6 +227,16 @@ fun KuemmeroApp() {
                         style = MaterialTheme.typography.headlineSmall
                     )
                 }
+                item {
+    Button(
+        onClick = {
+            backupLauncher.launch("kuemmero-backup.json")
+        },
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Text("Daten sichern")
+    }
+                }
 
                 item {
                     Button(
@@ -217,6 +252,7 @@ fun KuemmeroApp() {
                                     fahrt = fahrtKosten,
                                     stundensatz = stundensatz.replace(",", ".").toDoubleOrNull() ?: 0.0
                                 )
+                                speichereAuftraege(context, auftraege)
 
                                 kunde = ""
                                 leistung = ""
