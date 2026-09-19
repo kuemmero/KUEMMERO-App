@@ -253,7 +253,7 @@ val pdfLauncher = rememberLauncherForActivityResult(
             arbeitsstunden,
             materialKosten,
             fahrtKosten,
-stundensatz
+stundensatz.toDoubleOrNull() ?: 42.0
 )
 
         context.contentResolver.openOutputStream(it)?.use { output ->
