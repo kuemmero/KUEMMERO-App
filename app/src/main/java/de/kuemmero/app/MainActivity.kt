@@ -10,6 +10,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.graphics.Color
 
 data class Auftrag(
     val kunde: String,
@@ -61,6 +62,7 @@ fun KuemmeroApp() {
                     }
                 )
             }
+            containerColor = Color(0xFFF1F8F3),
         ) { padding ->
 
             LazyColumn(
