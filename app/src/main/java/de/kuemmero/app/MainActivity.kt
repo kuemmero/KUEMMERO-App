@@ -132,13 +132,16 @@ private fun erstelleAngebotPdf(
     val paint = Paint()
 
     paint.textSize = 28f
-    canvas.drawText("KÜMMERO", 40f, 60f, paint)
+canvas.drawText("KÜMMERO", 40f, 60f, paint)
 
-    paint.textSize = 16f
-    canvas.drawText("Haus & Alltag – wir kümmern uns.", 40f, 100f, paint)
-
-    paint.textSize = 20f
-    canvas.drawText("ANGEBOT", 40f, 140f, paint)
+paint.textSize = 14f
+canvas.drawText("Haus & Alltag – wir kümmern uns.", 40f, 88f, paint)
+canvas.drawText("Hausmeisterservice & Seniorenbetreuung", 40f, 108f, paint)
+canvas.drawText("Markus Becker", 40f, 128f, paint)
+canvas.drawText("Königsberger Straße 16", 40f, 148f, paint)
+canvas.drawText("58675 Hemer", 40f, 168f, paint)
+canvas.drawText("Tel.: +49 176 16712509", 40f, 188f, paint)
+canvas.drawText("E-Mail: kuemmero@web.de", 40f, 208f, paint
 
     paint.textSize = 14f
     canvas.drawText("Angebotsnummer: $angebotsnummer", 40f, 180f, paint)
