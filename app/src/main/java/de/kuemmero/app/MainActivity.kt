@@ -113,6 +113,67 @@ private fun speichereAuftraege(
         .apply()
 }
 
+private fun erstelleAngebotPdf(
+    context: Context,
+    angebotsnummer: String,
+    datum: String,
+    kunde: String,
+    leistung: String,
+    stunden: Double,
+    material: Double,
+    fahrt: Double,
+    stundensatz: Double
+): PdfDocument {
+    val pdf = PdfDocument()
+
+    val pageInfo = PdfDocument.PageInfo.Builder(595, 842, 1).create()
+    val page = pdf.startPage(pageInfo)
+    val canvas = page.canvas
+    val paint = Paint()
+
+    paint.textSize = 28f
+    canvas.drawText("KÜMMERO", 40f, 60f, paint)
+
+    paint.textSize = 16f
+    canvas.drawText("Haus & Alltag – wir kümmern uns.", 40f, 100f, paint)
+
+    paint.textSize = 20f
+    canvas.drawText("ANGEBOT", 40f, 140f, paint)
+
+    paint.textSize = 14f
+    canvas.drawText("Angebotsnummer: $angebotsnummer", 40f, 180f, paint)
+    canvas.drawText("Datum: $datum", 40f, 198f, paint)
+    canvas.drawText("Kunde: $kunde", 40f, 235f, paint)
+
+    canvas.drawText("Leistung:", 40f, 275f, paint)
+    canvas.drawText(leistung, 40f, 298f, paint)
+
+    canvas.drawText(
+        "Arbeitszeit: %.2f Std. × %.2f € = %.2f €"
+            .format(stunden, stundensatz, stunden * stundensatz),
+        40f, 345f, paint
+    )
+
+    canvas.drawText("Material: %.2f €".format(material), 40f, 375f, paint)
+    canvas.drawText("Fahrtkosten: %.2f €".format(fahrt), 40f, 405f, paint)
+
+    val gesamt = stunden * stundensatz + material + fahrt
+
+    paint.textSize = 20f
+    canvas.drawText(
+        "Gesamtsumme: %.2f €".format(gesamt),
+        40f, 460f, paint
+    )
+
+    paint.textSize = 12f
+    canvas.drawText(
+        "Vielen Dank für Ihr Vertrauen.",
+        40f, 520f, paint
+    )
+
+    pdf.finishPage(page)
+    return pdf
+}
 class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -192,7 +253,8 @@ val pdfLauncher = rememberLauncherForActivityResult(
             arbeitsstunden,
             materialKosten,
             fahrtKosten,
-            stundensatzWert
+stundensatz
+)
         )
 
         context.contentResolver.openOutputStream(it)?.use { output ->
