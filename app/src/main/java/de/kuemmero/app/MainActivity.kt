@@ -1,6 +1,9 @@
 package de.kuemmero.app
 
 import android.os.Bundle
+import android.content.Context
+import org.json.JSONArray
+import org.json.JSONObject
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.layout.*
@@ -11,6 +14,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 
 data class Auftrag(
     val kunde: String,
@@ -20,6 +24,71 @@ data class Auftrag(
     val fahrt: Double,
     val stundensatz: Double
 )
+private const val PREFS_NAME = "kuemmero_speicher"
+private const val AUFTRAEGE_KEY = "auftraege"
+
+private fun ladeAuftraege(context: Context): List<Auftrag> {
+    val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+    val json = JSONArray(prefs.getString(AUFTRAEGE_KEY, "[]"))
+
+    return List(json.length()) { i ->
+        val obj = json.getJSONObject(i)
+
+        Auftrag(
+            kunde = obj.getString("kunde"),
+            leistung = obj.getString("leistung"),
+            stunden = obj.getDouble("stunden"),
+            material = obj.getDouble("material"),
+            fahrt = obj.getDouble("fahrt"),
+            stundensatz = obj.getDouble("stundensatz")
+        )
+    }
+}
+
+private const val STUNDENSATZ_KEY = "stundensatz"
+
+private fun ladeAuftraege(context: Context): List<Auftrag> {
+    val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+    val json = JSONArray(prefs.getString(AUFTRAEGE_KEY, "[]"))
+
+    return List(json.length()) { i ->
+        val obj = json.getJSONObject(i)
+
+        Auftrag(
+            kunde = obj.getString("kunde"),
+            leistung = obj.getString("leistung"),
+            stunden = obj.getDouble("stunden"),
+            material = obj.getDouble("material"),
+            fahrt = obj.getDouble("fahrt"),
+            stundensatz = obj.getDouble("stundensatz")
+        )
+    }
+}
+
+private fun speichereAuftraege(
+    context: Context,
+    auftraege: List<Auftrag>
+) {
+    val json = JSONArray()
+
+    auftraege.forEach { auftrag ->
+        json.put(
+            JSONObject().apply {
+                put("kunde", auftrag.kunde)
+                put("leistung", auftrag.leistung)
+                put("stunden", auftrag.stunden)
+                put("material", auftrag.material)
+                put("fahrt", auftrag.fahrt)
+                put("stundensatz", auftrag.stundensatz)
+            }
+        )
+    }
+
+    context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        .edit()
+        .putString(AUFTRAEGE_KEY, json.toString())
+        .apply()
+}
 
 class MainActivity : ComponentActivity() {
 
@@ -35,19 +104,18 @@ class MainActivity : ComponentActivity() {
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun KuemmeroApp() {
-
+    
+    val context = LocalContext.current
     var kunde by remember { mutableStateOf("") }
     var leistung by remember { mutableStateOf("") }
     var stunden by remember { mutableStateOf("") }
     var material by remember { mutableStateOf("") }
     var fahrt by remember { mutableStateOf("") }
-    var stundensatz by remember { mutableStateOf("42,00") }
-    var auftraege by remember {mutableStateOf(listOf<Auftrag>())
-    }
+    var auftraege by remember { mutableStateOf(ladeAuftraege(context)) }
 
     val arbeitsstunden = stunden.toDoubleOrNull() ?: 0.0
     val materialKosten = material.toDoubleOrNull() ?: 0.0
-    val fahrtKosten = fahrt.toDoubleOrNull() ?: 0.0
+    var stundensatz by remember { mutableStateOf(context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE).getString(STUNDENSATZ_KEY, "42.00") ?: "42.00") }
 
     val arbeitskosten = arbeitsstunden * (stundensatz.replace(",", ".").toDoubleOrNull() ?: 0.0)
     val gesamt = arbeitskosten + materialKosten + fahrtKosten
@@ -127,7 +195,13 @@ fun KuemmeroApp() {
                 item {
                     OutlinedTextField(
     value = stundensatz,
-    onValueChange = { stundensatz = it },
+    onValueChange = {
+    stundensatz = it
+    context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        .edit()
+        .putString(STUNDENSATZ_KEY, it)
+        .apply()
+},
     label = { Text("Stundensatz (€ / Stunde)") },
     modifier = Modifier.fillMaxWidth()
 )
