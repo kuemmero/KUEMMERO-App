@@ -2,9 +2,11 @@ package de.kuemmero.app
 
 import android.os.Bundle
 import android.content.Context
-import android.content.Intent
+import android.graphics.Paint
+import android.graphics.pdf.PdfDocument
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import android.content.Intent
 import org.json.JSONArray
 import org.json.JSONObject
 import androidx.activity.ComponentActivity
