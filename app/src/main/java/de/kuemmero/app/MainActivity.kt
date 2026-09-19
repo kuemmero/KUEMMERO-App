@@ -48,7 +48,7 @@ fun KuemmeroApp() {
     val materialKosten = material.toDoubleOrNull() ?: 0.0
     val fahrtKosten = fahrt.toDoubleOrNull() ?: 0.0
 
-    val arbeitskosten = arbeitsstunden * stundensatz.replace(",", ".").toDoubleOrNull() ?: 0.0
+    val arbeitskosten = arbeitsstunden * (stundensatz.replace(",", ".").toDoubleOrNull() ?: 0.0)
     val gesamt = arbeitskosten + materialKosten + fahrtKosten
 
     MaterialTheme {
