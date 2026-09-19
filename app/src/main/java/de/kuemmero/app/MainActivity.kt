@@ -156,24 +156,24 @@ canvas.drawText(leistung, 40f, 403f, paint)
     canvas.drawText(
         "Arbeitszeit: %.2f Std. × %.2f € = %.2f €"
             .format(stunden, stundensatz, stunden * stundensatz),
-        40f, 345f, paint
+        40f, 440f, paint
     )
 
-    canvas.drawText("Material: %.2f €".format(material), 40f, 375f, paint)
-    canvas.drawText("Fahrtkosten: %.2f €".format(fahrt), 40f, 405f, paint)
+    canvas.drawText("Material: %.2f €".format(material), 40f, 470f, paint)
+    canvas.drawText("Fahrtkosten: %.2f €".format(fahrt), 40f, 500f, paint)
 
     val gesamt = stunden * stundensatz + material + fahrt
 
     paint.textSize = 20f
     canvas.drawText(
         "Gesamtsumme: %.2f €".format(gesamt),
-        40f, 460f, paint
+        40f, 555f, paint
     )
 
     paint.textSize = 12f
     canvas.drawText(
         "Vielen Dank für Ihr Vertrauen.",
-        40f, 520f, paint
+        40f, 610f, paint
     )
 
     pdf.finishPage(page)
