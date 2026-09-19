@@ -179,7 +179,29 @@ val restoreLauncher = rememberLauncherForActivityResult(
 
     val arbeitskosten = arbeitsstunden * (stundensatz.replace(",", ".").toDoubleOrNull() ?: 0.0)
     val gesamt = arbeitskosten + materialKosten + fahrtKosten
+val pdfLauncher = rememberLauncherForActivityResult(
+    contract = ActivityResultContracts.CreateDocument("application/pdf")
+) { uri ->
+    uri?.let {
+        val pdf = erstelleAngebotPdf(
+            context,
+            angebotsnummer,
+            datum,
+            kunde,
+            leistung,
+            arbeitsstunden,
+            materialKosten,
+            fahrtKosten,
+            stundensatzWert
+        )
 
+        context.contentResolver.openOutputStream(it)?.use { output ->
+            pdf.writeTo(output)
+        }
+
+        pdf.close()
+    }
+}
     MaterialTheme {
 
         Scaffold(
