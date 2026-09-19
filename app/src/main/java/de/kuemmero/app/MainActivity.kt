@@ -255,7 +255,6 @@ val pdfLauncher = rememberLauncherForActivityResult(
             fahrtKosten,
 stundensatz
 )
-        )
 
         context.contentResolver.openOutputStream(it)?.use { output ->
             pdf.writeTo(output)
