@@ -97,6 +97,7 @@ fun KuemmeroApp() {
     var auftraege by remember { mutableStateOf(ladeAuftraege(context)) }
 
     val arbeitsstunden = stunden.toDoubleOrNull() ?: 0.0
+    val fahrtKosten = fahrt.toDoubleOrNull() ?: 0.0
     val materialKosten = material.toDoubleOrNull() ?: 0.0
     var stundensatz by remember { mutableStateOf(context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE).getString(STUNDENSATZ_KEY, "42.00") ?: "42.00") }
 
