@@ -340,7 +340,24 @@ item {
                         Text("Auftrag speichern")
                     }
                 }
+item {
+    Button(
+        onClick = {
+            if (kunde.isNotBlank()) {
+                val dateiname = if (angebotsnummer.isNotBlank()) {
+                    "KÜMMERO-Angebot-$angebotsnummer.pdf"
+                } else {
+                    "KÜMMERO-Angebot.pdf"
+                }
 
+                pdfLauncher.launch(dateiname)
+            }
+        },
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Text("PDF-Angebot erstellen")
+    }
+}
                 item {
                     HorizontalDivider()
                 }
