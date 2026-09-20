@@ -168,17 +168,40 @@ canvas.drawText("Straße: $kundenStrasse", 40f, 365f, paint)
 canvas.drawText("PLZ und Ort: $kundenOrt", 40f, 390f, paint)
 canvas.drawText("Leistung:", 40f, 415f, paint)
 canvas.drawText(leistung, 40f, 440f, paint)
-canvas.drawText(
-        "Arbeitszeit: %.2f Std. × %.2f € = %.2f €"
-            .format(stunden, stundensatz, stunden * stundensatz),
-        40f, 470f, paint
-    )
 
-    canvas.drawText("Material: %.2f €".format(material), 40f, 500f, paint)
-    canvas.drawText("Fahrtkosten: %.2f €".format(fahrt), 40f, 530f, paint)
+paint.textSize = 12f
 
-    val gesamt = stunden * stundensatz + material + fahrt
+// Tabellenüberschrift
+canvas.drawText("Position", 40f, 475f, paint)
+canvas.drawText("Menge", 260f, 475f, paint)
+canvas.drawText("Einzelpreis", 340f, 475f, paint)
+canvas.drawText("Betrag", 470f, 475f, paint)
 
+// Trennlinie
+canvas.drawLine(40f, 482f, 550f, 482f, paint)
+
+// Arbeitszeit
+canvas.drawText("Arbeitszeit", 40f, 505f, paint)
+canvas.drawText("%.2f Std.".format(stunden), 260f, 505f, paint)
+canvas.drawText("%.2f €".format(stundensatz), 340f, 505f, paint)
+canvas.drawText("%.2f €".format(stunden * stundensatz), 470f, 505f, paint)
+
+// Material
+canvas.drawText("Material", 40f, 530f, paint)
+canvas.drawText("1", 260f, 530f, paint)
+canvas.drawText("%.2f €".format(material), 340f, 530f, paint)
+canvas.drawText("%.2f €".format(material), 470f, 530f, paint)
+
+// Fahrtkosten
+canvas.drawText("Fahrtkosten", 40f, 555f, paint)
+canvas.drawText("1", 260f, 555f, paint)
+canvas.drawText("%.2f €".format(fahrt), 340f, 555f, paint)
+canvas.drawText("%.2f €".format(fahrt), 470f, 555f, paint)
+
+// Trennlinie
+canvas.drawLine(40f, 565f, 550f, 565f, paint)
+
+val gesamt = stunden * stundensatz + material + fahrt
     paint.textSize = 20f
     canvas.drawText(
         "Gesamtsumme: %.2f €".format(gesamt),
