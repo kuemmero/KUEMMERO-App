@@ -81,6 +81,7 @@ private fun jsonDouble(
 }
 
 private const val STUNDENSATZ_KEY = "stundensatz"
+private const val BACKUP_URI_KEY = "backup_uri"
 
 private fun deutscheZahl(text: String, standardwert: Double = 0.0): Double {
     return text
@@ -93,6 +94,21 @@ private fun deutscheZahl(text: String, standardwert: Double = 0.0): Double {
 
 private fun formatEuro(value: Double): String =
     String.format(java.util.Locale.GERMANY, "%.2f €", value)
+
+private fun sichereBackupAutomatisch(context: Context): Boolean {
+    val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+    val uriText = prefs.getString(BACKUP_URI_KEY, null) ?: return false
+
+    return try {
+        val uri = android.net.Uri.parse(uriText)
+        context.contentResolver.openOutputStream(uri, "wt")?.use { output ->
+            output.write(erstelleBackup(context).toByteArray(Charsets.UTF_8))
+        } ?: return false
+        true
+    } catch (_: Exception) {
+        false
+    }
+}
 private fun erstelleBackup(context: Context): String {
     val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
 
@@ -340,36 +356,81 @@ fun KuemmeroApp() {
     var auftraege by remember { mutableStateOf(ladeAuftraege(context)) }
     var loeschIndex by remember { mutableStateOf<Int?>(null) }
 
-    // Erstellt eine neue Backup-Datei.
+    // Wählt beim ersten Mal die eine Backup-Datei aus.
+    // Danach wird genau diese Datei bei jeder Sicherung überschrieben.
     val backupLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.CreateDocument("application/json")
     ) { uri ->
         uri?.let {
-            context.contentResolver.openOutputStream(it)?.use { output ->
-                output.write(erstelleBackup(context).toByteArray())
+            try {
+                context.contentResolver.takePersistableUriPermission(
+                    it,
+                    Intent.FLAG_GRANT_READ_URI_PERMISSION or
+                        Intent.FLAG_GRANT_WRITE_URI_PERMISSION
+                )
+            } catch (_: Exception) {
+                // Manche Dateimanager erlauben keine dauerhafte URI-Berechtigung.
+            }
+
+            context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+                .edit()
+                .putString(BACKUP_URI_KEY, it.toString())
+                .apply()
+
+            try {
+                context.contentResolver.openOutputStream(it, "wt")?.use { output ->
+                    output.write(erstelleBackup(context).toByteArray(Charsets.UTF_8))
+                }
+
+                android.widget.Toast.makeText(
+                    context,
+                    "Sicherung gespeichert",
+                    android.widget.Toast.LENGTH_SHORT
+                ).show()
+            } catch (e: Exception) {
+                android.widget.Toast.makeText(
+                    context,
+                    "Sicherung konnte nicht gespeichert werden: ${e.message}",
+                    android.widget.Toast.LENGTH_LONG
+                ).show()
             }
         }
     }
 
-    // Überschreibt eine bereits vorhandene Backup-Datei.
+    // Ermöglicht, einmalig eine vorhandene Backup-Datei auszuwählen.
+    // Diese Datei wird danach als feste Sicherungsdatei verwendet.
     val backupUpdateLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.OpenDocument()
     ) { uri ->
         uri?.let {
             try {
+                try {
+                    context.contentResolver.takePersistableUriPermission(
+                        it,
+                        Intent.FLAG_GRANT_READ_URI_PERMISSION or
+                            Intent.FLAG_GRANT_WRITE_URI_PERMISSION
+                    )
+                } catch (_: Exception) {
+                }
+
+                context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+                    .edit()
+                    .putString(BACKUP_URI_KEY, it.toString())
+                    .apply()
+
                 context.contentResolver.openOutputStream(it, "wt")?.use { output ->
-                    output.write(erstelleBackup(context).toByteArray())
+                    output.write(erstelleBackup(context).toByteArray(Charsets.UTF_8))
                 } ?: throw Exception("Backup-Datei konnte nicht geöffnet werden")
 
                 android.widget.Toast.makeText(
                     context,
-                    "Backup aktualisiert",
+                    "Diese Datei ist jetzt die feste KÜMMERO-Sicherung.",
                     android.widget.Toast.LENGTH_LONG
                 ).show()
             } catch (e: Exception) {
                 android.widget.Toast.makeText(
                     context,
-                    "Backup konnte nicht aktualisiert werden: ${e.message}",
+                    "Sicherung konnte nicht aktualisiert werden: ${e.message}",
                     android.widget.Toast.LENGTH_LONG
                 ).show()
             }
@@ -612,7 +673,7 @@ item {
                         },
                         modifier = Modifier.fillMaxWidth()
                     ) {
-                        Text("Neue Sicherung erstellen")
+                        Text("Sicherung speichern")
                     }
                 }
 
@@ -629,7 +690,7 @@ item {
                         },
                         modifier = Modifier.fillMaxWidth()
                     ) {
-                        Text("Vorhandene Sicherung überschreiben")
+                        Text("Backup-Datei auswählen / festlegen")
                     }
                 }
                 item {
@@ -672,9 +733,15 @@ item {
                                 )
                                 speichereAuftraege(context, auftraege)
 
+                                val backupAutomatischGesichert =
+                                    sichereBackupAutomatisch(context)
+
                                 android.widget.Toast.makeText(
                                     context,
-                                    "Auftrag gespeichert.",
+                                    if (backupAutomatischGesichert)
+                                        "Auftrag gespeichert und Sicherung aktualisiert."
+                                    else
+                                        "Auftrag gespeichert.",
                                     android.widget.Toast.LENGTH_SHORT
                                 ).show()
 
