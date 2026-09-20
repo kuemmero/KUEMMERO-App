@@ -106,6 +106,12 @@ private fun speichereAuftraege(
                 put("material", auftrag.material)
                 put("fahrt", auftrag.fahrt)
                 put("stundensatz", auftrag.stundensatz)
+                put(
+    "gesamt",
+    auftrag.stunden * auftrag.stundensatz +
+            auftrag.material +
+            auftrag.fahrt
+)
             }
         )
     }
