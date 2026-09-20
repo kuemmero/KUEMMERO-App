@@ -217,6 +217,7 @@ fun KuemmeroApp() {
     val context = LocalContext.current
     var kunde by remember { mutableStateOf("") }
     var kundenStrasse by remember { mutableStateOf("") }
+    var kundenOrt by remember { mutableStateOf("") }
     var angebotsnummer by remember {
     mutableStateOf(
         "ANG-" + java.text.SimpleDateFormat(
