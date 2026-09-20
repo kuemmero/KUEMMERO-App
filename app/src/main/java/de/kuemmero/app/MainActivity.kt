@@ -326,15 +326,41 @@ fun KuemmeroApp() {
     var auftraege by remember { mutableStateOf(ladeAuftraege(context)) }
     var loeschIndex by remember { mutableStateOf<Int?>(null) }
 
+    // Erstellt eine neue Backup-Datei.
     val backupLauncher = rememberLauncherForActivityResult(
-    contract = ActivityResultContracts.CreateDocument("application/json")
-) { uri ->
-    uri?.let {
-        context.contentResolver.openOutputStream(it)?.use { output ->
-            output.write(erstelleBackup(context).toByteArray())
+        contract = ActivityResultContracts.CreateDocument("application/json")
+    ) { uri ->
+        uri?.let {
+            context.contentResolver.openOutputStream(it)?.use { output ->
+                output.write(erstelleBackup(context).toByteArray())
+            }
         }
     }
-}
+
+    // Überschreibt eine bereits vorhandene Backup-Datei.
+    val backupUpdateLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.OpenDocument()
+    ) { uri ->
+        uri?.let {
+            try {
+                context.contentResolver.openOutputStream(it, "wt")?.use { output ->
+                    output.write(erstelleBackup(context).toByteArray())
+                } ?: throw Exception("Backup-Datei konnte nicht geöffnet werden")
+
+                android.widget.Toast.makeText(
+                    context,
+                    "Backup aktualisiert",
+                    android.widget.Toast.LENGTH_LONG
+                ).show()
+            } catch (e: Exception) {
+                android.widget.Toast.makeText(
+                    context,
+                    "Backup konnte nicht aktualisiert werden: ${e.message}",
+                    android.widget.Toast.LENGTH_LONG
+                ).show()
+            }
+        }
+    }
 
 val restoreLauncher = rememberLauncherForActivityResult(
     contract = ActivityResultContracts.OpenDocument()
@@ -565,14 +591,31 @@ item {
                     )
                 }
                 item {
-    Button(
-        onClick = {
-            backupLauncher.launch("kuemmero-backup.json")
-        },
-        modifier = Modifier.fillMaxWidth()
-    ) {
-        Text("Daten sichern")
-    }
+                    Button(
+                        onClick = {
+                            backupLauncher.launch("kuemmero-backup.json")
+                        },
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text("Neue Sicherung erstellen")
+                    }
+                }
+
+                item {
+                    OutlinedButton(
+                        onClick = {
+                            backupUpdateLauncher.launch(
+                                arrayOf(
+                                    "application/json",
+                                    "text/plain",
+                                    "application/octet-stream"
+                                )
+                            )
+                        },
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text("Vorhandene Sicherung überschreiben")
+                    }
                 }
                 item {
     Button(
