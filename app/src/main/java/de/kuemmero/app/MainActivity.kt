@@ -23,6 +23,7 @@ import androidx.compose.ui.platform.LocalContext
 
 data class Auftrag(
     val kunde: String,
+    val kundenStrasse: Sting,
     val leistung: String,
     val stunden: Double,
     val material: Double,
@@ -41,6 +42,7 @@ private fun ladeAuftraege(context: Context): List<Auftrag> {
 
         Auftrag(
             kunde = obj.getString("kunde"),
+            kundenStrasse = obj.optString("kundenStrasse", ""),
             leistung = obj.getString("leistung"),
             stunden = obj.getDouble("stunden"),
             material = obj.getDouble("material"),
@@ -98,6 +100,7 @@ private fun speichereAuftraege(
         json.put(
             JSONObject().apply {
                 put("kunde", auftrag.kunde)
+                put("kundenStrasse", auftrag.kundenStrasse)
                 put("leistung", auftrag.leistung)
                 put("stunden", auftrag.stunden)
                 put("material", auftrag.material)
@@ -116,9 +119,9 @@ private fun speichereAuftraege(
 private fun erstelleAngebotPdf(
     context: Context,
     angebotsnummer: String,
-    datum: String,
     kunde: String,
-    leistung: String,
+kundenStrasse: String,
+leistung: String,
     stunden: Double,
     material: Double,
     fahrt: Double,
@@ -150,8 +153,9 @@ paint.textSize = 14f
 canvas.drawText("Angebotsnummer: $angebotsnummer", 40f, 285f, paint)
 canvas.drawText("Datum: $datum", 40f, 305f, paint)
 canvas.drawText("Kunde: $kunde", 40f, 340f, paint)
-canvas.drawText("Leistung:", 40f, 380f, paint)
-canvas.drawText(leistung, 40f, 403f, paint)
+canvas.drawText("Straße: $kundenStrasse", 40f, 360f, paint)
+    canvas.drawText("Leistung:", 40f, 395f, paint)
+canvas.drawText(leistung, 40f, 420f, paint)
 
     canvas.drawText(
         "Arbeitszeit: %.2f Std. × %.2f € = %.2f €"
@@ -201,6 +205,7 @@ fun KuemmeroApp() {
     
     val context = LocalContext.current
     var kunde by remember { mutableStateOf("") }
+    var kundenStrasse by remember { mutableStateOf("") }
     var angebotsnummer by remember {
     mutableStateOf(
         "ANG-" + java.text.SimpleDateFormat(
@@ -266,6 +271,7 @@ val pdfLauncher = rememberLauncherForActivityResult(
             angebotsnummer,
             datum,
             kunde,
+            kundenStrasse,
             leistung,
             arbeitsstunden,
             materialKosten,
@@ -330,6 +336,14 @@ item {
                         label = { Text("Kunde") },
                         modifier = Modifier.fillMaxWidth()
                     )
+                }
+                item {
+    OutlinedTextField(
+        value = kundenStrasse,
+        onValueChange = { kundenStrasse = it },
+        label = { Text("Straße und Hausnummer") },
+        modifier = Modifier.fillMaxWidth()
+    )
                 }
 
                 item {
@@ -420,6 +434,7 @@ item {
 
                                 auftraege = auftraege + Auftrag(
                                     kunde = kunde,
+                                    kundenStrasse = kundenStrasse,
                                     leistung = leistung,
                                     stunden = arbeitsstunden,
                                     material = materialKosten,
@@ -429,6 +444,7 @@ item {
                                 speichereAuftraege(context, auftraege)
 
                                 kunde = ""
+                                kundenStrasse = ""
                                 leistung = ""
                                 stunden = ""
                                 material = ""
