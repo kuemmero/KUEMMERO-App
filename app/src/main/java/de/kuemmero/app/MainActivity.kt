@@ -196,7 +196,14 @@ fun KuemmeroApp() {
     
     val context = LocalContext.current
     var kunde by remember { mutableStateOf("") }
-    var angebotsnummer by remember { mutableStateOf("") }
+    var angebotsnummer by remember {
+    mutableStateOf(
+        "ANG-" + java.text.SimpleDateFormat(
+            "yyyyMMdd-HHmmss",
+            java.util.Locale.GERMANY
+        ).format(java.util.Date())
+    )
+    }
     var datum by remember { mutableStateOf(java.text.SimpleDateFormat("dd.MM.yyyy", java.util.Locale.GERMANY).format(java.util.Date())) }
     var leistung by remember { mutableStateOf("") }
     var stunden by remember { mutableStateOf("") }
