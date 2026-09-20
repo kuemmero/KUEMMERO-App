@@ -12,8 +12,10 @@ android {
         applicationId = "de.kuemmero.app"
         minSdk = 24
         targetSdk = 35
-        versionCode = 3
-        versionName = "1.0"
+
+        // Erhöht, damit Android die neue APK als Update erkennt.
+        versionCode = 11
+        versionName = "1.1"
     }
 
     buildTypes {
