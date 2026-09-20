@@ -202,21 +202,22 @@ canvas.drawText("%.2f €".format(fahrt), 470f, 555f, paint)
 canvas.drawLine(40f, 565f, 550f, 565f, paint)
 
 val gesamt = stunden * stundensatz + material + fahrt
-    paint.textSize = 20f
-    canvas.drawText(
-        "Gesamtsumme: %.2f €".format(gesamt),
-        40f, 555f, paint
-    )
+
+paint.textSize = 20f
+canvas.drawText(
+    "Gesamtsumme: %.2f €".format(gesamt),
+    40f, 600f, paint
+)
 
     paint.textSize = 12f
 canvas.drawText(
     "Gemäß § 19 UStG wird keine Umsatzsteuer berechnet.",
-    40f, 585f, paint
+    40f, 635f, paint
 )
 
 canvas.drawText(
     "Vielen Dank für Ihr Vertrauen.",
-    40f, 615f, paint
+    40f, 665f, paint
 )
 
     pdf.finishPage(page)
