@@ -36,21 +36,44 @@ private const val AUFTRAEGE_KEY = "auftraege"
 
 private fun ladeAuftraege(context: Context): List<Auftrag> {
     val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-    val json = JSONArray(prefs.getString(AUFTRAEGE_KEY, "[]"))
+    val gespeicherteDaten = prefs.getString(AUFTRAEGE_KEY, "[]") ?: "[]"
+
+    val json = try {
+        JSONArray(gespeicherteDaten)
+    } catch (e: Exception) {
+        JSONArray()
+    }
 
     return List(json.length()) { i ->
-        val obj = json.getJSONObject(i)
+        val obj = json.optJSONObject(i) ?: JSONObject()
 
         Auftrag(
-            kunde = obj.getString("kunde"),
+            kunde = obj.optString("kunde", ""),
             kundenStrasse = obj.optString("kundenStrasse", ""),
             kundenOrt = obj.optString("kundenOrt", ""),
-            leistung = obj.getString("leistung"),
-            stunden = obj.getDouble("stunden"),
-            material = obj.getDouble("material"),
-            fahrt = obj.getDouble("fahrt"),
-            stundensatz = obj.getDouble("stundensatz")
+            leistung = obj.optString("leistung", ""),
+            stunden = jsonDouble(obj, "stunden"),
+            material = jsonDouble(obj, "material"),
+            fahrt = jsonDouble(obj, "fahrt"),
+            stundensatz = jsonDouble(obj, "stundensatz", 42.0)
         )
+    }
+}
+
+private fun jsonDouble(
+    obj: JSONObject,
+    key: String,
+    standardwert: Double = 0.0
+): Double {
+    val wert = obj.opt(key) ?: return standardwert
+
+    return when (wert) {
+        is Number -> wert.toDouble()
+        is String -> wert
+            .replace(",", ".")
+            .trim()
+            .toDoubleOrNull() ?: standardwert
+        else -> standardwert
     }
 }
 
@@ -79,45 +102,67 @@ private fun stelleBackupWiederHer(
             Context.MODE_PRIVATE
         )
 
-        val text = backupText.trim()
+        // UTF-8-BOM und Leerzeichen am Anfang entfernen
+        val text = backupText
+            .trim()
+            .removePrefix("\uFEFF")
+            .trim()
 
-        if (text.startsWith("{")) {
-            val backup = JSONObject(text)
-
-            val auftraege =
-                backup.optJSONArray("auftraege") ?: JSONArray()
-
-            val alterStundensatz =
-                backup.optString(
-                    "stundensatz",
-                    prefs.getString(STUNDENSATZ_KEY, "42.00") ?: "42.00"
-                )
-
-            prefs.edit()
-                .putString(STUNDENSATZ_KEY, alterStundensatz)
-                .putString(AUFTRAEGE_KEY, auftraege.toString())
-                .apply()
-
-        } else if (text.startsWith("[")) {
-
-            val auftraege = JSONArray(text)
-
-            prefs.edit()
-                .putString(AUFTRAEGE_KEY, auftraege.toString())
-                .apply()
-
-        } else {
-            throw Exception("Ungültige Backup-Datei")
+        if (text.isBlank()) {
+            throw Exception("Backup-Datei ist leer")
         }
+
+        var auftraege = JSONArray()
+        var stundensatz =
+            prefs.getString(STUNDENSATZ_KEY, "42.00") ?: "42.00"
+
+        when {
+            text.startsWith("{") -> {
+                val backup = JSONObject(text)
+
+                val daten = backup.opt("auftraege")
+
+                auftraege = when (daten) {
+                    is JSONArray -> daten
+                    is String -> {
+                        if (daten.trim().startsWith("[")) {
+                            JSONArray(daten)
+                        } else {
+                            JSONArray()
+                        }
+                    }
+                    else -> JSONArray()
+                }
+
+                val rate = backup.opt("stundensatz")
+                if (rate != null && rate.toString().isNotBlank()) {
+                    stundensatz = rate.toString()
+                }
+            }
+
+            text.startsWith("[") -> {
+                // Älteres Backup-Format: direktes JSON-Array
+                auftraege = JSONArray(text)
+            }
+
+            else -> {
+                throw Exception("Ungültiges Backup-Format")
+            }
+        }
+
+        // Backup-Daten dauerhaft speichern
+        prefs.edit()
+            .putString(STUNDENSATZ_KEY, stundensatz)
+            .putString(AUFTRAEGE_KEY, auftraege.toString())
+            .apply()
 
         android.widget.Toast.makeText(
             context,
-            "Daten erfolgreich wiederhergestellt",
+            "Daten erfolgreich wiederhergestellt (${auftraege.length()} Aufträge)",
             android.widget.Toast.LENGTH_LONG
         ).show()
 
     } catch (e: Exception) {
-
         android.widget.Toast.makeText(
             context,
             "Wiederherstellung fehlgeschlagen: ${e.message}",
@@ -167,7 +212,6 @@ private fun erstelleAngebotPdf(
     kundenStrasse: String,
     kundenOrt: String,
     leistung: String,
-    gueltigBis: String,
     stunden: Double,
     material: Double,
     fahrt: Double,
@@ -201,68 +245,58 @@ canvas.drawText("Datum: $datum", 40f, 305f, paint)
 canvas.drawText("Kunde: $kunde", 40f, 340f, paint)
 canvas.drawText("Straße: $kundenStrasse", 40f, 365f, paint)
 canvas.drawText("PLZ und Ort: $kundenOrt", 40f, 390f, paint)
-canvas.drawText("Gültig bis: $gueltigBis", 40f, 415f, paint)
-canvas.drawText("Leistung:", 40f, 440f, paint)
-canvas.drawText(leistung, 40f, 465f, paint)
+canvas.drawText("Leistung:", 40f, 415f, paint)
+canvas.drawText(leistung, 40f, 440f, paint)
 
 paint.textSize = 12f
 
 // Tabellenüberschrift
-canvas.drawText("Position", 40f, 500f, paint)
-canvas.drawText("Menge", 260f, 500f, paint)
-canvas.drawText("Einzelpreis", 340f, 500f, paint)
-canvas.drawText("Betrag", 470f, 500f, paint)
+canvas.drawText("Position", 40f, 475f, paint)
+canvas.drawText("Menge", 260f, 475f, paint)
+canvas.drawText("Einzelpreis", 340f, 475f, paint)
+canvas.drawText("Betrag", 470f, 475f, paint)
 
 // Trennlinie
-canvas.drawLine(40f, 507f, 550f, 507f, paint)
+canvas.drawLine(40f, 482f, 550f, 482f, paint)
 
 // Arbeitszeit
-canvas.drawText("Arbeitszeit", 40f, 530f, paint)
-canvas.drawText("%.2f Std.".format(stunden), 260f, 530f, paint)
-canvas.drawText("%.2f €".format(stundensatz), 340f, 530f, paint)
-canvas.drawText("%.2f €".format(stunden * stundensatz), 470f, 530f, paint)
+canvas.drawText("Arbeitszeit", 40f, 505f, paint)
+canvas.drawText("%.2f Std.".format(stunden), 260f, 505f, paint)
+canvas.drawText("%.2f €".format(stundensatz), 340f, 505f, paint)
+canvas.drawText("%.2f €".format(stunden * stundensatz), 470f, 505f, paint)
 
 // Material
-canvas.drawText("Material", 40f, 555f, paint)
-canvas.drawText("1", 260f, 555f, paint)
-canvas.drawText("%.2f €".format(material), 340f, 555f, paint)
-canvas.drawText("%.2f €".format(material), 470f, 555f, paint)
+canvas.drawText("Material", 40f, 530f, paint)
+canvas.drawText("1", 260f, 530f, paint)
+canvas.drawText("%.2f €".format(material), 340f, 530f, paint)
+canvas.drawText("%.2f €".format(material), 470f, 530f, paint)
 
 // Fahrtkosten
-canvas.drawText("Fahrtkosten", 40f, 580f, paint)
-canvas.drawText("1", 260f, 580f, paint)
-canvas.drawText("%.2f €".format(fahrt), 340f, 580f, paint)
-canvas.drawText("%.2f €".format(fahrt), 470f, 580f, paint)
+canvas.drawText("Fahrtkosten", 40f, 555f, paint)
+canvas.drawText("1", 260f, 555f, paint)
+canvas.drawText("%.2f €".format(fahrt), 340f, 555f, paint)
+canvas.drawText("%.2f €".format(fahrt), 470f, 555f, paint)
 
 // Trennlinie
-canvas.drawLine(40f, 590f, 550f, 590f, paint)
+canvas.drawLine(40f, 565f, 550f, 565f, paint)
 
 val gesamt = stunden * stundensatz + material + fahrt
 
 paint.textSize = 20f
 canvas.drawText(
     "Gesamtsumme: %.2f €".format(gesamt),
-    40f, 625f, paint
+    40f, 600f, paint
 )
 
-paint.textSize = 12f
+    paint.textSize = 12f
 canvas.drawText(
     "Gemäß § 19 UStG wird keine Umsatzsteuer berechnet.",
-    40f, 655f, paint
+    40f, 635f, paint
 )
-
-canvas.drawText(
-    "Annahme des Angebots:",
-    40f, 700f, paint
-)
-canvas.drawLine(40f, 735f, 270f, 735f, paint)
-canvas.drawLine(320f, 735f, 550f, 735f, paint)
-canvas.drawText("Ort, Datum", 40f, 752f, paint)
-canvas.drawText("Unterschrift Kunde", 320f, 752f, paint)
 
 canvas.drawText(
     "Vielen Dank für Ihr Vertrauen.",
-    40f, 790f, paint
+    40f, 665f, paint
 )
 
     pdf.finishPage(page)
@@ -296,15 +330,6 @@ fun KuemmeroApp() {
     )
     }
     var datum by remember { mutableStateOf(java.text.SimpleDateFormat("dd.MM.yyyy", java.util.Locale.GERMANY).format(java.util.Date())) }
-    var gueltigBis by remember {
-        mutableStateOf(
-            java.text.SimpleDateFormat("dd.MM.yyyy", java.util.Locale.GERMANY).format(
-                java.util.Calendar.getInstance().apply {
-                    add(java.util.Calendar.DAY_OF_YEAR, 14)
-                }.time
-            )
-        )
-    }
     var leistung by remember { mutableStateOf("") }
     var stunden by remember { mutableStateOf("") }
     var material by remember { mutableStateOf("") }
@@ -364,7 +389,6 @@ val pdfLauncher = rememberLauncherForActivityResult(
             kundenStrasse,
             kundenOrt,
             leistung,
-            gueltigBis,
             arbeitsstunden,
             materialKosten,
             fahrtKosten,
@@ -378,17 +402,7 @@ stundensatz.toDoubleOrNull() ?: 42.0
         pdf.close()
     }
 }
-    val kuemmeroColors = lightColorScheme(
-        primary = Color(0xFF2E7D32),
-        onPrimary = Color.White,
-        secondary = Color(0xFF66BB6A),
-        background = Color(0xFFF1F8F3),
-        surface = Color.White
-    )
-
-    MaterialTheme(
-        colorScheme = kuemmeroColors
-    ) {
+    MaterialTheme {
 
         Scaffold(
             topBar = {
@@ -428,14 +442,6 @@ item {
         value = datum,
         onValueChange = { datum = it },
         label = { Text("Datum") },
-        modifier = Modifier.fillMaxWidth()
-    )
-}
-item {
-    OutlinedTextField(
-        value = gueltigBis,
-        onValueChange = { gueltigBis = it },
-        label = { Text("Gültig bis") },
         modifier = Modifier.fillMaxWidth()
     )
 }
