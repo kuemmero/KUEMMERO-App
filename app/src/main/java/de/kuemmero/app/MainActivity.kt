@@ -119,6 +119,7 @@ private fun speichereAuftraege(
 private fun erstelleAngebotPdf(
     context: Context,
     angebotsnummer: String,
+    datum: String,
     kunde: String,
 kundenStrasse: String,
 leistung: String,
