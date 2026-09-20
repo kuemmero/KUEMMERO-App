@@ -122,7 +122,7 @@ private fun stelleBackupWiederHer(
             auftraege = when (daten) {
                 is JSONArray -> daten
                 is String -> JSONArray(daten)
-                else -> throw Exception("Im Backup fehlen die Aufträge")
+                else -> throw Exception("Im Backup wurde kein gültiger Auftragsspeicher gefunden")
             }
 
             val rate = backup.opt("stundensatz")
@@ -337,7 +337,7 @@ fun KuemmeroApp() {
 }
 
 val restoreLauncher = rememberLauncherForActivityResult(
-    contract = ActivityResultContracts.GetContent()
+    contract = ActivityResultContracts.OpenDocument()
 ) { uri ->
     uri?.let {
         try {
@@ -577,7 +577,13 @@ item {
                 item {
     Button(
         onClick = {
-            restoreLauncher.launch("application/json")
+            restoreLauncher.launch(
+                arrayOf(
+                    "application/json",
+                    "text/plain",
+                    "application/octet-stream"
+                )
+            )
         },
         modifier = Modifier.fillMaxWidth()
     ) {
