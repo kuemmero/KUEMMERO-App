@@ -171,10 +171,15 @@ canvas.drawText(leistung, 40f, 403f, paint)
     )
 
     paint.textSize = 12f
-    canvas.drawText(
-        "Vielen Dank für Ihr Vertrauen.",
-        40f, 610f, paint
-    )
+canvas.drawText(
+    "Gemäß § 19 UStG wird keine Umsatzsteuer berechnet.",
+    40f, 585f, paint
+)
+
+canvas.drawText(
+    "Vielen Dank für Ihr Vertrauen.",
+    40f, 615f, paint
+)
 
     pdf.finishPage(page)
     return pdf
