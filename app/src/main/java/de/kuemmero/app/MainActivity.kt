@@ -72,24 +72,58 @@ private fun erstelleBackup(context: Context): String {
 private fun stelleBackupWiederHer(
     context: Context,
     backupText: String
-) {
-    val backup = JSONObject(backupText)
-
+try {
     val prefs = context.getSharedPreferences(
         PREFS_NAME,
         Context.MODE_PRIVATE
     )
 
-    prefs.edit()
-        .putString(
-            STUNDENSATZ_KEY,
-            backup.getString("stundensatz")
-        )
-        .putString(
-            AUFTRAEGE_KEY,
-            backup.getJSONArray("auftraege").toString()
-        )
-        .apply()
+    val text = backupText.trim()
+
+    if (text.startsWith("{")) {
+        val backup = JSONObject(text)
+
+        val auftraege =
+            backup.optJSONArray("auftraege") ?: JSONArray()
+
+        val alterStundensatz =
+            backup.optString(
+                "stundensatz",
+                prefs.getString(STUNDENSATZ_KEY, "42.00") ?: "42.00"
+            )
+
+        prefs.edit()
+            .putString(STUNDENSATZ_KEY, alterStundensatz)
+            .putString(AUFTRAEGE_KEY, auftraege.toString())
+            .apply()
+
+    } else if (text.startsWith("[")) {
+
+        val auftraege = JSONArray(text)
+
+        prefs.edit()
+            .putString(AUFTRAEGE_KEY, auftraege.toString())
+            .apply()
+
+    } else {
+        throw Exception("Ungültige Backup-Datei")
+    }
+
+    android.widget.Toast.makeText(
+        context,
+        "Daten erfolgreich wiederhergestellt",
+        android.widget.Toast.LENGTH_LONG
+    ).show()
+
+} catch (e: Exception) {
+
+    android.widget.Toast.makeText(
+        context,
+        "Wiederherstellung fehlgeschlagen: ${e.message}",
+        android.widget.Toast.LENGTH_LONG
+    ).show()
+}
+            
 }
 
 private fun speichereAuftraege(
