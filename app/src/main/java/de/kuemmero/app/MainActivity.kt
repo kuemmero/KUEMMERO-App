@@ -36,21 +36,44 @@ private const val AUFTRAEGE_KEY = "auftraege"
 
 private fun ladeAuftraege(context: Context): List<Auftrag> {
     val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-    val json = JSONArray(prefs.getString(AUFTRAEGE_KEY, "[]"))
+    val gespeicherteDaten = prefs.getString(AUFTRAEGE_KEY, "[]") ?: "[]"
+
+    val json = try {
+        JSONArray(gespeicherteDaten)
+    } catch (e: Exception) {
+        JSONArray()
+    }
 
     return List(json.length()) { i ->
-        val obj = json.getJSONObject(i)
+        val obj = json.optJSONObject(i) ?: JSONObject()
 
         Auftrag(
-            kunde = obj.getString("kunde"),
+            kunde = obj.optString("kunde", ""),
             kundenStrasse = obj.optString("kundenStrasse", ""),
             kundenOrt = obj.optString("kundenOrt", ""),
-            leistung = obj.getString("leistung"),
-            stunden = obj.getDouble("stunden"),
-            material = obj.getDouble("material"),
-            fahrt = obj.getDouble("fahrt"),
-            stundensatz = obj.getDouble("stundensatz")
+            leistung = obj.optString("leistung", ""),
+            stunden = jsonDouble(obj, "stunden"),
+            material = jsonDouble(obj, "material"),
+            fahrt = jsonDouble(obj, "fahrt"),
+            stundensatz = jsonDouble(obj, "stundensatz", 42.0)
         )
+    }
+}
+
+private fun jsonDouble(
+    obj: JSONObject,
+    key: String,
+    standardwert: Double = 0.0
+): Double {
+    val wert = obj.opt(key) ?: return standardwert
+
+    return when (wert) {
+        is Number -> wert.toDouble()
+        is String -> wert
+            .replace(",", ".")
+            .trim()
+            .toDoubleOrNull() ?: standardwert
+        else -> standardwert
     }
 }
 
@@ -72,58 +95,62 @@ private fun erstelleBackup(context: Context): String {
 private fun stelleBackupWiederHer(
     context: Context,
     backupText: String
-) {
-    try {
-        val prefs = context.getSharedPreferences(
-            PREFS_NAME,
-            Context.MODE_PRIVATE
-        )
+): Int {
+    val prefs = context.getSharedPreferences(
+        PREFS_NAME,
+        Context.MODE_PRIVATE
+    )
 
-        val text = backupText.trim()
+    val text = backupText
+        .removePrefix("\uFEFF")
+        .trim()
 
-        if (text.startsWith("{")) {
+    if (text.isBlank()) {
+        throw Exception("Backup-Datei ist leer")
+    }
+
+    var auftraege = JSONArray()
+    var stundensatz =
+        prefs.getString(STUNDENSATZ_KEY, "42.00") ?: "42.00"
+
+    when {
+        text.startsWith("{") -> {
             val backup = JSONObject(text)
+            val daten = backup.opt("auftraege")
 
-            val auftraege =
-                backup.optJSONArray("auftraege") ?: JSONArray()
+            auftraege = when (daten) {
+                is JSONArray -> daten
+                is String -> JSONArray(daten)
+                else -> throw Exception("Im Backup fehlen die Aufträge")
+            }
 
-            val alterStundensatz =
-                backup.optString(
-                    "stundensatz",
-                    prefs.getString(STUNDENSATZ_KEY, "42.00") ?: "42.00"
-                )
-
-            prefs.edit()
-                .putString(STUNDENSATZ_KEY, alterStundensatz)
-                .putString(AUFTRAEGE_KEY, auftraege.toString())
-                .apply()
-
-        } else if (text.startsWith("[")) {
-
-            val auftraege = JSONArray(text)
-
-            prefs.edit()
-                .putString(AUFTRAEGE_KEY, auftraege.toString())
-                .apply()
-
-        } else {
-            throw Exception("Ungültige Backup-Datei")
+            val rate = backup.opt("stundensatz")
+            if (rate != null && rate.toString().isNotBlank()) {
+                stundensatz = rate.toString()
+            }
         }
 
-        android.widget.Toast.makeText(
-            context,
-            "Daten erfolgreich wiederhergestellt",
-            android.widget.Toast.LENGTH_LONG
-        ).show()
+        text.startsWith("[") -> {
+            // Älteres Backup-Format: direktes JSON-Array
+            auftraege = JSONArray(text)
+        }
 
-    } catch (e: Exception) {
-
-        android.widget.Toast.makeText(
-            context,
-            "Wiederherstellung fehlgeschlagen: ${e.message}",
-            android.widget.Toast.LENGTH_LONG
-        ).show()
+        else -> {
+            throw Exception("Ungültiges Backup-Format")
+        }
     }
+
+    // Erst nach erfolgreicher Prüfung dauerhaft speichern.
+    val gespeichert = prefs.edit()
+        .putString(STUNDENSATZ_KEY, stundensatz)
+        .putString(AUFTRAEGE_KEY, auftraege.toString())
+        .commit()
+
+    if (!gespeichert) {
+        throw Exception("Daten konnten nicht gespeichert werden")
+    }
+
+    return auftraege.length()
 }
 
 private fun speichereAuftraege(
@@ -307,21 +334,35 @@ fun KuemmeroApp() {
 }
 
 val restoreLauncher = rememberLauncherForActivityResult(
-    contract = ActivityResultContracts.OpenDocument()
+    contract = ActivityResultContracts.GetContent()
 ) { uri ->
     uri?.let {
-        context.contentResolver.openInputStream(it)?.use { input ->
-            val backupText = input.bufferedReader().use { reader ->
-                reader.readText()
-            }
+        try {
+            val backupText = context.contentResolver.openInputStream(it)?.use { input ->
+                input.bufferedReader(Charsets.UTF_8).use { reader ->
+                    reader.readText()
+                }
+            } ?: throw Exception("Backup-Datei konnte nicht gelesen werden")
 
-            stelleBackupWiederHer(context, backupText)
+            val anzahl = stelleBackupWiederHer(context, backupText)
 
             stundensatz =
                 context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
                     .getString(STUNDENSATZ_KEY, "42.00") ?: "42.00"
 
             auftraege = ladeAuftraege(context)
+
+            android.widget.Toast.makeText(
+                context,
+                "Daten erfolgreich wiederhergestellt ($anzahl Aufträge)",
+                android.widget.Toast.LENGTH_LONG
+            ).show()
+        } catch (e: Exception) {
+            android.widget.Toast.makeText(
+                context,
+                "Wiederherstellung fehlgeschlagen: ${e.message}",
+                android.widget.Toast.LENGTH_LONG
+            ).show()
         }
     }
 }
@@ -495,9 +536,7 @@ item {
                 item {
     Button(
         onClick = {
-            restoreLauncher.launch(
-                arrayOf("application/json", "text/plain")
-            )
+            restoreLauncher.launch("application/json")
         },
         modifier = Modifier.fillMaxWidth()
     ) {
