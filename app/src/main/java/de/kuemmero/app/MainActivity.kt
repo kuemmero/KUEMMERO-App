@@ -21,6 +21,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.input.KeyboardOptions
+import androidx.compose.ui.text.input.KeyboardType
 
 data class Auftrag(
     val kunde: String,
@@ -79,6 +81,18 @@ private fun jsonDouble(
 }
 
 private const val STUNDENSATZ_KEY = "stundensatz"
+
+private fun deutscheZahl(text: String, standardwert: Double = 0.0): Double {
+    return text
+        .replace("€", "")
+        .replace(" ", "")
+        .replace(",", ".")
+        .trim()
+        .toDoubleOrNull() ?: standardwert
+}
+
+private fun formatEuro(value: Double): String =
+    String.format(java.util.Locale.GERMANY, "%.2f €", value)
 private fun erstelleBackup(context: Context): String {
     val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
 
@@ -244,21 +258,21 @@ canvas.drawLine(40f, 482f, 550f, 482f, paint)
 
 // Arbeitszeit
 canvas.drawText("Arbeitszeit", 40f, 505f, paint)
-canvas.drawText("%.2f Std.".format(stunden), 260f, 505f, paint)
-canvas.drawText("%.2f €".format(stundensatz), 340f, 505f, paint)
-canvas.drawText("%.2f €".format(stunden * stundensatz), 470f, 505f, paint)
+canvas.drawText(String.format(java.util.Locale.GERMANY, "%.2f Std.", stunden), 260f, 505f, paint)
+canvas.drawText(formatEuro(stundensatz), 340f, 505f, paint)
+canvas.drawText(formatEuro(stunden * stundensatz), 470f, 505f, paint)
 
 // Material
 canvas.drawText("Material", 40f, 530f, paint)
 canvas.drawText("1", 260f, 530f, paint)
-canvas.drawText("%.2f €".format(material), 340f, 530f, paint)
-canvas.drawText("%.2f €".format(material), 470f, 530f, paint)
+canvas.drawText(formatEuro(material), 340f, 530f, paint)
+canvas.drawText(formatEuro(material), 470f, 530f, paint)
 
 // Fahrtkosten
 canvas.drawText("Fahrtkosten", 40f, 555f, paint)
 canvas.drawText("1", 260f, 555f, paint)
-canvas.drawText("%.2f €".format(fahrt), 340f, 555f, paint)
-canvas.drawText("%.2f €".format(fahrt), 470f, 555f, paint)
+canvas.drawText(formatEuro(fahrt), 340f, 555f, paint)
+canvas.drawText(formatEuro(fahrt), 470f, 555f, paint)
 
 // Trennlinie
 canvas.drawLine(40f, 565f, 550f, 565f, paint)
@@ -267,7 +281,7 @@ val gesamt = stunden * stundensatz + material + fahrt
 
 paint.textSize = 20f
 canvas.drawText(
-    "Gesamtsumme: %.2f €".format(gesamt),
+    "Gesamtsumme: " + formatEuro(gesamt),
     40f, 600f, paint
 )
 
@@ -383,7 +397,7 @@ val restoreLauncher = rememberLauncherForActivityResult(
 
             android.widget.Toast.makeText(
                 context,
-                "Daten erfolgreich wiederhergestellt ($anzahl Aufträge)",
+                "Daten erfolgreich wiederhergestellt: $anzahl Aufträge",
                 android.widget.Toast.LENGTH_LONG
             ).show()
         } catch (e: Exception) {
@@ -396,11 +410,12 @@ val restoreLauncher = rememberLauncherForActivityResult(
     }
 }
 
-    val arbeitsstunden = stunden.replace(",-", "").replace(",", ".").toDoubleOrNull() ?: 0.0
-    val fahrtKosten = fahrt.replace(",-", "").replace(",", ".").toDoubleOrNull() ?: 0.0
-    val materialKosten = material.replace(",-", "").replace(",", ".").toDoubleOrNull() ?: 0.0
+    val arbeitsstunden = deutscheZahl(stunden)
+    val fahrtKosten = deutscheZahl(fahrt)
+    val materialKosten = deutscheZahl(material)
+    val aktuellerStundensatz = deutscheZahl(stundensatz, 42.0)
 
-    val arbeitskosten = arbeitsstunden * (stundensatz.replace(",", ".").toDoubleOrNull() ?: 0.0)
+    val arbeitskosten = arbeitsstunden * aktuellerStundensatz
     val gesamt = arbeitskosten + materialKosten + fahrtKosten
 val pdfLauncher = rememberLauncherForActivityResult(
     contract = ActivityResultContracts.CreateDocument("application/pdf")
@@ -417,7 +432,7 @@ val pdfLauncher = rememberLauncherForActivityResult(
             arbeitsstunden,
             materialKosten,
             fahrtKosten,
-stundensatz.toDoubleOrNull() ?: 42.0
+aktuellerStundensatz
 )
 
         context.contentResolver.openOutputStream(it)?.use { output ->
@@ -586,7 +601,7 @@ item {
 
                 item {
                     Text(
-                        "Gesamt: %.2f €".format(gesamt),
+                        formatEuro(gesamt),
                         style = MaterialTheme.typography.headlineSmall
                     )
                 }
@@ -638,19 +653,30 @@ item {
                     Button(
                         onClick = {
 
-                            if (kunde.isNotBlank()) {
-
+                            if (kunde.isBlank()) {
+                                android.widget.Toast.makeText(
+                                    context,
+                                    "Bitte zuerst einen Kundennamen eingeben.",
+                                    android.widget.Toast.LENGTH_SHORT
+                                ).show()
+                            } else {
                                 auftraege = auftraege + Auftrag(
-                                    kunde = kunde,
-                                    kundenStrasse = kundenStrasse,
-                                    kundenOrt = kundenOrt,
-                                    leistung = leistung,
+                                    kunde = kunde.trim(),
+                                    kundenStrasse = kundenStrasse.trim(),
+                                    kundenOrt = kundenOrt.trim(),
+                                    leistung = leistung.trim(),
                                     stunden = arbeitsstunden,
                                     material = materialKosten,
                                     fahrt = fahrtKosten,
-                                    stundensatz = stundensatz.replace(",", ".").toDoubleOrNull() ?: 0.0
+                                    stundensatz = aktuellerStundensatz
                                 )
                                 speichereAuftraege(context, auftraege)
+
+                                android.widget.Toast.makeText(
+                                    context,
+                                    "Auftrag gespeichert.",
+                                    android.widget.Toast.LENGTH_SHORT
+                                ).show()
 
                                 kunde = ""
                                 kundenStrasse = ""
@@ -684,6 +710,23 @@ item {
         Text("PDF-Angebot erstellen")
     }
 }
+                item {
+                    OutlinedButton(
+                        onClick = {
+                            kunde = ""
+                            kundenStrasse = ""
+                            kundenOrt = ""
+                            leistung = ""
+                            stunden = ""
+                            material = ""
+                            fahrt = ""
+                        },
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text("Eingaben leeren")
+                    }
+                }
+
                 item {
                     HorizontalDivider()
                 }
@@ -721,7 +764,7 @@ item {
                             Text(auftrag.leistung)
 
                             Text(
-                                "Gesamt: %.2f €".format(
+                                formatEuro(
                                     auftrag.stunden * auftrag.stundensatz +
                                     auftrag.material +
                                     auftrag.fahrt
