@@ -72,58 +72,58 @@ private fun erstelleBackup(context: Context): String {
 private fun stelleBackupWiederHer(
     context: Context,
     backupText: String
-try {
-    val prefs = context.getSharedPreferences(
-        PREFS_NAME,
-        Context.MODE_PRIVATE
-    )
+) {
+    try {
+        val prefs = context.getSharedPreferences(
+            PREFS_NAME,
+            Context.MODE_PRIVATE
+        )
 
-    val text = backupText.trim()
+        val text = backupText.trim()
 
-    if (text.startsWith("{")) {
-        val backup = JSONObject(text)
+        if (text.startsWith("{")) {
+            val backup = JSONObject(text)
 
-        val auftraege =
-            backup.optJSONArray("auftraege") ?: JSONArray()
+            val auftraege =
+                backup.optJSONArray("auftraege") ?: JSONArray()
 
-        val alterStundensatz =
-            backup.optString(
-                "stundensatz",
-                prefs.getString(STUNDENSATZ_KEY, "42.00") ?: "42.00"
-            )
+            val alterStundensatz =
+                backup.optString(
+                    "stundensatz",
+                    prefs.getString(STUNDENSATZ_KEY, "42.00") ?: "42.00"
+                )
 
-        prefs.edit()
-            .putString(STUNDENSATZ_KEY, alterStundensatz)
-            .putString(AUFTRAEGE_KEY, auftraege.toString())
-            .apply()
+            prefs.edit()
+                .putString(STUNDENSATZ_KEY, alterStundensatz)
+                .putString(AUFTRAEGE_KEY, auftraege.toString())
+                .apply()
 
-    } else if (text.startsWith("[")) {
+        } else if (text.startsWith("[")) {
 
-        val auftraege = JSONArray(text)
+            val auftraege = JSONArray(text)
 
-        prefs.edit()
-            .putString(AUFTRAEGE_KEY, auftraege.toString())
-            .apply()
+            prefs.edit()
+                .putString(AUFTRAEGE_KEY, auftraege.toString())
+                .apply()
 
-    } else {
-        throw Exception("Ungültige Backup-Datei")
+        } else {
+            throw Exception("Ungültige Backup-Datei")
+        }
+
+        android.widget.Toast.makeText(
+            context,
+            "Daten erfolgreich wiederhergestellt",
+            android.widget.Toast.LENGTH_LONG
+        ).show()
+
+    } catch (e: Exception) {
+
+        android.widget.Toast.makeText(
+            context,
+            "Wiederherstellung fehlgeschlagen: ${e.message}",
+            android.widget.Toast.LENGTH_LONG
+        ).show()
     }
-
-    android.widget.Toast.makeText(
-        context,
-        "Daten erfolgreich wiederhergestellt",
-        android.widget.Toast.LENGTH_LONG
-    ).show()
-
-} catch (e: Exception) {
-
-    android.widget.Toast.makeText(
-        context,
-        "Wiederherstellung fehlgeschlagen: ${e.message}",
-        android.widget.Toast.LENGTH_LONG
-    ).show()
-}
-            
 }
 
 private fun speichereAuftraege(
