@@ -23,7 +23,7 @@ import androidx.compose.ui.platform.LocalContext
 
 data class Auftrag(
     val kunde: String,
-    val kundenStrasse: Sting,
+    val kundenStrasse: String,
     val leistung: String,
     val stunden: Double,
     val material: Double,
