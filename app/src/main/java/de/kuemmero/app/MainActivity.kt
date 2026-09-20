@@ -101,14 +101,22 @@ private fun sichereBackupAutomatisch(context: Context): Boolean {
 
     return try {
         val uri = android.net.Uri.parse(uriText)
-        context.contentResolver.openOutputStream(uri, "wt")?.use { output ->
-            output.write(erstelleBackup(context).toByteArray(Charsets.UTF_8))
-        } ?: return false
+        val text = erstelleBackup(context)
+        val descriptor = context.contentResolver.openFileDescriptor(uri, "rwt")
+            ?: return false
+
+        descriptor.use { pfd ->
+            java.io.FileOutputStream(pfd.fileDescriptor).use { output ->
+                output.write(text.toByteArray(Charsets.UTF_8))
+                output.flush()
+            }
+        }
         true
     } catch (_: Exception) {
         false
     }
 }
+
 private fun erstelleBackup(context: Context): String {
     val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
 
@@ -211,10 +219,18 @@ private fun speichereAuftraege(
         )
     }
 
-    context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+    val gespeichert = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
         .edit()
         .putString(AUFTRAEGE_KEY, json.toString())
-        .apply()
+        .commit()
+
+    if (!gespeichert) {
+        throw Exception("Aufträge konnten nicht gespeichert werden")
+    }
+
+    // Wenn bereits eine feste Backup-Datei ausgewählt wurde,
+    // wird sie nach jedem Speichern sofort aktualisiert.
+    sichereBackupAutomatisch(context)
 }
 
 private fun erstelleAngebotPdf(
@@ -378,8 +394,14 @@ fun KuemmeroApp() {
                 .apply()
 
             try {
-                context.contentResolver.openOutputStream(it, "wt")?.use { output ->
-                    output.write(erstelleBackup(context).toByteArray(Charsets.UTF_8))
+                val descriptor = context.contentResolver.openFileDescriptor(it, "rwt")
+                    ?: throw Exception("Backup-Datei konnte nicht geöffnet werden")
+
+                descriptor.use { pfd ->
+                    java.io.FileOutputStream(pfd.fileDescriptor).use { output ->
+                        output.write(erstelleBackup(context).toByteArray(Charsets.UTF_8))
+                        output.flush()
+                    }
                 }
 
                 android.widget.Toast.makeText(
@@ -418,9 +440,15 @@ fun KuemmeroApp() {
                     .putString(BACKUP_URI_KEY, it.toString())
                     .apply()
 
-                context.contentResolver.openOutputStream(it, "wt")?.use { output ->
-                    output.write(erstelleBackup(context).toByteArray(Charsets.UTF_8))
-                } ?: throw Exception("Backup-Datei konnte nicht geöffnet werden")
+                val descriptor = context.contentResolver.openFileDescriptor(it, "rwt")
+                    ?: throw Exception("Backup-Datei konnte nicht geöffnet werden")
+
+                descriptor.use { pfd ->
+                    java.io.FileOutputStream(pfd.fileDescriptor).use { output ->
+                        output.write(erstelleBackup(context).toByteArray(Charsets.UTF_8))
+                        output.flush()
+                    }
+                }
 
                 android.widget.Toast.makeText(
                     context,
@@ -708,6 +736,23 @@ item {
     ) {
         Text("Daten wiederherstellen")
     }
+                }
+
+                item {
+                    OutlinedButton(
+                        onClick = {
+                            val ok = sichereBackupAutomatisch(context)
+                            android.widget.Toast.makeText(
+                                context,
+                                if (ok) "Sicherung aktualisiert."
+                                else "Bitte zuerst eine Backup-Datei festlegen.",
+                                android.widget.Toast.LENGTH_LONG
+                            ).show()
+                        },
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text("Sicherung jetzt aktualisieren")
+                    }
                 }
 
                 item {
