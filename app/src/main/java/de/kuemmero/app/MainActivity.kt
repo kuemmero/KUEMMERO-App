@@ -14,6 +14,7 @@ import androidx.activity.compose.setContent
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
@@ -323,6 +324,8 @@ fun KuemmeroApp() {
     )
     }
     var auftraege by remember { mutableStateOf(ladeAuftraege(context)) }
+    var loeschIndex by remember { mutableStateOf<Int?>(null) }
+
     val backupLauncher = rememberLauncherForActivityResult(
     contract = ActivityResultContracts.CreateDocument("application/json")
 ) { uri ->
@@ -398,6 +401,44 @@ stundensatz.toDoubleOrNull() ?: 42.0
         pdf.close()
     }
 }
+    loeschIndex?.let { index ->
+        if (index in auftraege.indices) {
+            AlertDialog(
+                onDismissRequest = {
+                    loeschIndex = null
+                },
+                title = {
+                    Text("Auftrag löschen?")
+                },
+                text = {
+                    Text("Soll der Auftrag von ${auftraege[index].kunde} wirklich gelöscht werden?")
+                },
+                confirmButton = {
+                    TextButton(
+                        onClick = {
+                            auftraege = auftraege.toMutableList().apply {
+                                removeAt(index)
+                            }
+                            speichereAuftraege(context, auftraege)
+                            loeschIndex = null
+                        }
+                    ) {
+                        Text("Löschen")
+                    }
+                },
+                dismissButton = {
+                    TextButton(
+                        onClick = {
+                            loeschIndex = null
+                        }
+                    ) {
+                        Text("Abbrechen")
+                    }
+                }
+            )
+        }
+    }
+
     MaterialTheme {
 
         Scaffold(
@@ -605,7 +646,7 @@ item {
                     )
                 }
 
-                items(auftraege) { auftrag ->
+                itemsIndexed(auftraege) { index, auftrag ->
 
                     Card(
                         modifier = Modifier.fillMaxWidth()
@@ -620,6 +661,14 @@ item {
                                 style = MaterialTheme.typography.titleMedium
                             )
 
+                            if (auftrag.kundenStrasse.isNotBlank() || auftrag.kundenOrt.isNotBlank()) {
+                                Text(
+                                    listOf(auftrag.kundenStrasse, auftrag.kundenOrt)
+                                        .filter { it.isNotBlank() }
+                                        .joinToString(", ")
+                                )
+                            }
+
                             Text(auftrag.leistung)
 
                             Text(
@@ -629,6 +678,17 @@ item {
                                     auftrag.fahrt
                                 )
                             )
+
+                            Spacer(modifier = Modifier.height(6.dp))
+
+                            OutlinedButton(
+                                onClick = {
+                                    loeschIndex = index
+                                },
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Text("Auftrag löschen")
+                            }
                         }
                     }
                 }
