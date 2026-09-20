@@ -24,6 +24,7 @@ import androidx.compose.ui.platform.LocalContext
 data class Auftrag(
     val kunde: String,
     val kundenStrasse: String,
+    val kundenOrt: String,
     val leistung: String,
     val stunden: Double,
     val material: Double,
@@ -43,6 +44,7 @@ private fun ladeAuftraege(context: Context): List<Auftrag> {
         Auftrag(
             kunde = obj.getString("kunde"),
             kundenStrasse = obj.optString("kundenStrasse", ""),
+            kundenOrt = obj.optString("kundenOrt", ""),
             leistung = obj.getString("leistung"),
             stunden = obj.getDouble("stunden"),
             material = obj.getDouble("material"),
@@ -101,6 +103,7 @@ private fun speichereAuftraege(
             JSONObject().apply {
                 put("kunde", auftrag.kunde)
                 put("kundenStrasse", auftrag.kundenStrasse)
+                put("kundenOrt", auftrag.kundenOrt)
                 put("leistung", auftrag.leistung)
                 put("stunden", auftrag.stunden)
                 put("material", auftrag.material)
@@ -127,8 +130,9 @@ private fun erstelleAngebotPdf(
     angebotsnummer: String,
     datum: String,
     kunde: String,
-kundenStrasse: String,
-leistung: String,
+    kundenStrasse: String,
+    kundenOrt: String,
+    leistung: String,
     stunden: Double,
     material: Double,
     fahrt: Double,
@@ -160,14 +164,14 @@ paint.textSize = 14f
 canvas.drawText("Angebotsnummer: $angebotsnummer", 40f, 285f, paint)
 canvas.drawText("Datum: $datum", 40f, 305f, paint)
 canvas.drawText("Kunde: $kunde", 40f, 340f, paint)
-canvas.drawText("Straße: $kundenStrasse", 40f, 365f, paint)
-canvas.drawText("Leistung:", 40f, 395f, paint)
-canvas.drawText(leistung, 40f, 420f, paint)
-
-    canvas.drawText(
+canvas.drawText("Straße: $kundenStrasse", 40f, 365f, paint)canvas.drawText("Leistung:", 40f, 395f, paint)
+canvas.drawText("PLZ und Ort: $kundenOrt", 40f, 390f, paint)
+canvas.drawText("Leistung:", 40f, 415f, paint)
+canvas.drawText(leistung, 40f, 440f, paint)
+canvas.drawText(
         "Arbeitszeit: %.2f Std. × %.2f € = %.2f €"
             .format(stunden, stundensatz, stunden * stundensatz),
-        40f, 440f, paint
+        40f, 465f, paint
     )
 
     canvas.drawText("Material: %.2f €".format(material), 40f, 470f, paint)
@@ -279,6 +283,7 @@ val pdfLauncher = rememberLauncherForActivityResult(
             datum,
             kunde,
             kundenStrasse,
+            kundenOrt,
             leistung,
             arbeitsstunden,
             materialKosten,
@@ -349,6 +354,14 @@ item {
         value = kundenStrasse,
         onValueChange = { kundenStrasse = it },
         label = { Text("Straße und Hausnummer") },
+        modifier = Modifier.fillMaxWidth()
+    )
+                }
+                item {
+    OutlinedTextField(
+        value = kundenOrt,
+        onValueChange = { kundenOrt = it },
+        label = { Text("PLZ und Ort") },
         modifier = Modifier.fillMaxWidth()
     )
                 }
@@ -442,6 +455,7 @@ item {
                                 auftraege = auftraege + Auftrag(
                                     kunde = kunde,
                                     kundenStrasse = kundenStrasse,
+                                    kundenOrt = kundenOrt,
                                     leistung = leistung,
                                     stunden = arbeitsstunden,
                                     material = materialKosten,
@@ -452,6 +466,7 @@ item {
 
                                 kunde = ""
                                 kundenStrasse = ""
+                                kundenOrt = ""
                                 leistung = ""
                                 stunden = ""
                                 material = ""
