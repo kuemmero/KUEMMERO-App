@@ -154,8 +154,8 @@ paint.textSize = 14f
 canvas.drawText("Angebotsnummer: $angebotsnummer", 40f, 285f, paint)
 canvas.drawText("Datum: $datum", 40f, 305f, paint)
 canvas.drawText("Kunde: $kunde", 40f, 340f, paint)
-canvas.drawText("Straße: $kundenStrasse", 40f, 360f, paint)
-    canvas.drawText("Leistung:", 40f, 395f, paint)
+canvas.drawText("Straße: $kundenStrasse", 40f, 365f, paint)
+canvas.drawText("Leistung:", 40f, 395f, paint)
 canvas.drawText(leistung, 40f, 420f, paint)
 
     canvas.drawText(
