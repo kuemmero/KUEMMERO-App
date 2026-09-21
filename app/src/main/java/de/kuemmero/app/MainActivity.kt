@@ -2803,7 +2803,10 @@ fun KuemmeroApp() {
                                         if (k.fotosVorher.isNotEmpty()) {
                                             Text("📷 Bild vorher: ${k.fotosVorher.size}", color = KuemmeroGreen, fontWeight = FontWeight.SemiBold)
                                         }
-                                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                        Row(
+                                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                            modifier = Modifier.fillMaxWidth()
+                                        ) {
                                             OutlinedButton(
                                                 onClick = {
                                                     kvBearbeiteIndex = index
@@ -2824,6 +2827,42 @@ fun KuemmeroApp() {
                                                 },
                                                 modifier = Modifier.weight(1f)
                                             ) { Text("Bearbeiten") }
+
+                                            Button(
+                                                onClick = {
+                                                    val a = Auftrag(
+                                                        nummer = "ANG-" + SimpleDateFormat("yyyyMMdd-HHmmss", Locale.GERMANY).format(Date()),
+                                                        datum = k.datum.ifBlank { datumFormat.format(Date()) },
+                                                        gueltigBis = k.gueltigBis,
+                                                        kunde = k.kunde,
+                                                        kundenStrasse = k.kundenStrasse,
+                                                        kundenOrt = k.kundenOrt,
+                                                        leistung = k.leistung,
+                                                        stunden = k.stunden,
+                                                        material = k.material,
+                                                        materialBonUri = k.materialBonUri,
+                                                        fahrt = k.fahrt,
+                                                        stundensatz = k.stundensatz,
+                                                        status = "Offen",
+                                                        zahlungsstatus = "Offen",
+                                                        fotosVorher = k.fotosVorher
+                                                    )
+                                                    auftraege = auftraege + a
+                                                    speichereAuftraege(context, auftraege)
+                                                    hauptseite = "Aufträge"
+                                                    auftragFormOffen = false
+                                                    bearbeiteIndex = null
+                                                    auftragDetailIndex = auftraege.lastIndex
+                                                    android.widget.Toast.makeText(
+                                                        context,
+                                                        "Kostenvoranschlag wurde als Auftrag übernommen.",
+                                                        android.widget.Toast.LENGTH_SHORT
+                                                    ).show()
+                                                },
+                                                modifier = Modifier.weight(1f),
+                                                colors = ButtonDefaults.buttonColors(containerColor = KuemmeroGreen)
+                                            ) { Text("Als Auftrag") }
+
                                             Button(
                                                 onClick = {
                                                     val a = Auftrag(
