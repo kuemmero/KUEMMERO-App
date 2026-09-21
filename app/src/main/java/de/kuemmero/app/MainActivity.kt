@@ -106,11 +106,20 @@ private fun zahl(text: String, standard: Double = 0.0): Double =
 private fun runde2(value: Double): Double =
     kotlin.math.round(value * 100.0) / 100.0
 
-private fun arbeitsbetrag(stunden: Double, stundensatz: Double): Double =
-    runde2(runde2(stunden) * runde2(stundensatz))
+private fun arbeitsbetrag(stunden: Double, stundensatz: Double): Double {
+    // Für die Abrechnung zuerst beide Werte auf die angezeigten 2 Nachkommastellen bringen.
+    // Dadurch wird z. B. 0,01 Std. bei 42,00 €/Std. immer zu 0,42 €.
+    val abrechnungsStunden = runde2(stunden)
+    val abrechnungsSatz = runde2(stundensatz)
+    return runde2(abrechnungsStunden * abrechnungsSatz)
+}
 
-private fun gesamtbetrag(stunden: Double, material: Double, fahrt: Double, stundensatz: Double): Double =
-    runde2(arbeitsbetrag(stunden, stundensatz) + runde2(material) + runde2(fahrt))
+private fun gesamtbetrag(stunden: Double, material: Double, fahrt: Double, stundensatz: Double): Double {
+    val arbeitskosten = arbeitsbetrag(stunden, stundensatz)
+    val materialkosten = runde2(material)
+    val fahrtkosten = runde2(fahrt)
+    return runde2(arbeitskosten + materialkosten + fahrtkosten)
+}
 
 private fun euro(value: Double): String =
     String.format(Locale.GERMANY, "%.2f €", runde2(value))
