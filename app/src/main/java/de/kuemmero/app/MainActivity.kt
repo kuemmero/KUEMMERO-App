@@ -449,6 +449,83 @@ private fun erstelleRechnungPdf(
     return pdf
 }
 
+private fun druckeRechnungPdf(context: Context, auftrag: Auftrag) {
+    val printManager = context.getSystemService(Context.PRINT_SERVICE) as PrintManager
+    val nummer = auftrag.rechnungsnummer.ifBlank { "RE-${SimpleDateFormat("yyyyMMdd-HHmmss", Locale.GERMANY).format(Date())}" }
+    val rechnungsdatum = auftrag.rechnungsdatum.ifBlank { SimpleDateFormat("dd.MM.yyyy", Locale.GERMANY).format(Date()) }
+    val faelligAm = auftrag.faelligAm.ifBlank {
+        val cal = Calendar.getInstance().apply { add(Calendar.DAY_OF_YEAR, 14) }
+        SimpleDateFormat("dd.MM.yyyy", Locale.GERMANY).format(cal.time)
+    }
+    val adapter = object : PrintDocumentAdapter() {
+        private var pdf: PdfDocument? = null
+
+        override fun onLayout(
+            oldAttributes: PrintAttributes?,
+            newAttributes: PrintAttributes,
+            cancellationSignal: CancellationSignal?,
+            callback: LayoutResultCallback,
+            extras: android.os.Bundle?
+        ) {
+            if (cancellationSignal?.isCanceled == true) {
+                callback.onLayoutCancelled()
+                return
+            }
+            pdf?.close()
+            pdf = erstelleRechnungPdf(
+                nummer, rechnungsdatum, faelligAm,
+                auftrag.kunde, auftrag.kundenStrasse, auftrag.kundenOrt, auftrag.leistung,
+                auftrag.stunden, auftrag.material, auftrag.fahrt, auftrag.stundensatz,
+                auftrag.unterschriftPfad
+            )
+            val info = PrintDocumentInfo.Builder("KÜMMERO-Rechnung-$nummer.pdf")
+                .setContentType(PrintDocumentInfo.CONTENT_TYPE_DOCUMENT)
+                .setPageCount(1)
+                .build()
+            callback.onLayoutFinished(info, true)
+        }
+
+        override fun onWrite(
+            pages: Array<out android.print.PageRange>,
+            destination: ParcelFileDescriptor,
+            cancellationSignal: CancellationSignal?,
+            callback: WriteResultCallback
+        ) {
+            try {
+                if (cancellationSignal?.isCanceled == true) {
+                    callback.onWriteCancelled()
+                    return
+                }
+                val document = pdf ?: throw IllegalStateException("Rechnung konnte nicht erstellt werden")
+                ParcelFileDescriptor.AutoCloseOutputStream(destination).use { output ->
+                    document.writeTo(output)
+                }
+                callback.onWriteFinished(arrayOf(android.print.PageRange.ALL_PAGES))
+            } catch (e: Exception) {
+                callback.onWriteFailed(e.message)
+            } finally {
+                pdf?.close()
+                pdf = null
+            }
+        }
+
+        override fun onFinish() {
+            pdf?.close()
+            pdf = null
+            super.onFinish()
+        }
+    }
+
+    printManager.print(
+        "KÜMMERO-Rechnung-$nummer",
+        adapter,
+        PrintAttributes.Builder()
+            .setMediaSize(PrintAttributes.MediaSize.ISO_A4)
+            .setMinMargins(PrintAttributes.Margins.NO_MARGINS)
+            .build()
+    )
+}
+
 private fun druckePdf(
     context: Context,
     dateiname: String,
@@ -2043,6 +2120,17 @@ fun KuemmeroApp() {
                                     colors = ButtonDefaults.buttonColors(containerColor = KuemmeroGreenLight)
                                 ) {
                                     Text("Rechnung erstellen", fontWeight = FontWeight.Bold)
+                                }
+                            }
+
+                            if (a.status == "Abgerechnet" && a.rechnungsnummer.isNotBlank()) {
+                                Button(
+                                    onClick = { druckeRechnungPdf(context, a) },
+                                    modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp),
+                                    shape = RoundedCornerShape(26.dp),
+                                    colors = ButtonDefaults.buttonColors(containerColor = KuemmeroGreenLight)
+                                ) {
+                                    Text("🧾 Rechnung PDF drucken", fontWeight = FontWeight.Bold)
                                 }
                             }
 
