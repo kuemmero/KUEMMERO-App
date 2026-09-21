@@ -567,6 +567,8 @@ fun KuemmeroApp() {
     var auftragsSuche by remember { mutableStateOf("") }
     var statusFilter by remember { mutableStateOf("Alle") }
     var zahlungsFilterOffen by remember { mutableStateOf(false) }
+    var kundenAkteName by remember { mutableStateOf<String?>(null) }
+    var kalenderOffen by remember { mutableStateOf(false) }
     val listeState = rememberLazyListState()
 
     val feldFarben = OutlinedTextFieldDefaults.colors(
@@ -713,6 +715,18 @@ fun KuemmeroApp() {
     val gesamt = arbeitsstunden * rate + materialKosten + fahrtKosten
     val umsatz = auftraege.sumOf { it.stunden * it.stundensatz + it.material + it.fahrt }
 
+    val heuteText = datumFormat.format(Date())
+    val termineHeute = auftraege.filter { it.terminDatum == heuteText }
+        .sortedBy { it.terminUhrzeit }
+    val offeneAuftraege = auftraege.count { it.status != "Abgerechnet" }
+    val offeneZahlungen = auftraege.filter { it.zahlungsstatus != "Bezahlt" }
+    val offeneZahlungSumme = offeneZahlungen.sumOf { it.stunden * it.stundensatz + it.material + it.fahrt }
+    val naechsteTermine = auftraege.filter { it.terminDatum.isNotBlank() }
+        .sortedWith(compareBy<Auftrag> {
+            try { datumFormat.parse(it.terminDatum)?.time ?: Long.MAX_VALUE } catch (_: Exception) { Long.MAX_VALUE }
+        }.thenBy { it.terminUhrzeit })
+        .take(8)
+
     if (kundenDialog) {
         AlertDialog(
             onDismissRequest = { kundenDialog = false },
@@ -732,6 +746,8 @@ fun KuemmeroApp() {
                                     modifier = Modifier
                                         .fillMaxWidth()
                                         .clickable {
+                                            kundenDialog = false
+                                            kundenAkteName = k.name
                                             kunde = k.name
                                             strasse = k.adresse
                                             ort = k.ort
@@ -920,6 +936,60 @@ fun KuemmeroApp() {
         )
     }
 
+    kundenAkteName?.let { name ->
+        val kundeAkte = kunden.firstOrNull { it.name.equals(name, ignoreCase = true) }
+        val kundenAuftraege = auftraege.filter { it.kunde.equals(name, ignoreCase = true) }
+        AlertDialog(
+            onDismissRequest = { kundenAkteName = null },
+            title = { Text("Kundenakte") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Text(name, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, color = KuemmeroGreen)
+                    if (kundeAkte?.adresse?.isNotBlank() == true) Text("Adresse: ${kundeAkte.adresse}")
+                    if (kundeAkte?.ort?.isNotBlank() == true) Text("Ort: ${kundeAkte.ort}")
+                    if (kundeAkte?.telefon?.isNotBlank() == true) Text("Telefon: ${kundeAkte.telefon}")
+                    if (kundeAkte?.email?.isNotBlank() == true) Text("E-Mail: ${kundeAkte.email}")
+                    HorizontalDivider()
+                    Text("Aufträge: ${kundenAuftraege.size}", fontWeight = FontWeight.Bold)
+                    Text("Umsatz: ${euro(kundenAuftraege.sumOf { it.stunden * it.stundensatz + it.material + it.fahrt })}")
+                    val offen = kundenAuftraege.filter { it.zahlungsstatus != "Bezahlt" }
+                    Text("Offene Zahlungen: ${euro(offen.sumOf { it.stunden * it.stundensatz + it.material + it.fahrt })}", color = if (offen.isEmpty()) KuemmeroGreen else KuemmeroError, fontWeight = FontWeight.Bold)
+                }
+            },
+            confirmButton = { TextButton(onClick = { kundenAkteName = null }) { Text("Schließen") } }
+        )
+    }
+
+    if (kalenderOffen) {
+        AlertDialog(
+            onDismissRequest = { kalenderOffen = false },
+            title = { Text("📅 Termine") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    if (naechsteTermine.isEmpty()) {
+                        Text("Noch keine Termine eingetragen.")
+                    } else {
+                        naechsteTermine.forEach { a ->
+                            Card(
+                                modifier = Modifier.fillMaxWidth(),
+                                colors = CardDefaults.cardColors(containerColor = KuemmeroMint),
+                                shape = RoundedCornerShape(12.dp)
+                            ) {
+                                Column(Modifier.padding(10.dp)) {
+                                    Text("${a.terminDatum}${if (a.terminUhrzeit.isNotBlank()) " · ${a.terminUhrzeit}" else ""}", fontWeight = FontWeight.Bold, color = KuemmeroGreen)
+                                    Text(a.kunde, fontWeight = FontWeight.SemiBold)
+                                    if (a.leistung.isNotBlank()) Text(a.leistung)
+                                    if (a.kundenStrasse.isNotBlank() || a.kundenOrt.isNotBlank()) Text(listOf(a.kundenStrasse, a.kundenOrt).filter { it.isNotBlank() }.joinToString(", "))
+                                }
+                            }
+                        }
+                    }
+                }
+            },
+            confirmButton = { TextButton(onClick = { kalenderOffen = false }) { Text("Schließen") } }
+        )
+    }
+
     loeschIndex?.let { index ->
         AlertDialog(
             onDismissRequest = { loeschIndex = null },
@@ -1000,6 +1070,45 @@ fun KuemmeroApp() {
                 modifier = Modifier.padding(padding).padding(16.dp),
                 verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
+                item {
+                    Card(
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = CardDefaults.cardColors(containerColor = KuemmeroGreen),
+                        shape = RoundedCornerShape(22.dp)
+                    ) {
+                        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                            Text("Heute · $heuteText", color = Color.White, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+                            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                Column(Modifier.weight(1f)) {
+                                    Text("Termine", color = Color.White)
+                                    Text("${termineHeute.size}", color = Color.White, fontSize = 25.sp, fontWeight = FontWeight.Bold)
+                                }
+                                Column(Modifier.weight(1f)) {
+                                    Text("Offene Aufträge", color = Color.White)
+                                    Text("$offeneAuftraege", color = Color.White, fontSize = 25.sp, fontWeight = FontWeight.Bold)
+                                }
+                                Column(Modifier.weight(1f)) {
+                                    Text("Offen €", color = Color.White)
+                                    Text(euro(offeneZahlungSumme), color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.Bold)
+                                }
+                            }
+                            if (termineHeute.isEmpty()) {
+                                Text("Heute keine Termine.", color = Color.White)
+                            } else {
+                                termineHeute.take(3).forEach { a ->
+                                    Text("${if (a.terminUhrzeit.isBlank()) "" else a.terminUhrzeit + " · "}${a.kunde}${if (a.leistung.isBlank()) "" else " – " + a.leistung}", color = Color.White, fontWeight = FontWeight.SemiBold)
+                                }
+                            }
+                            OutlinedButton(
+                                onClick = { kalenderOffen = true },
+                                modifier = Modifier.fillMaxWidth(),
+                                border = BorderStroke(1.5.dp, Color.White),
+                                colors = ButtonDefaults.outlinedButtonColors(contentColor = Color.White)
+                            ) { Text("📅 Alle Termine anzeigen") }
+                        }
+                    }
+                }
+
                 item {
                     Card(
                         modifier = Modifier.fillMaxWidth(),
@@ -1545,7 +1654,7 @@ fun KuemmeroApp() {
                     val index = pair.first
                     val a = pair.second
                     Card(
-                        modifier = Modifier.fillMaxWidth(),
+                        modifier = Modifier.fillMaxWidth().clickable { kundenAkteName = a.kunde },
                         colors = CardDefaults.cardColors(containerColor = KuemmeroSurface),
                         shape = RoundedCornerShape(22.dp)
                     ) {
@@ -1561,6 +1670,9 @@ fun KuemmeroApp() {
                             }
                             if (a.datum.isNotBlank()) {
                                 Text("Datum: ${a.datum}", color = KuemmeroText)
+                            }
+                            if (a.terminDatum.isNotBlank()) {
+                                Text("📅 Termin: ${a.terminDatum}${if (a.terminUhrzeit.isNotBlank()) " · ${a.terminUhrzeit}" else ""}", color = KuemmeroGreen, fontWeight = FontWeight.Bold)
                             }
                             Text("Status: ${a.status}", color = KuemmeroGreen, fontWeight = FontWeight.SemiBold)
                             if (a.kundenStrasse.isNotBlank() || a.kundenOrt.isNotBlank()) {
