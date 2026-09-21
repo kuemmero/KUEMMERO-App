@@ -53,6 +53,7 @@ import java.text.SimpleDateFormat
 import java.util.Calendar
 import java.util.Date
 import java.util.Locale
+import kotlinx.coroutines.delay
 
 data class Kunde(
     val name: String,
@@ -597,6 +598,23 @@ fun KuemmeroApp() {
     var kundenAkteName by remember { mutableStateOf<String?>(null) }
     var kalenderOffen by remember { mutableStateOf(false) }
     val listeState = rememberLazyListState()
+
+    // Laufende Arbeitszeit
+    var timerIndex by remember { mutableStateOf<Int?>(null) }
+    var timerSekunden by remember { mutableStateOf(0L) }
+
+    LaunchedEffect(timerIndex) {
+        while (timerIndex != null) {
+            val i = timerIndex ?: break
+            val a = auftraege.getOrNull(i)
+            timerSekunden = if (a != null && a.arbeitsStart > 0L) {
+                ((System.currentTimeMillis() - a.arbeitsStart) / 1000L).coerceAtLeast(0L)
+            } else {
+                0L
+            }
+            delay(1000L)
+        }
+    }
 
     val feldFarben = OutlinedTextFieldDefaults.colors(
         focusedContainerColor = KuemmeroMint,
@@ -1836,6 +1854,27 @@ fun KuemmeroApp() {
                                     colors = ButtonDefaults.outlinedButtonColors(contentColor = KuemmeroGreen)
                                 ) {
                                     Text("▶ Arbeit starten", fontWeight = FontWeight.Bold)
+                                }
+                            }
+
+                            if (gespeicherteZeit > 0L) {
+                                OutlinedButton(
+                                    onClick = {
+                                        val neueStunden = gespeicherteZeit / 3600.0
+                                        val aktualisiert = a.copy(stunden = neueStunden)
+                                        auftraege = auftraege.toMutableList().apply { set(index, aktualisiert) }
+                                        speichereAuftraege(context, auftraege)
+                                        stunden = String.format(Locale.GERMANY, "%.2f", neueStunden)
+                                    },
+                                    modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp),
+                                    shape = RoundedCornerShape(26.dp),
+                                    border = BorderStroke(2.dp, KuemmeroGreen),
+                                    colors = ButtonDefaults.outlinedButtonColors(contentColor = KuemmeroGreen)
+                                ) {
+                                    Text(
+                                        "⏱ Arbeitszeit übernehmen (${String.format(Locale.GERMANY, "%.2f", gespeicherteZeit / 3600.0)} Std.)",
+                                        fontWeight = FontWeight.Bold
+                                    )
                                 }
                             }
 
