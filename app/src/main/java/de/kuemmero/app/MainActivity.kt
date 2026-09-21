@@ -35,8 +35,6 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
-import androidx.compose.foundation.relocation.BringIntoViewRequester
-import androidx.compose.foundation.relocation.bringIntoViewRequester
 import androidx.compose.material3.*
 import androidx.compose.foundation.Image
 import androidx.compose.ui.graphics.asImageBitmap
@@ -833,7 +831,6 @@ fun KuemmeroApp() {
     var fotosBereichOffen by remember { mutableStateOf(false) }
     var unterschriftBereichOffen by remember { mutableStateOf(false) }
     var sicherungBereichOffen by remember { mutableStateOf(false) }
-    val sicherungBringRequester = remember { BringIntoViewRequester() }
     var hauptseite by remember { mutableStateOf("Heute") }
     val listeState = rememberLazyListState()
 
@@ -881,10 +878,10 @@ fun KuemmeroApp() {
         }
     }
 
+    // Sicherung beim Öffnen automatisch sichtbar machen
     LaunchedEffect(sicherungBereichOffen) {
         if (sicherungBereichOffen) {
-            kotlinx.coroutines.delay(80L)
-            sicherungBringRequester.bringIntoView()
+            listeState.animateScrollToItem(22)
         }
     }
 
@@ -1838,7 +1835,6 @@ fun KuemmeroApp() {
                         "💾 Sicherung",
                         sicherungBereichOffen,
                         { sicherungBereichOffen = !sicherungBereichOffen },
-                        modifier = Modifier.bringIntoViewRequester(sicherungBringRequester)
                     ) {
                         OutlinedButton(onClick = { createBackup.launch("kuemmero-backup.json") }, modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp), shape = RoundedCornerShape(28.dp), border = BorderStroke(2.dp, KuemmeroGreen), colors = ButtonDefaults.outlinedButtonColors(contentColor = KuemmeroGreen)) { Text("Sicherung speichern", fontWeight = FontWeight.SemiBold) }
                         Button(onClick = { restoreBackup.launch(arrayOf("application/json", "text/plain", "application/octet-stream")) }, modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp), shape = RoundedCornerShape(28.dp), colors = ButtonDefaults.buttonColors(containerColor = KuemmeroGreenLight)) { Text("Daten wiederherstellen", fontWeight = FontWeight.Bold) }
