@@ -1505,8 +1505,8 @@ fun KuemmeroApp() {
                     listOf(
                         Triple("Heute", "⌂", "Heute"),
                         Triple("Aufträge", "▣", "Aufträge"),
+                        Triple("Kostenvoranschläge", "€", "Kostenvoranschläge"),
                         Triple("Kunden", "♙", "Kunden"),
-                        Triple("Kalender", "▦", "Kalender"),
                         Triple("Mehr", "⋯", "Mehr")
                     ).forEach { (label, iconText, page) ->
                         NavigationBarItem(
@@ -2232,43 +2232,6 @@ fun KuemmeroApp() {
                                 )
                             }
 
-                            if (auftragDetailIndex == null) {
-                                OutlinedButton(
-                                    onClick = {
-                                        auftragDetailIndex = index
-                                        bearbeiteIndex = index
-                                        auftragFormOffen = true
-                                        nummer = a.nummer
-                                        datum = a.datum
-                                        gueltigBis = a.gueltigBis
-                                        kunde = a.kunde
-                                        strasse = a.kundenStrasse
-                                        ort = a.kundenOrt
-                                        leistung = a.leistung
-                                        stunden = a.stunden.toString().replace(".", ",")
-                                        material = a.material.toString().replace(".", ",")
-                                        materialBonUri = a.materialBonUri
-                                        fahrt = a.fahrt.toString().replace(".", ",")
-                                        stundensatz = a.stundensatz.toString().replace(".", ",")
-                                        status = a.status
-                                        zahlungsstatus = a.zahlungsstatus
-                                        bezahltAm = a.bezahltAm
-                                        terminDatum = a.terminDatum
-                                        terminUhrzeit = a.terminUhrzeit
-                                        notiz = a.notiz
-                                        fotosVorher = a.fotosVorher
-                                        fotosNachher = a.fotosNachher
-                                        unterschriftPfad = a.unterschriftPfad
-                                    },
-                                    modifier = Modifier.fillMaxWidth().heightIn(min = 50.dp),
-                                    shape = RoundedCornerShape(25.dp),
-                                    border = BorderStroke(2.dp, KuemmeroGreen),
-                                    colors = ButtonDefaults.outlinedButtonColors(contentColor = KuemmeroGreen)
-                                ) {
-                                    Text("✏ Auftrag ändern", fontWeight = FontWeight.Bold)
-                                }
-                            }
-
                             if (auftragDetailIndex == index) {
                                 OutlinedButton(
                                     onClick = { auftragDetailIndex = null; auftragFormOffen = false },
@@ -2648,7 +2611,7 @@ fun KuemmeroApp() {
                                 verticalAlignment = Alignment.CenterVertically,
                                 horizontalArrangement = Arrangement.spacedBy(10.dp)
                             ) {
-                                TextButton(onClick = { hauptseite = "Mehr" }) { Text("← Zurück") }
+                                TextButton(onClick = { hauptseite = "Aufträge" }) { Text("← Zurück") }
                                 Text(
                                     "Kostenvoranschläge",
                                     style = MaterialTheme.typography.headlineSmall,
@@ -2814,6 +2777,15 @@ fun KuemmeroApp() {
                     }
                     "Mehr" -> {
                         item { Text("Mehr", style = MaterialTheme.typography.headlineSmall, color = KuemmeroGreen, fontWeight = FontWeight.Bold) }
+                        item {
+                            OutlinedButton(
+                                onClick = { hauptseite = "Kalender" },
+                                modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp),
+                                shape = RoundedCornerShape(26.dp),
+                                border = BorderStroke(2.dp, KuemmeroGreen),
+                                colors = ButtonDefaults.outlinedButtonColors(contentColor = KuemmeroGreen)
+                            ) { Text("📅 Kalender", fontWeight = FontWeight.Bold) }
+                        }
                         item {
                             Card(Modifier.fillMaxWidth().clickable { hauptseite = "Kostenvoranschläge" }, colors = CardDefaults.cardColors(containerColor = KuemmeroSurface), shape = RoundedCornerShape(18.dp)) {
                                 Row(Modifier.fillMaxWidth().padding(16.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
