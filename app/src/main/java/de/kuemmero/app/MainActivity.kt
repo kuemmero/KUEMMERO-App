@@ -2232,6 +2232,43 @@ fun KuemmeroApp() {
                                 )
                             }
 
+                            if (auftragDetailIndex == null) {
+                                OutlinedButton(
+                                    onClick = {
+                                        auftragDetailIndex = index
+                                        bearbeiteIndex = index
+                                        auftragFormOffen = true
+                                        nummer = a.nummer
+                                        datum = a.datum
+                                        gueltigBis = a.gueltigBis
+                                        kunde = a.kunde
+                                        strasse = a.kundenStrasse
+                                        ort = a.kundenOrt
+                                        leistung = a.leistung
+                                        stunden = a.stunden.toString().replace(".", ",")
+                                        material = a.material.toString().replace(".", ",")
+                                        materialBonUri = a.materialBonUri
+                                        fahrt = a.fahrt.toString().replace(".", ",")
+                                        stundensatz = a.stundensatz.toString().replace(".", ",")
+                                        status = a.status
+                                        zahlungsstatus = a.zahlungsstatus
+                                        bezahltAm = a.bezahltAm
+                                        terminDatum = a.terminDatum
+                                        terminUhrzeit = a.terminUhrzeit
+                                        notiz = a.notiz
+                                        fotosVorher = a.fotosVorher
+                                        fotosNachher = a.fotosNachher
+                                        unterschriftPfad = a.unterschriftPfad
+                                    },
+                                    modifier = Modifier.fillMaxWidth().heightIn(min = 50.dp),
+                                    shape = RoundedCornerShape(25.dp),
+                                    border = BorderStroke(2.dp, KuemmeroGreen),
+                                    colors = ButtonDefaults.outlinedButtonColors(contentColor = KuemmeroGreen)
+                                ) {
+                                    Text("✏ Auftrag ändern", fontWeight = FontWeight.Bold)
+                                }
+                            }
+
                             if (auftragDetailIndex == index) {
                                 OutlinedButton(
                                     onClick = { auftragDetailIndex = null; auftragFormOffen = false },
