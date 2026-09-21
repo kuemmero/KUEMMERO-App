@@ -24,6 +24,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.horizontalScroll
@@ -846,12 +847,18 @@ fun KuemmeroApp() {
                     Text("Bitte hier unterschreiben:", color = KuemmeroText)
                     Spacer(Modifier.height(8.dp))
                     var pathPoints by remember { mutableStateOf<List<Offset>>(emptyList()) }
+                    var signBoxWidth by remember { mutableStateOf(1f) }
+                    var signBoxHeight by remember { mutableStateOf(1f) }
                     Box(
                         modifier = Modifier
                             .fillMaxWidth()
                             .height(180.dp)
                             .background(Color.White, RoundedCornerShape(12.dp))
                             .border(1.dp, KuemmeroGreen, RoundedCornerShape(12.dp))
+                            .onSizeChanged {
+                                signBoxWidth = it.width.toFloat().coerceAtLeast(1f)
+                                signBoxHeight = it.height.toFloat().coerceAtLeast(1f)
+                            }
                             .pointerInput(Unit) {
                                 detectDragGestures(
                                     onDragStart = { offset -> pathPoints = pathPoints + offset },
@@ -873,17 +880,32 @@ fun KuemmeroApp() {
                     TextButton(onClick = { pathPoints = emptyList() }) { Text("Unterschrift löschen") }
                     Button(
                         onClick = {
+                            if (pathPoints.size < 2) {
+                                android.widget.Toast.makeText(context, "Bitte zuerst unterschreiben.", 0).show()
+                                return@Button
+                            }
                             val file = java.io.File(context.filesDir, "unterschrift_${System.currentTimeMillis()}.png")
-                            val bitmap = android.graphics.Bitmap.createBitmap(900, 360, android.graphics.Bitmap.Config.ARGB_8888)
+                            val bitmapWidth = 1200
+                            val bitmapHeight = 500
+                            val bitmap = android.graphics.Bitmap.createBitmap(bitmapWidth, bitmapHeight, android.graphics.Bitmap.Config.ARGB_8888)
                             val canvas = android.graphics.Canvas(bitmap)
                             canvas.drawColor(android.graphics.Color.WHITE)
-                            val paint = android.graphics.Paint().apply { color = android.graphics.Color.rgb(8,127,62); strokeWidth = 7f; style = android.graphics.Paint.Style.STROKE; strokeCap = android.graphics.Paint.Cap.ROUND }
-                            if (pathPoints.size > 1) {
-                                val path = android.graphics.Path()
-                                path.moveTo(pathPoints.first().x * 2f, pathPoints.first().y * 2f)
-                                pathPoints.drop(1).forEach { path.lineTo(it.x * 2f, it.y * 2f) }
-                                canvas.drawPath(path, paint)
+                            val paint = android.graphics.Paint().apply {
+                                color = android.graphics.Color.rgb(8,127,62)
+                                strokeWidth = 10f
+                                style = android.graphics.Paint.Style.STROKE
+                                strokeCap = android.graphics.Paint.Cap.ROUND
+                                strokeJoin = android.graphics.Paint.Join.ROUND
+                                isAntiAlias = true
                             }
+                            val scaleX = (bitmapWidth - 80f) / signBoxWidth
+                            val scaleY = (bitmapHeight - 80f) / signBoxHeight
+                            val path = android.graphics.Path()
+                            path.moveTo(40f + pathPoints.first().x * scaleX, 40f + pathPoints.first().y * scaleY)
+                            pathPoints.drop(1).forEach { point ->
+                                path.lineTo(40f + point.x * scaleX, 40f + point.y * scaleY)
+                            }
+                            canvas.drawPath(path, paint)
                             file.outputStream().use { bitmap.compress(android.graphics.Bitmap.CompressFormat.PNG, 100, it) }
                             unterschriftPfad = file.absolutePath
                             unterschriftDialog = false
