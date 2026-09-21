@@ -479,6 +479,14 @@ private fun erstellePdf(
     c.drawLine(40f, 693f, 280f, 693f, p)
     c.drawText("Unterschrift", 40f, 711f, p)
     c.drawLine(330f, 693f, 550f, 693f, p)
+    val signDate = if (signBitmap != null) {
+        unterschriftDatum.ifBlank { SimpleDateFormat("dd.MM.yyyy", Locale.GERMANY).format(Date()) }
+    } else {
+        ""
+    }
+    if (signDate.isNotBlank()) {
+        c.drawText(signDate, 330f, 687f, p)
+    }
     c.drawText("Datum", 330f, 711f, p)
     c.drawText("Vielen Dank für Ihr Vertrauen.", 40f, 763f, p)
     pdf.finishPage(page)
