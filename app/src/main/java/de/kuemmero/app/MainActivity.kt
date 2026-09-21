@@ -694,6 +694,33 @@ private val KuemmeroColors = lightColorScheme(
     onError = Color.White
 )
 
+@Composable
+private fun KlappBereich(
+    titel: String,
+    offen: Boolean,
+    onToggle: () -> Unit,
+    content: @Composable ColumnScope.() -> Unit
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Surface(
+            modifier = Modifier.fillMaxWidth().clickable { onToggle() },
+            shape = RoundedCornerShape(14.dp),
+            color = KuemmeroMint,
+            border = BorderStroke(1.5.dp, KuemmeroGreen)
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 12.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Text(titel, fontWeight = FontWeight.Bold, color = KuemmeroGreen)
+                Text(if (offen) "▲" else "▼", color = KuemmeroGreen, fontWeight = FontWeight.Bold)
+            }
+        }
+        if (offen) Column(verticalArrangement = Arrangement.spacedBy(8.dp), content = content)
+    }
+}
+
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -795,6 +822,11 @@ fun KuemmeroApp() {
     var zahlungsFilterOffen by remember { mutableStateOf(false) }
     var kundenAkteName by remember { mutableStateOf<String?>(null) }
     var kalenderOffen by remember { mutableStateOf(false) }
+    var terminBereichOffen by remember { mutableStateOf(false) }
+    var notizBereichOffen by remember { mutableStateOf(false) }
+    var fotosBereichOffen by remember { mutableStateOf(false) }
+    var unterschriftBereichOffen by remember { mutableStateOf(false) }
+    var sicherungBereichOffen by remember { mutableStateOf(false) }
     val listeState = rememberLazyListState()
 
     // Laufende Arbeitszeit
@@ -1608,97 +1640,46 @@ fun KuemmeroApp() {
                 }
 
                 item {
-                    Text("Termin", fontWeight = FontWeight.Bold, color = KuemmeroText)
-                    Spacer(Modifier.height(8.dp))
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
-                        OutlinedTextField(
-                            terminDatum, { terminDatum = it },
-                            label = { Text("Datum") },
-                            placeholder = { Text(datumJetzt) },
-                            colors = feldFarben, modifier = Modifier.weight(1f)
-                        )
-                        OutlinedTextField(
-                            terminUhrzeit, { terminUhrzeit = it },
-                            label = { Text("Uhrzeit") },
-                            placeholder = { Text("09:00") },
-                            colors = feldFarben, modifier = Modifier.weight(1f)
-                        )
+                    KlappBereich("📅 Termin", terminBereichOffen, { terminBereichOffen = !terminBereichOffen }) {
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+                            OutlinedTextField(terminDatum, { terminDatum = it }, label = { Text("Datum") }, placeholder = { Text(datumJetzt) }, colors = feldFarben, modifier = Modifier.weight(1f))
+                            OutlinedTextField(terminUhrzeit, { terminUhrzeit = it }, label = { Text("Uhrzeit") }, placeholder = { Text("09:00") }, colors = feldFarben, modifier = Modifier.weight(1f))
+                        }
                     }
                 }
 
                 item {
-                    OutlinedTextField(
-                        notiz, { notiz = it },
-                        label = { Text("Notiz zum Auftrag") },
-                        minLines = 3,
-                        colors = feldFarben, modifier = Modifier.fillMaxWidth()
-                    )
-                }
-
-                item {
-                    Text("Auftragsfotos", fontWeight = FontWeight.Bold, color = KuemmeroText)
-                    Spacer(Modifier.height(8.dp))
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
-                        OutlinedButton(
-                            onClick = { fotoTyp = "Vorher"; fotoLauncher.launch("image/*") },
-                            modifier = Modifier.weight(1f),
-                            colors = ButtonDefaults.outlinedButtonColors(contentColor = KuemmeroGreen)
-                        ) { Text("📷 Vorher (${fotosVorher.size})") }
-                        OutlinedButton(
-                            onClick = { fotoTyp = "Nachher"; fotoLauncher.launch("image/*") },
-                            modifier = Modifier.weight(1f),
-                            colors = ButtonDefaults.outlinedButtonColors(contentColor = KuemmeroGreen)
-                        ) { Text("📷 Nachher (${fotosNachher.size})") }
+                    KlappBereich("📝 Notiz zum Auftrag", notizBereichOffen, { notizBereichOffen = !notizBereichOffen }) {
+                        OutlinedTextField(notiz, { notiz = it }, label = { Text("Notiz zum Auftrag") }, minLines = 3, colors = feldFarben, modifier = Modifier.fillMaxWidth())
                     }
                 }
 
                 item {
-                    if (fotosVorher.isNotEmpty()) {
-                        Text("Vorher-Fotos", fontWeight = FontWeight.Bold, color = KuemmeroText)
-                        Spacer(Modifier.height(6.dp))
-                        Row(
-                            modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
-                            horizontalArrangement = Arrangement.spacedBy(8.dp)
-                        ) {
-                            fotosVorher.forEach { uri ->
-                                FotoVorschau(
-                                    context = context,
-                                    uri = uri,
-                                    onClick = { fotoVorschauUri = uri },
-                                    onDelete = { fotosVorher = fotosVorher.filterNot { it == uri } }
-                                )
+                    KlappBereich("📷 Auftragsfotos (${fotosVorher.size + fotosNachher.size})", fotosBereichOffen, { fotosBereichOffen = !fotosBereichOffen }) {
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+                            OutlinedButton(onClick = { fotoTyp = "Vorher"; fotoLauncher.launch("image/*") }, modifier = Modifier.weight(1f), colors = ButtonDefaults.outlinedButtonColors(contentColor = KuemmeroGreen)) { Text("📷 Vorher (${fotosVorher.size})") }
+                            OutlinedButton(onClick = { fotoTyp = "Nachher"; fotoLauncher.launch("image/*") }, modifier = Modifier.weight(1f), colors = ButtonDefaults.outlinedButtonColors(contentColor = KuemmeroGreen)) { Text("📷 Nachher (${fotosNachher.size})") }
+                        }
+                        if (fotosVorher.isNotEmpty()) {
+                            Text("Vorher-Fotos", fontWeight = FontWeight.Bold, color = KuemmeroText)
+                            Row(modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                fotosVorher.forEach { uri -> FotoVorschau(context, uri, { fotoVorschauUri = uri }, { fotosVorher = fotosVorher.filterNot { it == uri } }) }
                             }
                         }
-                        Spacer(Modifier.height(10.dp))
-                    }
-                    if (fotosNachher.isNotEmpty()) {
-                        Text("Nachher-Fotos", fontWeight = FontWeight.Bold, color = KuemmeroText)
-                        Spacer(Modifier.height(6.dp))
-                        Row(
-                            modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
-                            horizontalArrangement = Arrangement.spacedBy(8.dp)
-                        ) {
-                            fotosNachher.forEach { uri ->
-                                FotoVorschau(
-                                    context = context,
-                                    uri = uri,
-                                    onClick = { fotoVorschauUri = uri },
-                                    onDelete = { fotosNachher = fotosNachher.filterNot { it == uri } }
-                                )
+                        if (fotosNachher.isNotEmpty()) {
+                            Text("Nachher-Fotos", fontWeight = FontWeight.Bold, color = KuemmeroText)
+                            Row(modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                fotosNachher.forEach { uri -> FotoVorschau(context, uri, { fotoVorschauUri = uri }, { fotosNachher = fotosNachher.filterNot { it == uri } }) }
                             }
                         }
                     }
                 }
 
                 item {
-                    OutlinedButton(
-                        onClick = { unterschriftDialog = true },
-                        modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp),
-                        shape = RoundedCornerShape(26.dp),
-                        border = BorderStroke(2.dp, KuemmeroGreen),
-                        colors = ButtonDefaults.outlinedButtonColors(contentColor = KuemmeroGreen)
-                    ) {
-                        Text(if (unterschriftPfad.isBlank()) "✍ Kunden-Unterschrift aufnehmen" else "✓ Unterschrift vorhanden", fontWeight = FontWeight.Bold)
+                    KlappBereich("✍ Kunden-Unterschrift", unterschriftBereichOffen, { unterschriftBereichOffen = !unterschriftBereichOffen }) {
+                        OutlinedButton(onClick = { unterschriftDialog = true }, modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp), shape = RoundedCornerShape(26.dp), border = BorderStroke(2.dp, KuemmeroGreen), colors = ButtonDefaults.outlinedButtonColors(contentColor = KuemmeroGreen)) {
+                            Text(if (unterschriftPfad.isBlank()) "✍ Kunden-Unterschrift aufnehmen" else "✓ Unterschrift vorhanden", fontWeight = FontWeight.Bold)
+                        }
                     }
                 }
 
@@ -1812,46 +1793,10 @@ fun KuemmeroApp() {
                 }
 
                 item {
-                    OutlinedButton(
-                        onClick = { createBackup.launch("kuemmero-backup.json") },
-                        modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp),
-                        shape = RoundedCornerShape(28.dp),
-                        border = BorderStroke(2.dp, KuemmeroGreen),
-                        colors = ButtonDefaults.outlinedButtonColors(contentColor = KuemmeroGreen)
-                    ) {
-                        Text("Sicherung speichern", fontWeight = FontWeight.SemiBold)
-                    }
-                }
-
-                item {
-                    Button(
-                        onClick = {
-                            restoreBackup.launch(arrayOf("application/json", "text/plain", "application/octet-stream"))
-                        },
-                        modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp),
-                        shape = RoundedCornerShape(28.dp),
-                        colors = ButtonDefaults.buttonColors(containerColor = KuemmeroGreenLight)
-                    ) {
-                        Text("Daten wiederherstellen", fontWeight = FontWeight.Bold)
-                    }
-                }
-
-                item {
-                    OutlinedButton(
-                        onClick = {
-                            val ok = sichereBackupAutomatisch(context)
-                            android.widget.Toast.makeText(
-                                context,
-                                if (ok) "Sicherung aktualisiert." else "Bitte zuerst eine Backup-Datei speichern.",
-                                1
-                            ).show()
-                        },
-                        modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp),
-                        shape = RoundedCornerShape(26.dp),
-                        border = BorderStroke(2.dp, KuemmeroGreen),
-                        colors = ButtonDefaults.outlinedButtonColors(contentColor = KuemmeroGreen)
-                    ) {
-                        Text("Sicherung jetzt aktualisieren", fontWeight = FontWeight.SemiBold)
+                    KlappBereich("💾 Sicherung", sicherungBereichOffen, { sicherungBereichOffen = !sicherungBereichOffen }) {
+                        OutlinedButton(onClick = { createBackup.launch("kuemmero-backup.json") }, modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp), shape = RoundedCornerShape(28.dp), border = BorderStroke(2.dp, KuemmeroGreen), colors = ButtonDefaults.outlinedButtonColors(contentColor = KuemmeroGreen)) { Text("Sicherung speichern", fontWeight = FontWeight.SemiBold) }
+                        Button(onClick = { restoreBackup.launch(arrayOf("application/json", "text/plain", "application/octet-stream")) }, modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp), shape = RoundedCornerShape(28.dp), colors = ButtonDefaults.buttonColors(containerColor = KuemmeroGreenLight)) { Text("Daten wiederherstellen", fontWeight = FontWeight.Bold) }
+                        OutlinedButton(onClick = { val ok = sichereBackupAutomatisch(context); android.widget.Toast.makeText(context, if (ok) "Sicherung aktualisiert." else "Bitte zuerst eine Backup-Datei speichern.", 1).show() }, modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp), shape = RoundedCornerShape(26.dp), border = BorderStroke(2.dp, KuemmeroGreen), colors = ButtonDefaults.outlinedButtonColors(contentColor = KuemmeroGreen)) { Text("Sicherung jetzt aktualisieren", fontWeight = FontWeight.SemiBold) }
                     }
                 }
 
