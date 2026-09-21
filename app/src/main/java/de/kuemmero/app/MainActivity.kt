@@ -303,6 +303,48 @@ private fun ladeUnterschriftBitmap(pfad: String): android.graphics.Bitmap? {
     return cropped
 }
 
+private fun ladeFotoBitmap(context: Context, uriText: String): android.graphics.Bitmap? {
+    return try {
+        context.contentResolver.openInputStream(Uri.parse(uriText))?.use { input ->
+            android.graphics.BitmapFactory.decodeStream(input)
+        }
+    } catch (_: Exception) { null }
+}
+
+private fun fuegeFotoSeitenHinzu(
+    context: Context,
+    pdf: PdfDocument,
+    fotosVorher: List<String>,
+    fotosNachher: List<String>
+) {
+    val gruppen = listOf("FOTOS – VORHER" to fotosVorher, "FOTOS – NACHHER" to fotosNachher)
+    var seitenNummer = 2
+    for ((titel, fotos) in gruppen) {
+        if (fotos.isEmpty()) continue
+        for ((index, uriText) in fotos.withIndex()) {
+            val bitmap = ladeFotoBitmap(context, uriText) ?: continue
+            val page = pdf.startPage(PdfDocument.PageInfo.Builder(595, 842, seitenNummer++).create())
+            val c = page.canvas
+            val p = Paint(Paint.ANTI_ALIAS_FLAG)
+            p.textSize = 20f
+            c.drawText(titel, 40f, 50f, p)
+            p.textSize = 11f
+            c.drawText("Foto ${index + 1} von ${fotos.size}", 40f, 72f, p)
+
+            val maxW = 515f
+            val maxH = 690f
+            val scale = minOf(maxW / bitmap.width.toFloat(), maxH / bitmap.height.toFloat())
+            val drawW = bitmap.width * scale
+            val drawH = bitmap.height * scale
+            val left = (595f - drawW) / 2f
+            val top = 105f + (maxH - drawH) / 2f
+            c.drawBitmap(bitmap, null, android.graphics.RectF(left, top, left + drawW, top + drawH), null)
+            bitmap.recycle()
+            pdf.finishPage(page)
+        }
+    }
+}
+
 private fun erstellePdf(
     context: Context,
     nummer: String,
@@ -316,7 +358,9 @@ private fun erstellePdf(
     material: Double,
     fahrt: Double,
     stundensatz: Double,
-    unterschriftPfad: String = ""
+    unterschriftPfad: String = "",
+    fotosVorher: List<String> = emptyList(),
+    fotosNachher: List<String> = emptyList()
 ): PdfDocument {
     val pdf = PdfDocument()
     val page = pdf.startPage(PdfDocument.PageInfo.Builder(595, 842, 1).create())
@@ -372,11 +416,13 @@ private fun erstellePdf(
     c.drawText("Datum", 330f, 711f, p)
     c.drawText("Vielen Dank für Ihr Vertrauen.", 40f, 763f, p)
     pdf.finishPage(page)
+    fuegeFotoSeitenHinzu(context, pdf, fotosVorher, fotosNachher)
     return pdf
 }
 
 
 private fun erstelleRechnungPdf(
+    context: Context,
     nummer: String,
     rechnungsdatum: String,
     faelligAm: String,
@@ -388,7 +434,9 @@ private fun erstelleRechnungPdf(
     material: Double,
     fahrt: Double,
     stundensatz: Double,
-    unterschriftPfad: String = ""
+    unterschriftPfad: String = "",
+    fotosVorher: List<String> = emptyList(),
+    fotosNachher: List<String> = emptyList()
 ): PdfDocument {
     val pdf = PdfDocument()
     val page = pdf.startPage(PdfDocument.PageInfo.Builder(595, 842, 1).create())
@@ -451,6 +499,7 @@ private fun erstelleRechnungPdf(
     c.drawText("Unterschrift", 40f, 718f, p)
     c.drawText("Vielen Dank für Ihr Vertrauen.", 40f, 730f, p)
     pdf.finishPage(page)
+    fuegeFotoSeitenHinzu(context, pdf, fotosVorher, fotosNachher)
     return pdf
 }
 
@@ -478,14 +527,15 @@ private fun druckeRechnungPdf(context: Context, auftrag: Auftrag) {
             }
             pdf?.close()
             pdf = erstelleRechnungPdf(
+                context,
                 nummer, rechnungsdatum, faelligAm,
                 auftrag.kunde, auftrag.kundenStrasse, auftrag.kundenOrt, auftrag.leistung,
                 auftrag.stunden, auftrag.material, auftrag.fahrt, auftrag.stundensatz,
-                auftrag.unterschriftPfad
+                auftrag.unterschriftPfad, auftrag.fotosVorher, auftrag.fotosNachher
             )
             val info = PrintDocumentInfo.Builder("KÜMMERO-Rechnung-$nummer.pdf")
                 .setContentType(PrintDocumentInfo.CONTENT_TYPE_DOCUMENT)
-                .setPageCount(1)
+                .setPageCount(PrintDocumentInfo.PAGE_COUNT_UNKNOWN)
                 .build()
             callback.onLayoutFinished(info, true)
         }
@@ -559,11 +609,11 @@ private fun druckePdf(
                 context, nummer, datum, gueltigBis,
                 auftrag.kunde, auftrag.kundenStrasse, auftrag.kundenOrt, auftrag.leistung,
                 auftrag.stunden, auftrag.material, auftrag.fahrt, auftrag.stundensatz,
-                auftrag.unterschriftPfad
+                auftrag.unterschriftPfad, auftrag.fotosVorher, auftrag.fotosNachher
             )
             val info = PrintDocumentInfo.Builder(dateiname)
                 .setContentType(PrintDocumentInfo.CONTENT_TYPE_DOCUMENT)
-                .setPageCount(1)
+                .setPageCount(PrintDocumentInfo.PAGE_COUNT_UNKNOWN)
                 .build()
             callback.onLayoutFinished(info, true)
         }
@@ -813,12 +863,14 @@ fun KuemmeroApp() {
                 erstellePdf(
                     context, nummer, datum, gueltigBis,
                     a.kunde, a.kundenStrasse, a.kundenOrt, a.leistung,
-                    a.stunden, a.material, a.fahrt, a.stundensatz, a.unterschriftPfad
+                    a.stunden, a.material, a.fahrt, a.stundensatz, a.unterschriftPfad,
+                    a.fotosVorher, a.fotosNachher
                 )
             } else {
                 erstellePdf(
                     context, nummer, datum, gueltigBis, kunde, strasse, ort, leistung,
-                    zahl(stunden), zahl(material), zahl(fahrt), zahl(stundensatz, 42.0), unterschriftPfad
+                    zahl(stunden), zahl(material), zahl(fahrt), zahl(stundensatz, 42.0), unterschriftPfad,
+                    fotosVorher, fotosNachher
                 )
             }
             context.contentResolver.openOutputStream(it)?.use { out -> pdf.writeTo(out) }
@@ -841,6 +893,7 @@ fun KuemmeroApp() {
                     val faelligCal = Calendar.getInstance().apply { add(Calendar.DAY_OF_YEAR, 14) }
                     val faelligAm = datumFormat.format(faelligCal.time)
                     val pdf = erstelleRechnungPdf(
+                        context,
                         rechnungsnummer,
                         rechnungsdatum,
                         faelligAm,
@@ -852,7 +905,8 @@ fun KuemmeroApp() {
                         a.material,
                         a.fahrt,
                         a.stundensatz,
-                        a.unterschriftPfad
+                        a.unterschriftPfad,
+                        a.fotosVorher, a.fotosNachher
                     )
                     context.contentResolver.openOutputStream(it)?.use { out -> pdf.writeTo(out) }
                     pdf.close()
