@@ -2641,7 +2641,7 @@ fun KuemmeroApp() {
                         }
                         val kundenGefiltert = kunden.filter {
                             val q = kundenSuche.trim().lowercase()
-                            q.isBlank() || listOf(k.name, k.adresse, k.ort, k.telefon, k.email).any { it.lowercase().contains(q) }
+                            q.isBlank() || listOf(it.name, it.adresse, it.ort, it.telefon, it.email).any { value -> value.lowercase().contains(q) }
                         }
                         item { Text("${kundenGefiltert.size} Kunde${if (kundenGefiltert.size == 1) "" else "n"}", color = KuemmeroText) }
                         if (kundenGefiltert.isEmpty()) {
