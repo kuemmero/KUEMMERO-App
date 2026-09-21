@@ -80,6 +80,7 @@ data class Auftrag(
     val leistung: String,
     val stunden: Double,
     val material: Double,
+    val materialBonUri: String = "",
     val fahrt: Double,
     val stundensatz: Double,
     val status: String = "Offen",
@@ -147,6 +148,7 @@ private fun ladeAuftraege(context: Context): List<Auftrag> {
             o.optString("leistung"),
             o.optDouble("stunden", 0.0),
             o.optDouble("material", 0.0),
+            o.optString("materialBonUri", ""),
             o.optDouble("fahrt", 0.0),
             o.optDouble("stundensatz", 42.0),
             o.optString("status", "Offen").ifBlank { "Offen" },
@@ -222,6 +224,7 @@ private fun speichereAuftraege(context: Context, liste: List<Auftrag>) {
             put("leistung", a.leistung)
             put("stunden", a.stunden)
             put("material", a.material)
+            put("materialBonUri", a.materialBonUri)
             put("fahrt", a.fahrt)
             put("stundensatz", a.stundensatz)
             put("status", a.status)
@@ -781,6 +784,7 @@ fun KuemmeroApp() {
     var leistung by remember { mutableStateOf("") }
     var stunden by remember { mutableStateOf("") }
     var material by remember { mutableStateOf("") }
+    var materialBonUri by remember { mutableStateOf("") }
     var fahrt by remember { mutableStateOf("") }
     var stundensatz by remember {
         mutableStateOf(
@@ -939,6 +943,23 @@ fun KuemmeroApp() {
             if (fotoTyp == "Vorher") fotosVorher = (fotosVorher + neue).distinct()
             else fotosNachher = (fotosNachher + neue).distinct()
             android.widget.Toast.makeText(context, "${neue.size} Foto(s) hinzugefügt.", 0).show()
+        }
+    }
+
+    val materialBonLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.OpenDocument()
+    ) { uri ->
+        uri?.let {
+            try {
+                context.contentResolver.takePersistableUriPermission(
+                    it,
+                    Intent.FLAG_GRANT_READ_URI_PERMISSION
+                )
+            } catch (_: Exception) {
+                // Bei manchen Dateianbietern nicht verfügbar; die URI bleibt trotzdem nutzbar.
+            }
+            materialBonUri = it.toString()
+            android.widget.Toast.makeText(context, "Kassenbon hinzugefügt.", 0).show()
         }
     }
 
@@ -1620,6 +1641,45 @@ fun KuemmeroApp() {
                     )
                 }
                 item {
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        OutlinedButton(
+                            onClick = { materialBonLauncher.launch(arrayOf("image/*", "application/pdf")) },
+                            modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp),
+                            shape = RoundedCornerShape(26.dp),
+                            border = BorderStroke(2.dp, KuemmeroGreen),
+                            colors = ButtonDefaults.outlinedButtonColors(contentColor = KuemmeroGreen)
+                        ) {
+                            Text(
+                                if (materialBonUri.isBlank()) "🧾 Kassenbon zu Material hinzufügen" else "✓ Kassenbon zum Material vorhanden",
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+                        if (materialBonUri.isNotBlank()) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                if (materialBonUri.lowercase(Locale.GERMANY).contains(".pdf")) {
+                                    Text("🧾 Material-Kassenbon: PDF", modifier = Modifier.weight(1f), color = KuemmeroText)
+                                } else {
+                                    FotoVorschau(
+                                        context,
+                                        materialBonUri,
+                                        { fotoVorschauUri = materialBonUri },
+                                        { materialBonUri = "" }
+                                    )
+                                    Text("Material-Kassenbon", modifier = Modifier.weight(1f), color = KuemmeroText)
+                                }
+                                TextButton(
+                                    onClick = { materialBonUri = "" },
+                                    colors = ButtonDefaults.textButtonColors(contentColor = KuemmeroError)
+                                ) { Text("Entfernen") }
+                            }
+                        }
+                    }
+                }
+                item {
                     OutlinedTextField(
                         fahrt, { fahrt = it },
                         label = { Text("Fahrtkosten (€)") },
@@ -1741,7 +1801,7 @@ fun KuemmeroApp() {
                                 val a = Auftrag(
                                     nummer.trim(), datum.trim(), gueltigBis.trim(),
                                     kunde.trim(), strasse.trim(), ort.trim(), leistung.trim(),
-                                    arbeitsstunden, materialKosten, fahrtKosten, rate, status, zahlungsstatus, bezahltAm,
+                                    arbeitsstunden, materialKosten, materialBonUri, fahrtKosten, rate, status, zahlungsstatus, bezahltAm,
                                     terminDatum.trim(), terminUhrzeit.trim(), notiz.trim(), fotosVorher, fotosNachher, unterschriftPfad,
                                     bearbeiteIndex?.let { auftraege.getOrNull(it)?.rechnungsnummer } ?: "",
                                     bearbeiteIndex?.let { auftraege.getOrNull(it)?.rechnungsdatum } ?: "",
@@ -1767,6 +1827,7 @@ fun KuemmeroApp() {
                                 leistung = ""
                                 stunden = ""
                                 material = ""
+                                materialBonUri = ""
                                 fahrt = ""
                                 status = "Offen"
                                 zahlungsstatus = "Offen"
@@ -2208,6 +2269,7 @@ fun KuemmeroApp() {
                                     leistung = a.leistung
                                     stunden = a.stunden.toString().replace(".", ",")
                                     material = a.material.toString().replace(".", ",")
+                                    materialBonUri = a.materialBonUri
                                     fahrt = a.fahrt.toString().replace(".", ",")
                                     stundensatz = a.stundensatz.toString().replace(".", ",")
                                     status = a.status
