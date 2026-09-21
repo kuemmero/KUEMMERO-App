@@ -92,6 +92,7 @@ data class Auftrag(
     val fotosVorher: List<String> = emptyList(),
     val fotosNachher: List<String> = emptyList(),
     val unterschriftPfad: String = "",
+    val unterschriftDatum: String = "",
     val rechnungsnummer: String = "",
     val rechnungsdatum: String = "",
     val faelligAm: String = "",
@@ -153,7 +154,6 @@ private fun speichereKostenvoranschlaege(context: Context, liste: List<Kostenvor
     }
     context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
         .edit().putString(KOSTENVORANSCHLAEGE_KEY, json.toString()).commit()
-    sichereBackupAutomatisch(context)
 }
 
 
@@ -210,6 +210,7 @@ private fun ladeAuftraege(context: Context): List<Auftrag> {
             o.optJSONArray("fotosVorher")?.let { arr -> List(arr.length()) { j -> arr.optString(j) } } ?: emptyList(),
             o.optJSONArray("fotosNachher")?.let { arr -> List(arr.length()) { j -> arr.optString(j) } } ?: emptyList(),
             o.optString("unterschriftPfad", ""),
+            o.optString("unterschriftDatum", ""),
             o.optString("rechnungsnummer", ""),
             o.optString("rechnungsdatum", ""),
             o.optString("faelligAm", ""),
@@ -250,7 +251,6 @@ private fun speichereKunden(context: Context, liste: List<Kunde>) {
     }
     context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
         .edit().putString(KUNDEN_KEY, json.toString()).commit()
-    sichereBackupAutomatisch(context)
 }
 
 private fun speichereOderAktualisiereKunde(context: Context, kunde: Kunde) {
@@ -286,6 +286,7 @@ private fun speichereAuftraege(context: Context, liste: List<Auftrag>) {
             put("fotosVorher", JSONArray(a.fotosVorher))
             put("fotosNachher", JSONArray(a.fotosNachher))
             put("unterschriftPfad", a.unterschriftPfad)
+            put("unterschriftDatum", a.unterschriftDatum)
             put("rechnungsnummer", a.rechnungsnummer)
             put("rechnungsdatum", a.rechnungsdatum)
             put("faelligAm", a.faelligAm)
@@ -297,7 +298,6 @@ private fun speichereAuftraege(context: Context, liste: List<Auftrag>) {
     }
     context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
         .edit().putString(AUFTRAEGE_KEY, json.toString()).commit()
-    sichereBackupAutomatisch(context)
 }
 
 private fun backupText(context: Context): String {
@@ -315,11 +315,14 @@ private fun sichereBackupAutomatisch(context: Context): Boolean {
         .getString(BACKUP_URI_KEY, null) ?: return false
     return try {
         val uri = Uri.parse(uriText)
-        context.contentResolver.openOutputStream(uri, "wt")?.use {
-            it.write(backupText(context).toByteArray(Charsets.UTF_8))
+        context.contentResolver.openOutputStream(uri, "wt")?.use { out ->
+            out.write(backupText(context).toByteArray(Charsets.UTF_8))
+            out.flush()
         } ?: return false
         true
-    } catch (_: Exception) { false }
+    } catch (_: Exception) {
+        false
+    }
 }
 
 private fun ladeUnterschriftBitmap(pfad: String): android.graphics.Bitmap? {
@@ -420,6 +423,7 @@ private fun erstellePdf(
     fahrt: Double,
     stundensatz: Double,
     unterschriftPfad: String = "",
+    unterschriftDatum: String = "",
     fotosVorher: List<String> = emptyList(),
     fotosNachher: List<String> = emptyList(),
     dokumentTitel: String = "ANGEBOT"
@@ -497,6 +501,7 @@ private fun erstelleRechnungPdf(
     fahrt: Double,
     stundensatz: Double,
     unterschriftPfad: String = "",
+    unterschriftDatum: String = "",
     fotosVorher: List<String> = emptyList(),
     fotosNachher: List<String> = emptyList()
 ): PdfDocument {
@@ -559,6 +564,8 @@ private fun erstelleRechnungPdf(
     }
     c.drawLine(40f, 700f, 300f, 700f, p)
     c.drawText("Unterschrift", 40f, 718f, p)
+    c.drawLine(330f, 700f, 550f, 700f, p)
+    c.drawText("Datum: ${unterschriftDatum.ifBlank { "—" }}", 330f, 718f, p)
     c.drawText("Vielen Dank für Ihr Vertrauen.", 40f, 730f, p)
     pdf.finishPage(page)
     fuegeFotoSeitenHinzu(context, pdf, fotosVorher, fotosNachher)
@@ -593,7 +600,7 @@ private fun druckeRechnungPdf(context: Context, auftrag: Auftrag) {
                 nummer, rechnungsdatum, faelligAm,
                 auftrag.kunde, auftrag.kundenStrasse, auftrag.kundenOrt, auftrag.leistung,
                 auftrag.stunden, auftrag.material, auftrag.fahrt, auftrag.stundensatz,
-                auftrag.unterschriftPfad, auftrag.fotosVorher, auftrag.fotosNachher
+                auftrag.unterschriftPfad, auftrag.unterschriftDatum, auftrag.fotosVorher, auftrag.fotosNachher
             )
             val info = PrintDocumentInfo.Builder("KÜMMERO-Rechnung-$nummer.pdf")
                 .setContentType(PrintDocumentInfo.CONTENT_TYPE_DOCUMENT)
@@ -672,7 +679,7 @@ private fun druckePdf(
                 context, nummer, datum, gueltigBis,
                 auftrag.kunde, auftrag.kundenStrasse, auftrag.kundenOrt, auftrag.leistung,
                 auftrag.stunden, auftrag.material, auftrag.fahrt, auftrag.stundensatz,
-                auftrag.unterschriftPfad, auftrag.fotosVorher, auftrag.fotosNachher, dokumentTitel
+                auftrag.unterschriftPfad, auftrag.unterschriftDatum, auftrag.fotosVorher, auftrag.fotosNachher, dokumentTitel
             )
             val info = PrintDocumentInfo.Builder(dateiname)
                 .setContentType(PrintDocumentInfo.CONTENT_TYPE_DOCUMENT)
@@ -876,6 +883,7 @@ fun KuemmeroApp() {
     var fotosVorher by remember { mutableStateOf<List<String>>(emptyList()) }
     var fotosNachher by remember { mutableStateOf<List<String>>(emptyList()) }
     var unterschriftPfad by remember { mutableStateOf("") }
+    var unterschriftDatum by remember { mutableStateOf("") }
     var fotoTyp by remember { mutableStateOf("Vorher") }
     var unterschriftDialog by remember { mutableStateOf(false) }
     var fotoVorschauUri by remember { mutableStateOf<String?>(null) }
@@ -964,6 +972,7 @@ fun KuemmeroApp() {
 
     var auftragFuerPdf by remember { mutableStateOf<Auftrag?>(null) }
     var rechnungFuerIndex by remember { mutableStateOf<Int?>(null) }
+    var sicherungBestaetigung by remember { mutableStateOf(false) }
 
     val createBackup = rememberLauncherForActivityResult(
         ActivityResultContracts.CreateDocument("application/json")
@@ -974,8 +983,9 @@ fun KuemmeroApp() {
             try {
                 context.contentResolver.openOutputStream(it, "wt")?.use { out ->
                     out.write(backupText(context).toByteArray(Charsets.UTF_8))
+                    out.flush()
                 }
-                android.widget.Toast.makeText(context, "Sicherung gespeichert", 0).show()
+                android.widget.Toast.makeText(context, "Sicherung gespeichert. Diese Datei wird künftig aktualisiert.", 0).show()
             } catch (e: Exception) {
                 android.widget.Toast.makeText(context, "Sicherung fehlgeschlagen", 1).show()
             }
@@ -1058,13 +1068,13 @@ fun KuemmeroApp() {
                 erstellePdf(
                     context, nummer, datum, gueltigBis,
                     a.kunde, a.kundenStrasse, a.kundenOrt, a.leistung,
-                    a.stunden, a.material, a.fahrt, a.stundensatz, a.unterschriftPfad,
+                    a.stunden, a.material, a.fahrt, a.stundensatz, a.unterschriftPfad, a.unterschriftDatum,
                     a.fotosVorher, a.fotosNachher
                 )
             } else {
                 erstellePdf(
                     context, nummer, datum, gueltigBis, kunde, strasse, ort, leistung,
-                    zahl(stunden), zahl(material), zahl(fahrt), zahl(stundensatz, 42.0), unterschriftPfad,
+                    zahl(stunden), zahl(material), zahl(fahrt), zahl(stundensatz, 42.0), unterschriftPfad, unterschriftDatum,
                     fotosVorher, fotosNachher
                 )
             }
@@ -1144,6 +1154,42 @@ fun KuemmeroApp() {
             try { datumFormat.parse(it.terminDatum)?.time ?: Long.MAX_VALUE } catch (_: Exception) { Long.MAX_VALUE }
         }.thenBy { it.terminUhrzeit })
         .take(8)
+
+    if (sicherungBestaetigung) {
+        val vorhandeneSicherung = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            .getString(BACKUP_URI_KEY, null)
+            ?.isNotBlank() == true
+        AlertDialog(
+            onDismissRequest = { sicherungBestaetigung = false },
+            title = { Text("Sicherung bestätigen") },
+            text = {
+                Text(
+                    if (vorhandeneSicherung)
+                        "Soll die bestehende KÜMMERO-Sicherung jetzt aktualisiert werden?"
+                    else
+                        "Soll jetzt eine KÜMMERO-Sicherung gespeichert werden?"
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    sicherungBestaetigung = false
+                    if (vorhandeneSicherung) {
+                        val ok = sichereBackupAutomatisch(context)
+                        android.widget.Toast.makeText(
+                            context,
+                            if (ok) "Sicherung aktualisiert." else "Sicherung konnte nicht aktualisiert werden.",
+                            if (ok) 0 else 1
+                        ).show()
+                    } else {
+                        createBackup.launch("kuemmero-backup.json")
+                    }
+                }) { Text("Ja, sichern") }
+            },
+            dismissButton = {
+                TextButton(onClick = { sicherungBestaetigung = false }) { Text("Abbrechen") }
+            }
+        )
+    }
 
     if (kundenDialog) {
         AlertDialog(
@@ -1376,6 +1422,7 @@ fun KuemmeroApp() {
                             canvas.drawPath(path, paint)
                             file.outputStream().use { bitmap.compress(android.graphics.Bitmap.CompressFormat.PNG, 100, it) }
                             unterschriftPfad = file.absolutePath
+                            unterschriftDatum = SimpleDateFormat("dd.MM.yyyy", Locale.GERMANY).format(Date())
                             unterschriftDialog = false
                             android.widget.Toast.makeText(context, "Unterschrift gespeichert.", 0).show()
                         },
@@ -1916,7 +1963,7 @@ fun KuemmeroApp() {
                 item {
                     KlappBereich("✍ Kunden-Unterschrift", unterschriftBereichOffen, { unterschriftBereichOffen = !unterschriftBereichOffen }) {
                         OutlinedButton(onClick = { unterschriftDialog = true }, modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp), shape = RoundedCornerShape(26.dp), border = BorderStroke(2.dp, KuemmeroGreen), colors = ButtonDefaults.outlinedButtonColors(contentColor = KuemmeroGreen)) {
-                            Text(if (unterschriftPfad.isBlank()) "✍ Kunden-Unterschrift aufnehmen" else "✓ Unterschrift vorhanden", fontWeight = FontWeight.Bold)
+                            Text(if (unterschriftPfad.isBlank()) "✍ Kunden-Unterschrift aufnehmen" else "✓ Unterschrift vorhanden${if (unterschriftDatum.isBlank()) "" else " · $unterschriftDatum"}", fontWeight = FontWeight.Bold)
                         }
                     }
                 }
@@ -1940,7 +1987,7 @@ fun KuemmeroApp() {
                                     nummer.trim(), datum.trim(), gueltigBis.trim(),
                                     kunde.trim(), strasse.trim(), ort.trim(), leistung.trim(),
                                     arbeitsstunden, materialKosten, materialBonUri, fahrtKosten, rate, status, zahlungsstatus, bezahltAm,
-                                    terminDatum.trim(), terminUhrzeit.trim(), notiz.trim(), fotosVorher, fotosNachher, unterschriftPfad,
+                                    terminDatum.trim(), terminUhrzeit.trim(), notiz.trim(), fotosVorher, fotosNachher, unterschriftPfad, unterschriftDatum,
                                     bearbeiteIndex?.let { auftraege.getOrNull(it)?.rechnungsnummer } ?: "",
                                     bearbeiteIndex?.let { auftraege.getOrNull(it)?.rechnungsdatum } ?: "",
                                     bearbeiteIndex?.let { auftraege.getOrNull(it)?.faelligAm } ?: "",
@@ -1977,6 +2024,7 @@ fun KuemmeroApp() {
                                 fotosVorher = emptyList()
                                 fotosNachher = emptyList()
                                 unterschriftPfad = ""
+                                unterschriftDatum = ""
                             }
                         },
                         modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp),
@@ -2039,9 +2087,9 @@ fun KuemmeroApp() {
                         sicherungBereichOffen,
                         { sicherungBereichOffen = !sicherungBereichOffen },
                     ) {
-                        OutlinedButton(onClick = { createBackup.launch("kuemmero-backup.json") }, modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp), shape = RoundedCornerShape(28.dp), border = BorderStroke(2.dp, KuemmeroGreen), colors = ButtonDefaults.outlinedButtonColors(contentColor = KuemmeroGreen)) { Text("Sicherung speichern", fontWeight = FontWeight.SemiBold) }
+                        OutlinedButton(onClick = { sicherungBestaetigung = true }, modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp), shape = RoundedCornerShape(28.dp), border = BorderStroke(2.dp, KuemmeroGreen), colors = ButtonDefaults.outlinedButtonColors(contentColor = KuemmeroGreen)) { Text("Sicherung speichern / aktualisieren", fontWeight = FontWeight.SemiBold) }
                         Button(onClick = { restoreBackup.launch(arrayOf("application/json", "text/plain", "application/octet-stream")) }, modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp), shape = RoundedCornerShape(28.dp), colors = ButtonDefaults.buttonColors(containerColor = KuemmeroGreenLight)) { Text("Daten wiederherstellen", fontWeight = FontWeight.Bold) }
-                        OutlinedButton(onClick = { val ok = sichereBackupAutomatisch(context); android.widget.Toast.makeText(context, if (ok) "Sicherung aktualisiert." else "Bitte zuerst eine Backup-Datei speichern.", 1).show() }, modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp), shape = RoundedCornerShape(26.dp), border = BorderStroke(2.dp, KuemmeroGreen), colors = ButtonDefaults.outlinedButtonColors(contentColor = KuemmeroGreen)) { Text("Sicherung jetzt aktualisieren", fontWeight = FontWeight.SemiBold) }
+                        OutlinedButton(onClick = { sicherungBestaetigung = true }, modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp), shape = RoundedCornerShape(26.dp), border = BorderStroke(2.dp, KuemmeroGreen), colors = ButtonDefaults.outlinedButtonColors(contentColor = KuemmeroGreen)) { Text("Sicherung jetzt aktualisieren", fontWeight = FontWeight.SemiBold) }
                     }
                 }
 
@@ -2169,6 +2217,7 @@ fun KuemmeroApp() {
                                 fotosVorher = emptyList()
                                 fotosNachher = emptyList()
                                 unterschriftPfad = ""
+                                unterschriftDatum = ""
                             },
                             modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp),
                             shape = RoundedCornerShape(26.dp),
@@ -2456,6 +2505,7 @@ fun KuemmeroApp() {
                                     fotosVorher = a.fotosVorher
                                     fotosNachher = a.fotosNachher
                                     unterschriftPfad = a.unterschriftPfad
+                                    unterschriftDatum = a.unterschriftDatum
                                 },
                                 modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp),
                                 shape = RoundedCornerShape(26.dp),
@@ -2940,9 +2990,9 @@ fun KuemmeroApp() {
                             Card(Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = KuemmeroSurface), shape = RoundedCornerShape(18.dp)) {
                                 Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                                     Text("Sicherung & Daten", style = MaterialTheme.typography.titleMedium, color = KuemmeroGreen, fontWeight = FontWeight.Bold)
-                                    OutlinedButton(onClick = { createBackup.launch("kuemmero-backup.json") }, modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp), shape = RoundedCornerShape(26.dp), border = BorderStroke(2.dp, KuemmeroGreen), colors = ButtonDefaults.outlinedButtonColors(contentColor = KuemmeroGreen)) { Text("Sicherung speichern") }
+                                    OutlinedButton(onClick = { sicherungBestaetigung = true }, modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp), shape = RoundedCornerShape(26.dp), border = BorderStroke(2.dp, KuemmeroGreen), colors = ButtonDefaults.outlinedButtonColors(contentColor = KuemmeroGreen)) { Text("Sicherung speichern / aktualisieren") }
                                     Button(onClick = { restoreBackup.launch(arrayOf("application/json", "text/plain", "application/octet-stream")) }, modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp), shape = RoundedCornerShape(26.dp), colors = ButtonDefaults.buttonColors(containerColor = KuemmeroGreenLight)) { Text("Daten wiederherstellen", fontWeight = FontWeight.Bold) }
-                                    OutlinedButton(onClick = { val ok = sichereBackupAutomatisch(context); android.widget.Toast.makeText(context, if (ok) "Sicherung aktualisiert." else "Bitte zuerst eine Backup-Datei speichern.", 1).show() }, modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp), shape = RoundedCornerShape(26.dp), border = BorderStroke(2.dp, KuemmeroGreen), colors = ButtonDefaults.outlinedButtonColors(contentColor = KuemmeroGreen)) { Text("Sicherung jetzt aktualisieren") }
+                                    OutlinedButton(onClick = { sicherungBestaetigung = true }, modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp), shape = RoundedCornerShape(26.dp), border = BorderStroke(2.dp, KuemmeroGreen), colors = ButtonDefaults.outlinedButtonColors(contentColor = KuemmeroGreen)) { Text("Sicherung jetzt aktualisieren") }
                                 }
                             }
                         }
