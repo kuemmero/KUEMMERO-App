@@ -427,18 +427,18 @@ fun KuemmeroApp() {
                             Text(
                                 "KÜMMERO",
                                 fontWeight = FontWeight.Bold,
-                                color = KuemmeroGreen
+                                color = Color.White
                             )
                             Text(
                                 "Haus & Alltag – wir kümmern uns.",
                                 style = MaterialTheme.typography.labelMedium,
-                                color = KuemmeroGreenLight
+                                color = Color(0xFFD9F2E3)
                             )
                         }
                     },
                     colors = TopAppBarDefaults.topAppBarColors(
-                        containerColor = KuemmeroSurface,
-                        titleContentColor = KuemmeroGreen
+                        containerColor = KuemmeroGreen,
+                        titleContentColor = Color.White
                     )
                 )
             },
