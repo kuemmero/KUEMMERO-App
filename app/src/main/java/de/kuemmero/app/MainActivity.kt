@@ -208,6 +208,9 @@ fun KuemmeroApp() {
     }
     var loeschIndex by remember { mutableStateOf<Int?>(null) }
 
+    // Speichert den Auftrag, dessen PDF für einen gespeicherten Auftrag erstellt werden soll.
+    var auftragFuerPdf by remember { mutableStateOf<Auftrag?>(null) }
+
     val createBackup = rememberLauncherForActivityResult(
         ActivityResultContracts.CreateDocument("application/json")
     ) { uri ->
@@ -251,12 +254,22 @@ fun KuemmeroApp() {
         ActivityResultContracts.CreateDocument("application/pdf")
     ) { uri ->
         uri?.let {
-            val pdf = erstellePdf(
-                context, nummer, datum, gueltigBis, kunde, strasse, ort, leistung,
-                zahl(stunden), zahl(material), zahl(fahrt), zahl(stundensatz, 42.0)
-            )
+            val a = auftragFuerPdf
+            val pdf = if (a != null) {
+                erstellePdf(
+                    context, nummer, datum, gueltigBis,
+                    a.kunde, a.kundenStrasse, a.kundenOrt, a.leistung,
+                    a.stunden, a.material, a.fahrt, a.stundensatz
+                )
+            } else {
+                erstellePdf(
+                    context, nummer, datum, gueltigBis, kunde, strasse, ort, leistung,
+                    zahl(stunden), zahl(material), zahl(fahrt), zahl(stundensatz, 42.0)
+                )
+            }
             context.contentResolver.openOutputStream(it)?.use { out -> pdf.writeTo(out) }
             pdf.close()
+            auftragFuerPdf = null
         }
     }
 
@@ -397,6 +410,15 @@ fun KuemmeroApp() {
                                 Text(listOf(a.kundenStrasse, a.kundenOrt).filter { it.isNotBlank() }.joinToString(", "))
                             Text(a.leistung)
                             Text(euro(a.stunden * a.stundensatz + a.material + a.fahrt))
+
+                            // PDF direkt aus dem gespeicherten Auftrag erstellen.
+                            Button(onClick = {
+                                auftragFuerPdf = a
+                                pdfLauncher.launch("KÜMMERO-Angebot-$nummer-${a.kunde}.pdf")
+                            }, modifier = Modifier.fillMaxWidth()) {
+                                Text("PDF drucken")
+                            }
+
                             OutlinedButton(onClick = { loeschIndex = index }, modifier = Modifier.fillMaxWidth()) {
                                 Text("Auftrag löschen")
                             }
