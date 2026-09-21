@@ -106,6 +106,52 @@ private const val AUFTRAEGE_KEY = "auftraege"
 private const val KUNDEN_KEY = "kunden"
 private const val STUNDENSATZ_KEY = "stundensatz"
 private const val BACKUP_URI_KEY = "backup_uri"
+private const val KOSTENVORANSCHLAEGE_KEY = "kostenvoranschlaege"
+
+data class Kostenvoranschlag(
+    val nummer: String = "",
+    val datum: String = "",
+    val gueltigBis: String = "",
+    val kunde: String = "",
+    val kundenStrasse: String = "",
+    val kundenOrt: String = "",
+    val leistung: String = "",
+    val stunden: Double = 0.0,
+    val material: Double = 0.0,
+    val fahrt: Double = 0.0,
+    val stundensatz: Double = 42.0
+)
+
+private fun ladeKostenvoranschlaege(context: Context): List<Kostenvoranschlag> {
+    val raw = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        .getString(KOSTENVORANSCHLAEGE_KEY, "[]") ?: "[]"
+    val json = try { JSONArray(raw) } catch (_: Exception) { JSONArray() }
+    return List(json.length()) { i ->
+        val o = json.optJSONObject(i) ?: JSONObject()
+        Kostenvoranschlag(
+            o.optString("nummer"), o.optString("datum"), o.optString("gueltigBis"),
+            o.optString("kunde"), o.optString("kundenStrasse"), o.optString("kundenOrt"),
+            o.optString("leistung"), o.optDouble("stunden", 0.0), o.optDouble("material", 0.0),
+            o.optDouble("fahrt", 0.0), o.optDouble("stundensatz", 42.0)
+        )
+    }
+}
+
+private fun speichereKostenvoranschlaege(context: Context, liste: List<Kostenvoranschlag>) {
+    val json = JSONArray()
+    liste.forEach { k ->
+        json.put(JSONObject().apply {
+            put("nummer", k.nummer); put("datum", k.datum); put("gueltigBis", k.gueltigBis)
+            put("kunde", k.kunde); put("kundenStrasse", k.kundenStrasse); put("kundenOrt", k.kundenOrt)
+            put("leistung", k.leistung); put("stunden", k.stunden); put("material", k.material)
+            put("fahrt", k.fahrt); put("stundensatz", k.stundensatz)
+        })
+    }
+    context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        .edit().putString(KOSTENVORANSCHLAEGE_KEY, json.toString()).commit()
+    sichereBackupAutomatisch(context)
+}
+
 
 private fun zahl(text: String, standard: Double = 0.0): Double =
     text.replace("€", "").replace(" ", "").replace(",", ".").trim()
@@ -256,6 +302,7 @@ private fun backupText(context: Context): String {
         put("stundensatz", p.getString(STUNDENSATZ_KEY, "42.00") ?: "42.00")
         put("auftraege", JSONArray(p.getString(AUFTRAEGE_KEY, "[]") ?: "[]"))
         put("kunden", JSONArray(p.getString(KUNDEN_KEY, "[]") ?: "[]"))
+        put("kostenvoranschlaege", JSONArray(p.getString(KOSTENVORANSCHLAEGE_KEY, "[]") ?: "[]"))
     }.toString(2)
 }
 
@@ -370,7 +417,8 @@ private fun erstellePdf(
     stundensatz: Double,
     unterschriftPfad: String = "",
     fotosVorher: List<String> = emptyList(),
-    fotosNachher: List<String> = emptyList()
+    fotosNachher: List<String> = emptyList(),
+    dokumentTitel: String = "ANGEBOT"
 ): PdfDocument {
     val pdf = PdfDocument()
     val page = pdf.startPage(PdfDocument.PageInfo.Builder(595, 842, 1).create())
@@ -385,7 +433,7 @@ private fun erstellePdf(
     c.drawText("58675 Hemer", 40f, 150f, p)
     c.drawText("Telefon: +49 176 16712509", 40f, 168f, p)
     c.drawText("E-Mail: kuemmero@web.de", 40f, 186f, p)
-    c.drawText("ANGEBOT", 40f, 233f, p)
+    c.drawText(dokumentTitel, 40f, 233f, p)
     p.textSize = 12f
     c.drawText("Angebotsnummer: $nummer", 40f, 258f, p)
     c.drawText("Datum: $datum", 40f, 278f, p)
@@ -597,7 +645,8 @@ private fun druckePdf(
     nummer: String,
     datum: String,
     gueltigBis: String,
-    auftrag: Auftrag
+    auftrag: Auftrag,
+    dokumentTitel: String = "ANGEBOT"
 ) {
     val printManager = context.getSystemService(Context.PRINT_SERVICE) as PrintManager
     val adapter = object : PrintDocumentAdapter() {
@@ -619,7 +668,7 @@ private fun druckePdf(
                 context, nummer, datum, gueltigBis,
                 auftrag.kunde, auftrag.kundenStrasse, auftrag.kundenOrt, auftrag.leistung,
                 auftrag.stunden, auftrag.material, auftrag.fahrt, auftrag.stundensatz,
-                auftrag.unterschriftPfad, auftrag.fotosVorher, auftrag.fotosNachher
+                auftrag.unterschriftPfad, auftrag.fotosVorher, auftrag.fotosNachher, dokumentTitel
             )
             val info = PrintDocumentInfo.Builder(dateiname)
                 .setContentType(PrintDocumentInfo.CONTENT_TYPE_DOCUMENT)
@@ -836,6 +885,20 @@ fun KuemmeroApp() {
     var unterschriftBereichOffen by remember { mutableStateOf(false) }
     var sicherungBereichOffen by remember { mutableStateOf(false) }
     var hauptseite by remember { mutableStateOf("Heute") }
+    var kostenvoranschlaege by remember { mutableStateOf(ladeKostenvoranschlaege(context)) }
+    var kvFormOffen by remember { mutableStateOf(false) }
+    var kvBearbeiteIndex by remember { mutableStateOf<Int?>(null) }
+    var kvNummer by remember { mutableStateOf("KV-" + SimpleDateFormat("yyyyMMdd-HHmmss", Locale.GERMANY).format(heute)) }
+    var kvDatum by remember { mutableStateOf(datumFormat.format(heute)) }
+    var kvGueltigBis by remember { mutableStateOf(datumFormat.format(Calendar.getInstance().apply { add(Calendar.DAY_OF_YEAR, 14) }.time)) }
+    var kvKunde by remember { mutableStateOf("") }
+    var kvStrasse by remember { mutableStateOf("") }
+    var kvOrt by remember { mutableStateOf("") }
+    var kvLeistung by remember { mutableStateOf("") }
+    var kvStunden by remember { mutableStateOf("") }
+    var kvMaterial by remember { mutableStateOf("") }
+    var kvFahrt by remember { mutableStateOf("") }
+    var kvStundensatz by remember { mutableStateOf(context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE).getString(STUNDENSATZ_KEY, "42.00") ?: "42.00") }
     var auftragDetailIndex by remember { mutableStateOf<Int?>(null) }
     var auftragFormOffen by remember { mutableStateOf(false) }
     val listeState = rememberLazyListState()
@@ -922,13 +985,16 @@ fun KuemmeroApp() {
                 val rate = obj.optString("stundensatz", "42.00")
                 val arr = obj.optJSONArray("auftraege") ?: JSONArray()
                 val kundenArr = obj.optJSONArray("kunden") ?: JSONArray()
+                val kvArr = obj.optJSONArray("kostenvoranschlaege") ?: JSONArray()
                 context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE).edit()
                     .putString(STUNDENSATZ_KEY, rate)
                     .putString(AUFTRAEGE_KEY, arr.toString())
-                    .putString(KUNDEN_KEY, kundenArr.toString()).commit()
+                    .putString(KUNDEN_KEY, kundenArr.toString())
+                    .putString(KOSTENVORANSCHLAEGE_KEY, kvArr.toString()).commit()
                 stundensatz = rate
                 auftraege = ladeAuftraege(context)
                 kunden = ladeKunden(context)
+                kostenvoranschlaege = ladeKostenvoranschlaege(context)
                 android.widget.Toast.makeText(context, "Daten wiederhergestellt", 0).show()
             } catch (e: Exception) {
                 android.widget.Toast.makeText(context, "Wiederherstellung fehlgeschlagen", 1).show()
@@ -2538,8 +2604,190 @@ fun KuemmeroApp() {
                             }
                         }
                     }
+                    "Kostenvoranschläge" -> {
+                        item {
+                            Row(
+                                Modifier.fillMaxWidth(),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(10.dp)
+                            ) {
+                                TextButton(onClick = { hauptseite = "Mehr" }) { Text("← Zurück") }
+                                Text(
+                                    "Kostenvoranschläge",
+                                    style = MaterialTheme.typography.headlineSmall,
+                                    color = KuemmeroGreen,
+                                    fontWeight = FontWeight.Bold
+                                )
+                            }
+                        }
+
+                        if (!kvFormOffen) {
+                            item {
+                                Button(
+                                    onClick = {
+                                        kvBearbeiteIndex = null
+                                        kvNummer = "KV-" + SimpleDateFormat("yyyyMMdd-HHmmss", Locale.GERMANY).format(Date())
+                                        kvDatum = datumFormat.format(Date())
+                                        kvGueltigBis = datumFormat.format(Calendar.getInstance().apply { add(Calendar.DAY_OF_YEAR, 14) }.time)
+                                        kvKunde = ""
+                                        kvStrasse = ""
+                                        kvOrt = ""
+                                        kvLeistung = ""
+                                        kvStunden = ""
+                                        kvMaterial = ""
+                                        kvFahrt = ""
+                                        kvFormOffen = true
+                                    },
+                                    modifier = Modifier.fillMaxWidth().heightIn(min = 54.dp),
+                                    shape = RoundedCornerShape(28.dp),
+                                    colors = ButtonDefaults.buttonColors(containerColor = KuemmeroGreen)
+                                ) { Text("+ Neuer Kostenvoranschlag", fontWeight = FontWeight.Bold) }
+                            }
+
+                            if (kostenvoranschlaege.isEmpty()) {
+                                item { Text("Noch keine Kostenvoranschläge gespeichert.", color = KuemmeroText) }
+                            }
+
+                            itemsIndexed(kostenvoranschlaege) { index, k ->
+                                Card(
+                                    Modifier.fillMaxWidth(),
+                                    colors = CardDefaults.cardColors(containerColor = KuemmeroSurface),
+                                    shape = RoundedCornerShape(18.dp),
+                                    border = BorderStroke(1.5.dp, KuemmeroGreenLight)
+                                ) {
+                                    Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                                        Text(
+                                            k.kunde.ifBlank { "Ohne Kundenname" },
+                                            style = MaterialTheme.typography.titleMedium,
+                                            color = KuemmeroText,
+                                            fontWeight = FontWeight.Bold
+                                        )
+                                        Text("${k.nummer} · ${k.datum}", color = KuemmeroText)
+                                        if (k.leistung.isNotBlank()) Text(k.leistung, color = KuemmeroText)
+                                        Text(
+                                            euro(gesamtbetrag(k.stunden, k.material, k.fahrt, k.stundensatz)),
+                                            color = KuemmeroGreen,
+                                            fontWeight = FontWeight.Bold
+                                        )
+                                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                            OutlinedButton(
+                                                onClick = {
+                                                    kvBearbeiteIndex = index
+                                                    kvNummer = k.nummer
+                                                    kvDatum = k.datum
+                                                    kvGueltigBis = k.gueltigBis
+                                                    kvKunde = k.kunde
+                                                    kvStrasse = k.kundenStrasse
+                                                    kvOrt = k.kundenOrt
+                                                    kvLeistung = k.leistung
+                                                    kvStunden = k.stunden.toString().replace(".", ",")
+                                                    kvMaterial = k.material.toString().replace(".", ",")
+                                                    kvFahrt = k.fahrt.toString().replace(".", ",")
+                                                    kvStundensatz = k.stundensatz.toString().replace(".", ",")
+                                                    kvFormOffen = true
+                                                },
+                                                modifier = Modifier.weight(1f)
+                                            ) { Text("Bearbeiten") }
+                                            Button(
+                                                onClick = {
+                                                    val a = Auftrag(
+                                                        k.nummer, k.datum, k.gueltigBis, k.kunde,
+                                                        k.kundenStrasse, k.kundenOrt, k.leistung,
+                                                        k.stunden, k.material, "", k.fahrt, k.stundensatz
+                                                    )
+                                                    druckePdf(
+                                                        context,
+                                                        "Kostenvoranschlag-${k.kunde.ifBlank { "Kunde" }}.pdf",
+                                                        k.nummer, k.datum, k.gueltigBis, a,
+                                                        "KOSTENVORANSCHLAG"
+                                                    )
+                                                },
+                                                modifier = Modifier.weight(1f),
+                                                colors = ButtonDefaults.buttonColors(containerColor = KuemmeroGreenLight)
+                                            ) { Text("PDF") }
+                                        }
+                                    }
+                                }
+                            }
+                        } else {
+                            item {
+                                Card(
+                                    Modifier.fillMaxWidth(),
+                                    colors = CardDefaults.cardColors(containerColor = KuemmeroSurface),
+                                    shape = RoundedCornerShape(18.dp)
+                                ) {
+                                    Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(9.dp)) {
+                                        Text(
+                                            if (kvBearbeiteIndex == null) "Neuer Kostenvoranschlag" else "Kostenvoranschlag bearbeiten",
+                                            style = MaterialTheme.typography.titleLarge,
+                                            color = KuemmeroGreen,
+                                            fontWeight = FontWeight.Bold
+                                        )
+                                        OutlinedTextField(kvNummer, { kvNummer = it }, label = { Text("Nummer") }, colors = feldFarben, modifier = Modifier.fillMaxWidth())
+                                        OutlinedTextField(kvDatum, { kvDatum = it }, label = { Text("Datum") }, colors = feldFarben, modifier = Modifier.fillMaxWidth())
+                                        OutlinedTextField(kvGueltigBis, { kvGueltigBis = it }, label = { Text("Gültig bis") }, colors = feldFarben, modifier = Modifier.fillMaxWidth())
+                                        OutlinedTextField(kvKunde, { kvKunde = it }, label = { Text("Kunde") }, colors = feldFarben, modifier = Modifier.fillMaxWidth())
+                                        OutlinedTextField(kvStrasse, { kvStrasse = it }, label = { Text("Adresse") }, colors = feldFarben, modifier = Modifier.fillMaxWidth())
+                                        OutlinedTextField(kvOrt, { kvOrt = it }, label = { Text("PLZ und Ort") }, colors = feldFarben, modifier = Modifier.fillMaxWidth())
+                                        OutlinedTextField(kvLeistung, { kvLeistung = it }, label = { Text("Leistung") }, colors = feldFarben, modifier = Modifier.fillMaxWidth())
+                                        OutlinedTextField(kvStunden, { kvStunden = it }, label = { Text("Arbeitsstunden") }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal), colors = feldFarben, modifier = Modifier.fillMaxWidth())
+                                        OutlinedTextField(kvMaterial, { kvMaterial = it }, label = { Text("Material (€)") }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal), colors = feldFarben, modifier = Modifier.fillMaxWidth())
+                                        OutlinedTextField(kvFahrt, { kvFahrt = it }, label = { Text("Fahrtkosten (€)") }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal), colors = feldFarben, modifier = Modifier.fillMaxWidth())
+                                        OutlinedTextField(kvStundensatz, { kvStundensatz = it }, label = { Text("Stundensatz (€ / Stunde)") }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal), colors = feldFarben, modifier = Modifier.fillMaxWidth())
+                                        Text(
+                                            "Gesamtsumme: ${euro(gesamtbetrag(zahl(kvStunden), zahl(kvMaterial), zahl(kvFahrt), zahl(kvStundensatz, 42.0)))}",
+                                            style = MaterialTheme.typography.titleLarge,
+                                            color = KuemmeroGreen,
+                                            fontWeight = FontWeight.Bold
+                                        )
+                                        Button(
+                                            onClick = {
+                                                if (kvKunde.isBlank()) {
+                                                    android.widget.Toast.makeText(context, "Bitte Kundennamen eingeben.", 0).show()
+                                                } else {
+                                                    val k = Kostenvoranschlag(
+                                                        kvNummer.trim(), kvDatum.trim(), kvGueltigBis.trim(),
+                                                        kvKunde.trim(), kvStrasse.trim(), kvOrt.trim(), kvLeistung.trim(),
+                                                        zahl(kvStunden), zahl(kvMaterial), zahl(kvFahrt), zahl(kvStundensatz, 42.0)
+                                                    )
+                                                    val list = kostenvoranschlaege.toMutableList()
+                                                    if (kvBearbeiteIndex != null) list[kvBearbeiteIndex!!] = k else list.add(k)
+                                                    kostenvoranschlaege = list
+                                                    speichereKostenvoranschlaege(context, list)
+                                                    kvFormOffen = false
+                                                    kvBearbeiteIndex = null
+                                                    android.widget.Toast.makeText(context, "Kostenvoranschlag gespeichert.", 0).show()
+                                                }
+                                            },
+                                            modifier = Modifier.fillMaxWidth().heightIn(min = 54.dp),
+                                            shape = RoundedCornerShape(28.dp),
+                                            colors = ButtonDefaults.buttonColors(containerColor = KuemmeroGreen)
+                                        ) { Text("Kostenvoranschlag speichern", fontWeight = FontWeight.Bold) }
+                                        OutlinedButton(
+                                            onClick = { kvFormOffen = false; kvBearbeiteIndex = null },
+                                            modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp),
+                                            shape = RoundedCornerShape(26.dp),
+                                            border = BorderStroke(2.dp, KuemmeroGreen),
+                                            colors = ButtonDefaults.outlinedButtonColors(contentColor = KuemmeroGreen)
+                                        ) { Text("Abbrechen") }
+                                    }
+                                }
+                            }
+                        }
+                    }
                     "Mehr" -> {
                         item { Text("Mehr", style = MaterialTheme.typography.headlineSmall, color = KuemmeroGreen, fontWeight = FontWeight.Bold) }
+                        item {
+                            Card(Modifier.fillMaxWidth().clickable { hauptseite = "Kostenvoranschläge" }, colors = CardDefaults.cardColors(containerColor = KuemmeroSurface), shape = RoundedCornerShape(18.dp)) {
+                                Row(Modifier.fillMaxWidth().padding(16.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
+                                    Column {
+                                        Text("📄 Kostenvoranschläge", style = MaterialTheme.typography.titleMedium, color = KuemmeroGreen, fontWeight = FontWeight.Bold)
+                                        Text("Eigene Übersicht und PDF-Kostenvoranschläge", color = KuemmeroText)
+                                    }
+                                    Text("→", color = KuemmeroGreen, fontSize = 24.sp, fontWeight = FontWeight.Bold)
+                                }
+                            }
+                        }
                         item {
                             Card(Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = KuemmeroSurface), shape = RoundedCornerShape(18.dp)) {
                                 Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
