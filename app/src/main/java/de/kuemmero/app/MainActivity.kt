@@ -311,16 +311,23 @@ private fun backupText(context: Context): String {
 }
 
 private fun sichereBackupAutomatisch(context: Context): Boolean {
-    val uriText = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-        .getString(BACKUP_URI_KEY, null) ?: return false
+    val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+    val uriText = prefs.getString(BACKUP_URI_KEY, null) ?: return false
     return try {
         val uri = Uri.parse(uriText)
-        context.contentResolver.openOutputStream(uri, "wt")?.use { out ->
+        val ok = context.contentResolver.openOutputStream(uri, "wt")?.use { out ->
             out.write(backupText(context).toByteArray(Charsets.UTF_8))
             out.flush()
-        } ?: return false
-        true
+            true
+        } ?: false
+        if (!ok) {
+            prefs.edit().remove(BACKUP_URI_KEY).apply()
+        }
+        ok
     } catch (_: Exception) {
+        // Die bisher gewählte Datei wurde z. B. gelöscht oder verschoben.
+        // Die alte URI darf danach nicht weiter verwendet werden.
+        prefs.edit().remove(BACKUP_URI_KEY).apply()
         false
     }
 }
@@ -736,16 +743,6 @@ private fun zeitText(sekunden: Long): String {
     return "%02d:%02d:%02d".format(Locale.GERMANY, h, m, s)
 }
 
-private fun rechnungIstUeberfaellig(auftrag: Auftrag, heute: String): Boolean {
-    if (auftrag.rechnungsnummer.isBlank() || auftrag.zahlungsstatus == "Bezahlt" || auftrag.faelligAm.isBlank()) return false
-    return try {
-        val format = SimpleDateFormat("dd.MM.yyyy", Locale.GERMANY)
-        val faellig = format.parse(auftrag.faelligAm)?.time ?: return false
-        val heuteZeit = format.parse(heute)?.time ?: return false
-        faellig < heuteZeit
-    } catch (_: Exception) { false }
-}
-
 private val KuemmeroGreen = Color(0xFF087F3E)
 private val KuemmeroGreenLight = Color(0xFF4CAF50)
 private val KuemmeroMint = Color(0xFFE8F5E9)
@@ -973,6 +970,13 @@ fun KuemmeroApp() {
         }
     }
 
+    // Sicherung beim Öffnen automatisch sichtbar machen
+    LaunchedEffect(sicherungBereichOffen) {
+        if (sicherungBereichOffen) {
+            listeState.animateScrollToItem(22)
+        }
+    }
+
     var auftragFuerPdf by remember { mutableStateOf<Auftrag?>(null) }
     var rechnungFuerIndex by remember { mutableStateOf<Int?>(null) }
     var sicherungBestaetigung by remember { mutableStateOf(false) }
@@ -1016,13 +1020,6 @@ fun KuemmeroApp() {
                 auftraege = ladeAuftraege(context)
                 kunden = ladeKunden(context)
                 kostenvoranschlaege = ladeKostenvoranschlaege(context)
-                auftragDetailIndex = null
-                auftragFormOffen = false
-                bearbeiteIndex = null
-                kvFormOffen = false
-                kvBearbeiteIndex = null
-                timerIndex = null
-                timerSekunden = 0L
                 android.widget.Toast.makeText(context, "Daten wiederhergestellt", 0).show()
             } catch (e: Exception) {
                 android.widget.Toast.makeText(context, "Wiederherstellung fehlgeschlagen", 1).show()
@@ -1158,7 +1155,6 @@ fun KuemmeroApp() {
     val termineHeute = auftraege.filter { it.terminDatum == heuteText }
         .sortedBy { it.terminUhrzeit }
     val offeneAuftraege = auftraege.count { it.status != "Abgerechnet" }
-    val abgearbeiteteAuftraege = auftraege.count { it.status == "Erledigt" || it.status == "Abgerechnet" }
     val offeneZahlungen = auftraege.filter { it.zahlungsstatus != "Bezahlt" }
     val offeneZahlungSumme = offeneZahlungen.sumOf { gesamtbetrag(it.stunden, it.material, it.fahrt, it.stundensatz) }
     val naechsteTermine = auftraege.filter { it.terminDatum.isNotBlank() }
@@ -1166,18 +1162,6 @@ fun KuemmeroApp() {
             try { datumFormat.parse(it.terminDatum)?.time ?: Long.MAX_VALUE } catch (_: Exception) { Long.MAX_VALUE }
         }.thenBy { it.terminUhrzeit })
         .take(8)
-    val heuteStart = try {
-        datumFormat.parse(heuteText)?.time ?: 0L
-    } catch (_: Exception) {
-        0L
-    }
-    val naechsterTermin = naechsteTermine.firstOrNull { a ->
-        try {
-            (datumFormat.parse(a.terminDatum)?.time ?: Long.MAX_VALUE) >= heuteStart
-        } catch (_: Exception) {
-            false
-        }
-    }
 
     if (sicherungBestaetigung) {
         val vorhandeneSicherung = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
@@ -1199,13 +1183,18 @@ fun KuemmeroApp() {
                     sicherungBestaetigung = false
                     if (vorhandeneSicherung) {
                         val ok = sichereBackupAutomatisch(context)
-                        android.widget.Toast.makeText(
-                            context,
-                            if (ok) "Sicherung aktualisiert." else "Sicherung konnte nicht aktualisiert werden.",
-                            if (ok) 0 else 1
-                        ).show()
+                        if (ok) {
+                            android.widget.Toast.makeText(context, "Sicherung aktualisiert.", 0).show()
+                        } else {
+                            android.widget.Toast.makeText(
+                                context,
+                                "Die bisherige Sicherungsdatei wurde nicht gefunden. Bitte eine neue Datei auswählen.",
+                                1
+                            ).show()
+                            createBackup.launch("kuemmero-backup.json")
+                        }
                     } else {
-                        createBackup.launch("KÜMMERO-Sicherung.json")
+                        createBackup.launch("kuemmero-backup.json")
                     }
                 }) { Text("Ja, sichern") }
             },
@@ -1477,8 +1466,6 @@ fun KuemmeroApp() {
                     Text("Umsatz: ${euro(kundenAuftraege.sumOf { gesamtbetrag(it.stunden, it.material, it.fahrt, it.stundensatz) })}")
                     val offen = kundenAuftraege.filter { it.zahlungsstatus != "Bezahlt" }
                     Text("Offene Zahlungen: ${euro(offen.sumOf { gesamtbetrag(it.stunden, it.material, it.fahrt, it.stundensatz) })}", color = if (offen.isEmpty()) KuemmeroGreen else KuemmeroError, fontWeight = FontWeight.Bold)
-                    val kundenKVs = kostenvoranschlaege.filter { it.kunde.equals(name, ignoreCase = true) }
-                    Text("Kostenvoranschläge: ${kundenKVs.size}", fontWeight = FontWeight.Bold)
                     val rechnungen = kundenAuftraege.filter { it.rechnungsnummer.isNotBlank() }
                     Text("Rechnungen: ${rechnungen.size}", fontWeight = FontWeight.Bold)
                     rechnungen.takeLast(5).reversed().forEach { r ->
@@ -1533,8 +1520,6 @@ fun KuemmeroApp() {
                 TextButton(onClick = {
                     auftraege = auftraege.toMutableList().apply { removeAt(index) }
                     speichereAuftraege(context, auftraege)
-                    timerIndex = null
-                    timerSekunden = 0L
                     // Nach dem Löschen immer zurück zur Auftragsübersicht.
                     auftragDetailIndex = null
                     auftragFormOffen = false
@@ -1697,18 +1682,12 @@ fun KuemmeroApp() {
                             Text("Heute · $heuteText", color = Color.White, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
                             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                                 Column(Modifier.weight(1f)) {
-                                    Text("Termine heute", color = Color.White)
+                                    Text("Termine", color = Color.White)
                                     Text("${termineHeute.size}", color = Color.White, fontSize = 25.sp, fontWeight = FontWeight.Bold)
                                 }
                                 Column(Modifier.weight(1f)) {
                                     Text("Offene Aufträge", color = Color.White)
                                     Text("$offeneAuftraege", color = Color.White, fontSize = 25.sp, fontWeight = FontWeight.Bold)
-                                }
-                            }
-                            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                Column(Modifier.weight(1f)) {
-                                    Text("Abgearbeitet", color = Color.White)
-                                    Text("$abgearbeiteteAuftraege", color = Color.White, fontSize = 25.sp, fontWeight = FontWeight.Bold)
                                 }
                                 Column(Modifier.weight(1f)) {
                                     Text("Offen €", color = Color.White)
@@ -1717,24 +1696,9 @@ fun KuemmeroApp() {
                             }
                             if (termineHeute.isEmpty()) {
                                 Text("Heute keine Termine.", color = Color.White)
-                                naechsterTermin?.let { a ->
-                                    Text(
-                                        "Nächster Termin: ${a.terminDatum}${if (a.terminUhrzeit.isBlank()) "" else " · " + a.terminUhrzeit}",
-                                        color = Color.White,
-                                        fontWeight = FontWeight.SemiBold
-                                    )
-                                    Text("${a.kunde}${if (a.leistung.isBlank()) "" else " – " + a.leistung}", color = Color.White)
-                                }
                             } else {
                                 termineHeute.take(3).forEach { a ->
                                     Text("${if (a.terminUhrzeit.isBlank()) "" else a.terminUhrzeit + " · "}${a.kunde}${if (a.leistung.isBlank()) "" else " – " + a.leistung}", color = Color.White, fontWeight = FontWeight.SemiBold)
-                                }
-                                naechsterTermin?.takeIf { it.terminDatum != heuteText }?.let { a ->
-                                    Text(
-                                        "Nächster Termin: ${a.terminDatum}${if (a.terminUhrzeit.isBlank()) "" else " · " + a.terminUhrzeit}",
-                                        color = Color.White,
-                                        fontWeight = FontWeight.SemiBold
-                                    )
                                 }
                             }
                             OutlinedButton(
@@ -2385,13 +2349,6 @@ fun KuemmeroApp() {
                                     color = KuemmeroText,
                                     style = MaterialTheme.typography.bodySmall
                                 )
-                                if (rechnungIstUeberfaellig(a, heuteText)) {
-                                    Text(
-                                        "⚠ Zahlung überfällig",
-                                        color = KuemmeroError,
-                                        fontWeight = FontWeight.Bold
-                                    )
-                                }
                             }
 
                             if (auftragDetailIndex == index) {
@@ -2473,23 +2430,12 @@ fun KuemmeroApp() {
                                 OutlinedButton(
                                     onClick = {
                                         val jetzt = System.currentTimeMillis()
-                                        val laufenderIndex = auftraege.indexOfFirst { it.arbeitsStart > 0L && it != a }
-                                        val neueListe = auftraege.toMutableList()
-                                        if (laufenderIndex >= 0) {
-                                            val laufend = neueListe[laufenderIndex]
-                                            val dauer = ((jetzt - laufend.arbeitsStart) / 1000L).coerceAtLeast(0L)
-                                            neueListe[laufenderIndex] = laufend.copy(
-                                                arbeitsEnde = jetzt,
-                                                arbeitsSekunden = laufend.arbeitsSekunden + dauer,
-                                                arbeitsStart = 0L
-                                            )
-                                        }
-                                        neueListe[index] = a.copy(
+                                        val aktualisiert = a.copy(
                                             arbeitsStart = jetzt,
                                             arbeitsEnde = 0L,
                                             arbeitszeitUebernommen = false
                                         )
-                                        auftraege = neueListe
+                                        auftraege = auftraege.toMutableList().apply { set(index, aktualisiert) }
                                         speichereAuftraege(context, auftraege)
                                         timerIndex = index
                                         timerSekunden = 0L
@@ -2709,17 +2655,9 @@ fun KuemmeroApp() {
                                 Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                                     Text("Heute · $heuteText", color = Color.White, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
                                     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                        Column(Modifier.weight(1f)) { Text("Termine heute", color = Color.White); Text("${termineHeute.size}", color = Color.White, fontSize = 26.sp, fontWeight = FontWeight.Bold) }
+                                        Column(Modifier.weight(1f)) { Text("Termine", color = Color.White); Text("${termineHeute.size}", color = Color.White, fontSize = 26.sp, fontWeight = FontWeight.Bold) }
                                         Column(Modifier.weight(1f)) { Text("Offene Aufträge", color = Color.White); Text("$offeneAuftraege", color = Color.White, fontSize = 26.sp, fontWeight = FontWeight.Bold) }
                                         Column(Modifier.weight(1f)) { Text("Offen €", color = Color.White); Text(euro(offeneZahlungSumme), color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.Bold) }
-                                    }
-                                    naechsterTermin?.let { a ->
-                                        Text(
-                                            "Nächster Termin: ${a.terminDatum}${if (a.terminUhrzeit.isBlank()) "" else " · " + a.terminUhrzeit}",
-                                            color = Color.White,
-                                            fontWeight = FontWeight.SemiBold
-                                        )
-                                        Text("${a.kunde}${if (a.leistung.isBlank()) "" else " – " + a.leistung}", color = Color.White)
                                     }
                                 }
                             }
@@ -2735,15 +2673,7 @@ fun KuemmeroApp() {
                             }
                         } else {
                             itemsIndexed(termineHeute) { _, a ->
-                                Card(
-                                    Modifier.fillMaxWidth().clickable {
-                                        val index = auftraege.indexOfFirst { it.nummer == a.nummer && it.kunde == a.kunde && it.terminDatum == a.terminDatum }
-                                        if (index >= 0) { hauptseite = "Aufträge"; auftragDetailIndex = index }
-                                    },
-                                    colors = CardDefaults.cardColors(containerColor = KuemmeroSurface),
-                                    shape = RoundedCornerShape(18.dp),
-                                    border = BorderStroke(1.5.dp, KuemmeroGreenLight)
-                                ) {
+                                Card(Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = KuemmeroSurface), shape = RoundedCornerShape(18.dp), border = BorderStroke(1.5.dp, KuemmeroGreenLight)) {
                                     Column(Modifier.padding(16.dp)) {
                                         Text(a.terminUhrzeit.ifBlank { "Ohne Uhrzeit" }, color = KuemmeroGreen, fontWeight = FontWeight.Bold)
                                         Text(a.kunde, color = KuemmeroText, style = MaterialTheme.typography.titleMedium)
@@ -3114,6 +3044,7 @@ fun KuemmeroApp() {
                                     Text("Sicherung & Daten", style = MaterialTheme.typography.titleMedium, color = KuemmeroGreen, fontWeight = FontWeight.Bold)
                                     OutlinedButton(onClick = { sicherungBestaetigung = true }, modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp), shape = RoundedCornerShape(26.dp), border = BorderStroke(2.dp, KuemmeroGreen), colors = ButtonDefaults.outlinedButtonColors(contentColor = KuemmeroGreen)) { Text("Sicherung speichern / aktualisieren") }
                                     Button(onClick = { restoreBackup.launch(arrayOf("application/json", "text/plain", "application/octet-stream")) }, modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp), shape = RoundedCornerShape(26.dp), colors = ButtonDefaults.buttonColors(containerColor = KuemmeroGreenLight)) { Text("Daten wiederherstellen", fontWeight = FontWeight.Bold) }
+                                    OutlinedButton(onClick = { sicherungBestaetigung = true }, modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp), shape = RoundedCornerShape(26.dp), border = BorderStroke(2.dp, KuemmeroGreen), colors = ButtonDefaults.outlinedButtonColors(contentColor = KuemmeroGreen)) { Text("Sicherung jetzt aktualisieren") }
                                 }
                             }
                         }
