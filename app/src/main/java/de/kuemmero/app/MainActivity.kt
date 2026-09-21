@@ -832,6 +832,7 @@ fun KuemmeroApp() {
     var unterschriftBereichOffen by remember { mutableStateOf(false) }
     var sicherungBereichOffen by remember { mutableStateOf(false) }
     var hauptseite by remember { mutableStateOf("Heute") }
+    var auftragDetailIndex by remember { mutableStateOf<Int?>(null) }
     val listeState = rememberLazyListState()
 
     // Laufende Arbeitszeit
@@ -1451,10 +1452,11 @@ fun KuemmeroApp() {
                 modifier = Modifier.padding(padding).padding(16.dp),
                 verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
-                item {
-                    Card(
-                        modifier = Modifier.fillMaxWidth(),
-                        colors = CardDefaults.cardColors(containerColor = KuemmeroGreen),
+                if (auftragDetailIndex == null) {
+                    item {
+                        Card(
+                            modifier = Modifier.fillMaxWidth(),
+                            colors = CardDefaults.cardColors(containerColor = KuemmeroGreen),
                         shape = RoundedCornerShape(22.dp)
                     ) {
                         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -1938,9 +1940,11 @@ fun KuemmeroApp() {
                         }
                     }
                 }
-                item {
-                    Text(
-                        "Gespeicherte Aufträge",
+                }
+                if (auftragDetailIndex == null) {
+                    item {
+                        Text(
+                            "Gespeicherte Aufträge",
                         style = MaterialTheme.typography.headlineSmall,
                         color = KuemmeroGreen,
                         fontWeight = FontWeight.Bold
@@ -1991,12 +1995,13 @@ fun KuemmeroApp() {
                         color = KuemmeroText,
                         style = MaterialTheme.typography.bodyMedium
                     )
+                    }
                 }
-                itemsIndexed(gefilterteAuftraege) { _, pair ->
+                itemsIndexed(if (auftragDetailIndex == null) gefilterteAuftraege else gefilterteAuftraege.filter { it.first == auftragDetailIndex }) { _, pair ->
                     val index = pair.first
                     val a = pair.second
                     Card(
-                        modifier = Modifier.fillMaxWidth().clickable { kundenAkteName = a.kunde },
+                        modifier = Modifier.fillMaxWidth().clickable { auftragDetailIndex = index },
                         colors = CardDefaults.cardColors(containerColor = KuemmeroSurface),
                         shape = RoundedCornerShape(22.dp)
                     ) {
@@ -2050,6 +2055,25 @@ fun KuemmeroApp() {
                                 )
                             }
 
+                            if (auftragDetailIndex == index) {
+                                OutlinedButton(
+                                    onClick = { auftragDetailIndex = null },
+                                    modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp),
+                                    shape = RoundedCornerShape(24.dp),
+                                    border = BorderStroke(2.dp, KuemmeroGreen),
+                                    colors = ButtonDefaults.outlinedButtonColors(contentColor = KuemmeroGreen)
+                                ) { Text("← Zurück zur Auftragsübersicht", fontWeight = FontWeight.Bold) }
+
+                            } else {
+                                Text(
+                                    "Tippen, um den Auftrag zu öffnen →",
+                                    color = KuemmeroGreen,
+                                    fontWeight = FontWeight.SemiBold,
+                                    modifier = Modifier.padding(top = 6.dp)
+                                )
+                            }
+
+                            if (auftragDetailIndex == index) {
                             OutlinedButton(
                                 onClick = {
                                     val heuteBezahlt = datumFormat.format(Date())
@@ -2308,6 +2332,7 @@ fun KuemmeroApp() {
                                 colors = ButtonDefaults.outlinedButtonColors(contentColor = KuemmeroError)
                             ) {
                                 Text("Auftrag löschen", fontWeight = FontWeight.Bold)
+                            }
                             }
                         }
                     }
