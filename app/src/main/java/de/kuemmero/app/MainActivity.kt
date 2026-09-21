@@ -434,16 +434,21 @@ private fun erstelleRechnungPdf(
     c.drawText("Kunden-Unterschrift:", 40f, 625f, p)
     val signBitmap = ladeUnterschriftBitmap(unterschriftPfad)
     if (signBitmap != null) {
-        val maxW = 225f
-        val maxH = 30f
+        val maxW = 260f
+        val maxH = 55f
         val scale = minOf(maxW / signBitmap.width.toFloat(), maxH / signBitmap.height.toFloat())
         val drawW = signBitmap.width * scale
         val drawH = signBitmap.height * scale
-        c.drawBitmap(signBitmap, null, android.graphics.RectF(40f, 635f, 40f + drawW, 635f + drawH), null)
+        val top = 635f + (maxH - drawH) / 2f
+        c.drawBitmap(signBitmap, null, android.graphics.RectF(40f, top, 40f + drawW, top + drawH), null)
         signBitmap.recycle()
+    } else {
+        p.textSize = 10f
+        c.drawText("Keine Unterschrift erfasst", 40f, 655f, p)
+        p.textSize = 11f
     }
-    c.drawLine(40f, 675f, 280f, 675f, p)
-    c.drawText("Unterschrift", 40f, 693f, p)
+    c.drawLine(40f, 700f, 300f, 700f, p)
+    c.drawText("Unterschrift", 40f, 718f, p)
     c.drawText("Vielen Dank für Ihr Vertrauen.", 40f, 730f, p)
     pdf.finishPage(page)
     return pdf
