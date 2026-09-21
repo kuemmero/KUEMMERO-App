@@ -16,6 +16,7 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
@@ -581,7 +582,7 @@ fun KuemmeroApp() {
                     onClick = { createBackup.launch("kuemmero-backup.json") },
                     modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp),
                     shape = RoundedCornerShape(28.dp),
-                    border = ButtonDefaults.outlinedButtonBorder.copy(width = 2.dp),
+                    border = BorderStroke(2.dp, KuemmeroGreen),
                     colors = ButtonDefaults.outlinedButtonColors(contentColor = KuemmeroGreen)
                 ) { Text("Sicherung speichern", fontWeight = FontWeight.SemiBold) }
                 }
@@ -607,7 +608,7 @@ fun KuemmeroApp() {
                     },
                     modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp),
                     shape = RoundedCornerShape(28.dp),
-                    border = ButtonDefaults.outlinedButtonBorder.copy(width = 2.dp),
+                    border = BorderStroke(2.dp, KuemmeroGreen),
                     colors = ButtonDefaults.outlinedButtonColors(contentColor = KuemmeroGreen)
                 ) { Text("Sicherung jetzt aktualisieren", fontWeight = FontWeight.SemiBold) }
                 }
@@ -720,7 +721,7 @@ fun KuemmeroApp() {
                             onClick = { loeschIndex = index },
                             modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp),
                             shape = RoundedCornerShape(26.dp),
-                            border = ButtonDefaults.outlinedButtonBorder.copy(width = 2.dp),
+                            border = BorderStroke(2.dp, KuemmeroError),
                             colors = ButtonDefaults.outlinedButtonColors(contentColor = KuemmeroError)
                         ) {
                             Text("Auftrag löschen", fontWeight = FontWeight.Bold)
