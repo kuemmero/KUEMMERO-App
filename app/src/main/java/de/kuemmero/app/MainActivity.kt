@@ -1155,7 +1155,6 @@ fun KuemmeroApp() {
     val termineHeute = auftraege.filter { it.terminDatum == heuteText }
         .sortedBy { it.terminUhrzeit }
     val offeneAuftraege = auftraege.count { it.status != "Abgerechnet" }
-    val abgearbeitetAuftraege = auftraege.count { it.status == "Erledigt" || it.status == "Abgerechnet" }
     val offeneZahlungen = auftraege.filter { it.zahlungsstatus != "Bezahlt" }
     val offeneZahlungSumme = offeneZahlungen.sumOf { gesamtbetrag(it.stunden, it.material, it.fahrt, it.stundensatz) }
     val naechsteTermine = auftraege.filter { it.terminDatum.isNotBlank() }
@@ -1163,7 +1162,6 @@ fun KuemmeroApp() {
             try { datumFormat.parse(it.terminDatum)?.time ?: Long.MAX_VALUE } catch (_: Exception) { Long.MAX_VALUE }
         }.thenBy { it.terminUhrzeit })
         .take(8)
-    val naechsterTermin = naechsteTermine.firstOrNull()
 
     if (sicherungBestaetigung) {
         val vorhandeneSicherung = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
@@ -2657,22 +2655,9 @@ fun KuemmeroApp() {
                                 Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                                     Text("Heute · $heuteText", color = Color.White, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
                                     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                        Column(Modifier.weight(1f)) {
-                                            Text("Termine", color = Color.White)
-                                            Text("${termineHeute.size}", color = Color.White, fontSize = 26.sp, fontWeight = FontWeight.Bold)
-                                        }
-                                        Column(Modifier.weight(1f)) {
-                                            Text("Offene Aufträge", color = Color.White)
-                                            Text("$offeneAuftraege", color = Color.White, fontSize = 26.sp, fontWeight = FontWeight.Bold)
-                                        }
-                                        Column(Modifier.weight(1f)) {
-                                            Text("Abgearbeitet", color = Color.White)
-                                            Text("$abgearbeitetAuftraege", color = Color.White, fontSize = 26.sp, fontWeight = FontWeight.Bold)
-                                        }
-                                        Column(Modifier.weight(1f)) {
-                                            Text("Offen €", color = Color.White)
-                                            Text(euro(offeneZahlungSumme), color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.Bold)
-                                        }
+                                        Column(Modifier.weight(1f)) { Text("Termine", color = Color.White); Text("${termineHeute.size}", color = Color.White, fontSize = 26.sp, fontWeight = FontWeight.Bold) }
+                                        Column(Modifier.weight(1f)) { Text("Offene Aufträge", color = Color.White); Text("$offeneAuftraege", color = Color.White, fontSize = 26.sp, fontWeight = FontWeight.Bold) }
+                                        Column(Modifier.weight(1f)) { Text("Offen €", color = Color.White); Text(euro(offeneZahlungSumme), color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.Bold) }
                                     }
                                 }
                             }
@@ -2698,27 +2683,51 @@ fun KuemmeroApp() {
                                 }
                             }
                         }
-                        item {
-                            Text("Nächster Termin", style = MaterialTheme.typography.titleLarge, color = KuemmeroGreen, fontWeight = FontWeight.Bold)
-                        }
-                        item {
-                            Card(
-                                Modifier.fillMaxWidth(),
-                                colors = CardDefaults.cardColors(containerColor = KuemmeroSurface),
-                                shape = RoundedCornerShape(18.dp),
-                                border = BorderStroke(1.5.dp, KuemmeroGreenLight)
-                            ) {
-                                if (naechsterTermin == null) {
-                                    Text("Keine zukünftigen Termine.", Modifier.padding(18.dp), color = KuemmeroText)
-                                } else {
-                                    Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        if (naechsteTermine.isNotEmpty()) {
+                            item {
+                                Text(
+                                    "Nächster Termin",
+                                    style = MaterialTheme.typography.titleLarge,
+                                    color = KuemmeroGreen,
+                                    fontWeight = FontWeight.Bold
+                                )
+                            }
+                            item {
+                                val naechsterIndex = auftraege.indexOf(naechsteTermine.first())
+                                val a = naechsteTermine.first()
+                                Card(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .clickable {
+                                            if (naechsterIndex >= 0) {
+                                                hauptseite = "Aufträge"
+                                                auftragFormOffen = false
+                                                auftragDetailIndex = naechsterIndex
+                                            }
+                                        },
+                                    colors = CardDefaults.cardColors(containerColor = KuemmeroSurface),
+                                    shape = RoundedCornerShape(18.dp),
+                                    border = BorderStroke(1.5.dp, KuemmeroGreenLight)
+                                ) {
+                                    Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                                         Text(
-                                            "${naechsterTermin.terminDatum} · ${naechsterTermin.terminUhrzeit.ifBlank { "ohne Uhrzeit" }}",
+                                            "${a.terminDatum}${if (a.terminUhrzeit.isNotBlank()) " · ${a.terminUhrzeit}" else ""}",
                                             color = KuemmeroGreen,
                                             fontWeight = FontWeight.Bold
                                         )
-                                        Text(naechsterTermin.kunde, color = KuemmeroText, style = MaterialTheme.typography.titleMedium)
-                                        if (naechsterTermin.leistung.isNotBlank()) Text(naechsterTermin.leistung, color = KuemmeroText)
+                                        Text(a.kunde, color = KuemmeroText, style = MaterialTheme.typography.titleMedium)
+                                        if (a.leistung.isNotBlank()) Text(a.leistung, color = KuemmeroText)
+                                        if (a.kundenStrasse.isNotBlank() || a.kundenOrt.isNotBlank()) {
+                                            Text(
+                                                listOf(a.kundenStrasse, a.kundenOrt).filter { it.isNotBlank() }.joinToString(", "),
+                                                color = KuemmeroText
+                                            )
+                                        }
+                                        Text(
+                                            "Tippen, um den Auftrag zu öffnen →",
+                                            color = KuemmeroGreen,
+                                            fontWeight = FontWeight.SemiBold
+                                        )
                                     }
                                 }
                             }
