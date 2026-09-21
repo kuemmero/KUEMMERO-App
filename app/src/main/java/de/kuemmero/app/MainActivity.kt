@@ -298,7 +298,12 @@ fun KuemmeroApp() {
     var loeschIndex by remember { mutableStateOf<Int?>(null) }
     var bearbeiteIndex by remember { mutableStateOf<Int?>(null) }
     val listeState = rememberLazyListState()
-    val coroutineScope = rememberCoroutineScope()
+
+    LaunchedEffect(bearbeiteIndex) {
+        if (bearbeiteIndex != null) {
+            listeState.animateScrollToItem(0)
+        }
+    }
 
     // Speichert den Auftrag, dessen PDF für einen gespeicherten Auftrag erstellt werden soll.
     var auftragFuerPdf by remember { mutableStateOf<Auftrag?>(null) }
@@ -536,7 +541,6 @@ fun KuemmeroApp() {
                                 material = a.material.toString().replace(".", ",")
                                 fahrt = a.fahrt.toString().replace(".", ",")
                                 stundensatz = a.stundensatz.toString().replace(".", ",")
-                                coroutineScope.launch { listeState.animateScrollToItem(0) }
                             }, modifier = Modifier.fillMaxWidth()) {
                                 Text("Auftrag bearbeiten")
                             }
