@@ -847,6 +847,7 @@ fun KuemmeroApp() {
     }
     var auftraege by remember { mutableStateOf(ladeAuftraege(context)) }
     var kunden by remember { mutableStateOf(ladeKunden(context)) }
+    var kundenSuche by remember { mutableStateOf("") }
     var kundenDialog by remember { mutableStateOf(false) }
     var neuerKundeDialog by remember { mutableStateOf(false) }
     var neuerKundenName by remember { mutableStateOf("") }
@@ -905,6 +906,7 @@ fun KuemmeroApp() {
     var kvFotosVorher by remember { mutableStateOf<List<String>>(emptyList()) }
     var kvFahrt by remember { mutableStateOf("") }
     var kvStundensatz by remember { mutableStateOf(context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE).getString(STUNDENSATZ_KEY, "42.00") ?: "42.00") }
+    var kvKundenDialog by remember { mutableStateOf(false) }
     var auftragDetailIndex by remember { mutableStateOf<Int?>(null) }
     var auftragFormOffen by remember { mutableStateOf(false) }
     val listeState = rememberLazyListState()
@@ -1470,7 +1472,47 @@ fun KuemmeroApp() {
     }
 
     MaterialTheme(colorScheme = KuemmeroColors) {
-        Scaffold(
+        if (kvKundenDialog) {
+        AlertDialog(
+            onDismissRequest = { kvKundenDialog = false },
+            title = { Text("Kunde auswählen") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    if (kunden.isEmpty()) {
+                        Text("Noch keine Kunden gespeichert.")
+                    } else {
+                        kunden.forEach { k ->
+                            OutlinedButton(
+                                onClick = {
+                                    kvKunde = k.name
+                                    kvStrasse = k.adresse
+                                    kvOrt = k.ort
+                                    kvKundenDialog = false
+                                },
+                                modifier = Modifier.fillMaxWidth(),
+                                shape = RoundedCornerShape(14.dp),
+                                border = BorderStroke(1.5.dp, KuemmeroGreen),
+                                colors = ButtonDefaults.outlinedButtonColors(contentColor = KuemmeroText)
+                            ) {
+                                Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.Start) {
+                                    Text(k.name, fontWeight = FontWeight.Bold, color = KuemmeroGreen)
+                                    if (k.adresse.isNotBlank() || k.ort.isNotBlank()) Text(listOf(k.adresse, k.ort).filter { it.isNotBlank() }.joinToString(", "), color = KuemmeroText)
+                                }
+                            }
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { kvKundenDialog = false; neuerKundenName = kvKunde; neuerKundenAdresse = kvStrasse; neuerKundenOrt = kvOrt; neuerKundeDialog = true }) {
+                    Text("+ Neuer Kunde")
+                }
+            },
+            dismissButton = { TextButton(onClick = { kvKundenDialog = false }) { Text("Abbrechen") } }
+        )
+    }
+
+    Scaffold(
             topBar = {
                 TopAppBar(
                     title = {
@@ -2586,16 +2628,34 @@ fun KuemmeroApp() {
                                 Text("+ Neuer Kunde", fontWeight = FontWeight.Bold)
                             }
                         }
-                        if (kunden.isEmpty()) {
-                            item { Text("Noch keine Kunden gespeichert.", color = KuemmeroText) }
+                        item {
+                            OutlinedTextField(
+                                value = kundenSuche,
+                                onValueChange = { kundenSuche = it },
+                                label = { Text("Kunden suchen") },
+                                singleLine = true,
+                                modifier = Modifier.fillMaxWidth(),
+                                colors = feldFarben,
+                                shape = RoundedCornerShape(14.dp)
+                            )
+                        }
+                        val kundenGefiltert = kunden.filter {
+                            val q = kundenSuche.trim().lowercase()
+                            q.isBlank() || listOf(k.name, k.adresse, k.ort, k.telefon, k.email).any { it.lowercase().contains(q) }
+                        }
+                        item { Text("${kundenGefiltert.size} Kunde${if (kundenGefiltert.size == 1) "" else "n"}", color = KuemmeroText) }
+                        if (kundenGefiltert.isEmpty()) {
+                            item { Text(if (kunden.isEmpty()) "Noch keine Kunden gespeichert." else "Kein Kunde gefunden.", color = KuemmeroText) }
                         } else {
-                            itemsIndexed(kunden) { _, k ->
+                            itemsIndexed(kundenGefiltert) { _, k ->
                                 Card(Modifier.fillMaxWidth().clickable { kundenAkteName = k.name }, colors = CardDefaults.cardColors(containerColor = KuemmeroSurface), shape = RoundedCornerShape(18.dp), border = BorderStroke(1.5.dp, KuemmeroGreenLight)) {
-                                    Column(Modifier.padding(16.dp)) {
+                                    Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                                         Text(k.name, style = MaterialTheme.typography.titleMedium, color = KuemmeroGreen, fontWeight = FontWeight.Bold)
-                                        Text(k.adresse, color = KuemmeroText)
-                                        Text(k.ort, color = KuemmeroText)
+                                        if (k.adresse.isNotBlank() || k.ort.isNotBlank()) Text(listOf(k.adresse, k.ort).filter { it.isNotBlank() }.joinToString(", "), color = KuemmeroText)
+                                        if (k.telefon.isNotBlank()) Text("☎ ${k.telefon}", color = KuemmeroText)
+                                        if (k.email.isNotBlank()) Text("✉ ${k.email}", color = KuemmeroText)
                                         Text("Aufträge: ${auftraege.count { it.kunde == k.name }}", color = KuemmeroText)
+                                        Text("Kundenakte öffnen →", color = KuemmeroGreen, fontWeight = FontWeight.Bold)
                                     }
                                 }
                             }
@@ -2752,7 +2812,21 @@ fun KuemmeroApp() {
                                         OutlinedTextField(kvNummer, { kvNummer = it }, label = { Text("Nummer") }, colors = feldFarben, modifier = Modifier.fillMaxWidth())
                                         OutlinedTextField(kvDatum, { kvDatum = it }, label = { Text("Datum") }, colors = feldFarben, modifier = Modifier.fillMaxWidth())
                                         OutlinedTextField(kvGueltigBis, { kvGueltigBis = it }, label = { Text("Gültig bis") }, colors = feldFarben, modifier = Modifier.fillMaxWidth())
-                                        OutlinedTextField(kvKunde, { kvKunde = it }, label = { Text("Kunde") }, colors = feldFarben, modifier = Modifier.fillMaxWidth())
+                                        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                            Text("Kunde", color = KuemmeroGreen, fontWeight = FontWeight.Bold)
+                                            OutlinedButton(
+                                                onClick = { kvKundenDialog = true },
+                                                modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp),
+                                                shape = RoundedCornerShape(14.dp),
+                                                border = BorderStroke(2.dp, KuemmeroGreen),
+                                                colors = ButtonDefaults.outlinedButtonColors(contentColor = KuemmeroText)
+                                            ) {
+                                                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                                                    Text(if (kvKunde.isBlank()) "Kunde auswählen" else kvKunde, fontWeight = FontWeight.SemiBold)
+                                                    Text("▼", color = KuemmeroGreen, fontWeight = FontWeight.Bold)
+                                                }
+                                            }
+                                        }
                                         OutlinedTextField(kvStrasse, { kvStrasse = it }, label = { Text("Adresse") }, colors = feldFarben, modifier = Modifier.fillMaxWidth())
                                         OutlinedTextField(kvOrt, { kvOrt = it }, label = { Text("PLZ und Ort") }, colors = feldFarben, modifier = Modifier.fillMaxWidth())
                                         OutlinedTextField(kvLeistung, { kvLeistung = it }, label = { Text("Leistung") }, colors = feldFarben, modifier = Modifier.fillMaxWidth())
