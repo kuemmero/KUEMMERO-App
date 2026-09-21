@@ -17,6 +17,7 @@ import androidx.activity.ComponentActivity
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
@@ -41,6 +42,14 @@ import java.util.Calendar
 import java.util.Date
 import java.util.Locale
 
+data class Kunde(
+    val name: String,
+    val adresse: String = "",
+    val ort: String = "",
+    val telefon: String = "",
+    val email: String = ""
+)
+
 data class Auftrag(
     val nummer: String = "",
     val datum: String = "",
@@ -57,6 +66,7 @@ data class Auftrag(
 
 private const val PREFS_NAME = "kuemmero_speicher"
 private const val AUFTRAEGE_KEY = "auftraege"
+private const val KUNDEN_KEY = "kunden"
 private const val STUNDENSATZ_KEY = "stundensatz"
 private const val BACKUP_URI_KEY = "backup_uri"
 
@@ -89,6 +99,46 @@ private fun ladeAuftraege(context: Context): List<Auftrag> {
     }
 }
 
+private fun ladeKunden(context: Context): List<Kunde> {
+    val raw = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        .getString(KUNDEN_KEY, "[]") ?: "[]"
+    val json = try { JSONArray(raw) } catch (_: Exception) { JSONArray() }
+    return List(json.length()) { i ->
+        val o = json.optJSONObject(i) ?: JSONObject()
+        Kunde(
+            o.optString("name"),
+            o.optString("adresse"),
+            o.optString("ort"),
+            o.optString("telefon"),
+            o.optString("email")
+        )
+    }.filter { it.name.isNotBlank() }
+}
+
+private fun speichereKunden(context: Context, liste: List<Kunde>) {
+    val json = JSONArray()
+    liste.forEach { k ->
+        json.put(JSONObject().apply {
+            put("name", k.name)
+            put("adresse", k.adresse)
+            put("ort", k.ort)
+            put("telefon", k.telefon)
+            put("email", k.email)
+        })
+    }
+    context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        .edit().putString(KUNDEN_KEY, json.toString()).commit()
+    sichereBackupAutomatisch(context)
+}
+
+private fun speichereOderAktualisiereKunde(context: Context, kunde: Kunde) {
+    if (kunde.name.isBlank()) return
+    val liste = ladeKunden(context).toMutableList()
+    val index = liste.indexOfFirst { it.name.equals(kunde.name, ignoreCase = true) }
+    if (index >= 0) liste[index] = kunde else liste.add(kunde)
+    speichereKunden(context, liste)
+}
+
 private fun speichereAuftraege(context: Context, liste: List<Auftrag>) {
     val json = JSONArray()
     liste.forEach { a ->
@@ -116,6 +166,7 @@ private fun backupText(context: Context): String {
     return JSONObject().apply {
         put("stundensatz", p.getString(STUNDENSATZ_KEY, "42.00") ?: "42.00")
         put("auftraege", JSONArray(p.getString(AUFTRAEGE_KEY, "[]") ?: "[]"))
+        put("kunden", JSONArray(p.getString(KUNDEN_KEY, "[]") ?: "[]"))
     }.toString(2)
 }
 
@@ -316,6 +367,14 @@ fun KuemmeroApp() {
         )
     }
     var auftraege by remember { mutableStateOf(ladeAuftraege(context)) }
+    var kunden by remember { mutableStateOf(ladeKunden(context)) }
+    var kundenDialog by remember { mutableStateOf(false) }
+    var neuerKundeDialog by remember { mutableStateOf(false) }
+    var neuerKundenName by remember { mutableStateOf("") }
+    var neuerKundenAdresse by remember { mutableStateOf("") }
+    var neuerKundenOrt by remember { mutableStateOf("") }
+    var neuerKundenTelefon by remember { mutableStateOf("") }
+    var neuerKundenEmail by remember { mutableStateOf("") }
     var nummer by remember {
         mutableStateOf("ANG-" + SimpleDateFormat("yyyyMMdd-HHmmss", Locale.GERMANY).format(heute))
     }
@@ -376,11 +435,14 @@ fun KuemmeroApp() {
                 val obj = JSONObject(text)
                 val rate = obj.optString("stundensatz", "42.00")
                 val arr = obj.optJSONArray("auftraege") ?: JSONArray()
+                val kundenArr = obj.optJSONArray("kunden") ?: JSONArray()
                 context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE).edit()
                     .putString(STUNDENSATZ_KEY, rate)
-                    .putString(AUFTRAEGE_KEY, arr.toString()).commit()
+                    .putString(AUFTRAEGE_KEY, arr.toString())
+                    .putString(KUNDEN_KEY, kundenArr.toString()).commit()
                 stundensatz = rate
                 auftraege = ladeAuftraege(context)
+                kunden = ladeKunden(context)
                 android.widget.Toast.makeText(context, "Daten wiederhergestellt", 0).show()
             } catch (e: Exception) {
                 android.widget.Toast.makeText(context, "Wiederherstellung fehlgeschlagen", 1).show()
@@ -417,6 +479,131 @@ fun KuemmeroApp() {
     val rate = zahl(stundensatz, 42.0)
     val gesamt = arbeitsstunden * rate + materialKosten + fahrtKosten
     val umsatz = auftraege.sumOf { it.stunden * it.stundensatz + it.material + it.fahrt }
+
+    if (kundenDialog) {
+        AlertDialog(
+            onDismissRequest = { kundenDialog = false },
+            title = { Text("Kundenverwaltung") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    if (kunden.isEmpty()) {
+                        Text("Noch keine Kunden gespeichert.")
+                    } else {
+                        kunden.forEach { k ->
+                            Card(
+                                modifier = Modifier.fillMaxWidth(),
+                                colors = CardDefaults.cardColors(containerColor = KuemmeroMint),
+                                shape = RoundedCornerShape(12.dp)
+                            ) {
+                                Column(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .clickable {
+                                            kunde = k.name
+                                            strasse = k.adresse
+                                            ort = k.ort
+                                            kundenDialog = false
+                                        }
+                                        .padding(12.dp)
+                                ) {
+                                    Text(k.name, fontWeight = FontWeight.Bold, color = KuemmeroGreen)
+                                    if (k.adresse.isNotBlank()) Text(k.adresse)
+                                    if (k.ort.isNotBlank()) Text(k.ort)
+                                    if (k.telefon.isNotBlank()) Text("Tel.: ${k.telefon}")
+                                    if (k.email.isNotBlank()) Text(k.email)
+                                }
+                            }
+                        }
+                    }
+                    OutlinedButton(
+                        onClick = {
+                            kundenDialog = false
+                            neuerKundenName = ""
+                            neuerKundenAdresse = ""
+                            neuerKundenOrt = ""
+                            neuerKundenTelefon = ""
+                            neuerKundenEmail = ""
+                            neuerKundeDialog = true
+                        },
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text("+ Neuer Kunde")
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { kundenDialog = false }) { Text("Schließen") }
+            }
+        )
+    }
+
+    if (neuerKundeDialog) {
+        AlertDialog(
+            onDismissRequest = { neuerKundeDialog = false },
+            title = { Text("Neuen Kunden anlegen") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    OutlinedTextField(
+                        neuerKundenName,
+                        { neuerKundenName = it },
+                        label = { Text("Kunde") },
+                        singleLine = true
+                    )
+                    OutlinedTextField(
+                        neuerKundenAdresse,
+                        { neuerKundenAdresse = it },
+                        label = { Text("Adresse") },
+                        singleLine = true
+                    )
+                    OutlinedTextField(
+                        neuerKundenOrt,
+                        { neuerKundenOrt = it },
+                        label = { Text("PLZ und Ort") },
+                        singleLine = true
+                    )
+                    OutlinedTextField(
+                        neuerKundenTelefon,
+                        { neuerKundenTelefon = it },
+                        label = { Text("Telefon") },
+                        singleLine = true,
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone)
+                    )
+                    OutlinedTextField(
+                        neuerKundenEmail,
+                        { neuerKundenEmail = it },
+                        label = { Text("E-Mail") },
+                        singleLine = true,
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email)
+                    )
+                }
+            },
+            confirmButton = {
+                Button(onClick = {
+                    if (neuerKundenName.isBlank()) {
+                        android.widget.Toast.makeText(context, "Bitte Kundennamen eingeben.", 0).show()
+                    } else {
+                        val k = Kunde(
+                            neuerKundenName.trim(),
+                            neuerKundenAdresse.trim(),
+                            neuerKundenOrt.trim(),
+                            neuerKundenTelefon.trim(),
+                            neuerKundenEmail.trim()
+                        )
+                        speichereOderAktualisiereKunde(context, k)
+                        kunden = ladeKunden(context)
+                        kunde = k.name
+                        strasse = k.adresse
+                        ort = k.ort
+                        neuerKundeDialog = false
+                        android.widget.Toast.makeText(context, "Kunde gespeichert.", 0).show()
+                    }
+                }) { Text("Speichern") }
+            },
+            dismissButton = {
+                TextButton(onClick = { neuerKundeDialog = false }) { Text("Abbrechen") }
+            }
+        )
+    }
 
     loeschIndex?.let { index ->
         AlertDialog(
@@ -503,6 +690,39 @@ fun KuemmeroApp() {
                             Text("Hausmeisterservice & Seniorenbetreuung", color = KuemmeroText)
                             Text("Markus Becker · 58675 Hemer", color = KuemmeroText)
                             Text("E-Mail: kuemmero@web.de", color = KuemmeroText)
+                        }
+                    }
+                }
+
+                item {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        OutlinedButton(
+                            onClick = { kundenDialog = true },
+                            modifier = Modifier.weight(1f).heightIn(min = 52.dp),
+                            shape = RoundedCornerShape(26.dp),
+                            border = BorderStroke(2.dp, KuemmeroGreen),
+                            colors = ButtonDefaults.outlinedButtonColors(contentColor = KuemmeroGreen)
+                        ) {
+                            Text("Kunden auswählen", fontWeight = FontWeight.SemiBold)
+                        }
+                        OutlinedButton(
+                            onClick = {
+                                neuerKundenName = kunde
+                                neuerKundenAdresse = strasse
+                                neuerKundenOrt = ort
+                                neuerKundenTelefon = ""
+                                neuerKundenEmail = ""
+                                neuerKundeDialog = true
+                            },
+                            modifier = Modifier.weight(1f).heightIn(min = 52.dp),
+                            shape = RoundedCornerShape(26.dp),
+                            border = BorderStroke(2.dp, KuemmeroGreen),
+                            colors = ButtonDefaults.outlinedButtonColors(contentColor = KuemmeroGreen)
+                        ) {
+                            Text("+ Neuer Kunde", fontWeight = FontWeight.SemiBold)
                         }
                     }
                 }
@@ -615,6 +835,11 @@ fun KuemmeroApp() {
                             if (kunde.isBlank()) {
                                 android.widget.Toast.makeText(context, "Bitte Kundennamen eingeben.", 0).show()
                             } else {
+                                speichereOderAktualisiereKunde(
+                                    context,
+                                    Kunde(kunde.trim(), strasse.trim(), ort.trim())
+                                )
+                                kunden = ladeKunden(context)
                                 val a = Auftrag(
                                     nummer.trim(), datum.trim(), gueltigBis.trim(),
                                     kunde.trim(), strasse.trim(), ort.trim(), leistung.trim(),
