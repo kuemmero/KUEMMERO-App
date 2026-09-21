@@ -738,6 +738,7 @@ private fun FotoVorschau(
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun KuemmeroApp() {
     val context = LocalContext.current
