@@ -6,6 +6,12 @@ import android.graphics.Paint
 import android.graphics.pdf.PdfDocument
 import android.net.Uri
 import android.os.Bundle
+import android.os.CancellationSignal
+import android.os.ParcelFileDescriptor
+import android.print.PrintAttributes
+import android.print.PrintDocumentAdapter
+import android.print.PrintDocumentInfo
+import android.print.PrintManager
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
@@ -167,6 +173,88 @@ private fun erstellePdf(
     c.drawText("Vielen Dank für Ihr Vertrauen.", 40f, 730f, p)
     pdf.finishPage(page)
     return pdf
+}
+
+private fun druckePdf(
+    context: Context,
+    dateiname: String,
+    nummer: String,
+    datum: String,
+    gueltigBis: String,
+    auftrag: Auftrag
+) {
+    val printManager = context.getSystemService(Context.PRINT_SERVICE) as PrintManager
+
+    val adapter = object : PrintDocumentAdapter() {
+        private var pdf: PdfDocument? = null
+
+        override fun onLayout(
+            oldAttributes: PrintAttributes?,
+            newAttributes: PrintAttributes,
+            cancellationSignal: CancellationSignal?,
+            callback: LayoutResultCallback,
+            extras: android.os.Bundle?
+        ) {
+            if (cancellationSignal?.isCanceled == true) {
+                callback.onLayoutCancelled()
+                return
+            }
+
+            pdf?.close()
+            pdf = erstellePdf(
+                context, nummer, datum, gueltigBis,
+                auftrag.kunde, auftrag.kundenStrasse, auftrag.kundenOrt, auftrag.leistung,
+                auftrag.stunden, auftrag.material, auftrag.fahrt, auftrag.stundensatz
+            )
+
+            val info = PrintDocumentInfo.Builder(dateiname)
+                .setContentType(PrintDocumentInfo.CONTENT_TYPE_DOCUMENT)
+                .setPageCount(1)
+                .build()
+
+            callback.onLayoutFinished(info, true)
+        }
+
+        override fun onWrite(
+            pages: Array<out android.print.PageRange>,
+            destination: ParcelFileDescriptor,
+            cancellationSignal: CancellationSignal?,
+            callback: WriteResultCallback
+        ) {
+            try {
+                if (cancellationSignal?.isCanceled == true) {
+                    callback.onWriteCancelled()
+                    return
+                }
+
+                val document = pdf ?: throw IllegalStateException("PDF konnte nicht erstellt werden")
+                ParcelFileDescriptor.AutoCloseOutputStream(destination).use { output ->
+                    document.writeTo(output)
+                }
+                callback.onWriteFinished(arrayOf(android.print.PageRange.ALL_PAGES))
+            } catch (e: Exception) {
+                callback.onWriteFailed(e.message)
+            } finally {
+                pdf?.close()
+                pdf = null
+            }
+        }
+
+        override fun onFinish() {
+            pdf?.close()
+            pdf = null
+            super.onFinish()
+        }
+    }
+
+    printManager.print(
+        dateiname.removeSuffix(".pdf"),
+        adapter,
+        PrintAttributes.Builder()
+            .setMediaSize(PrintAttributes.MediaSize.ISO_A4)
+            .setMinMargins(PrintAttributes.Margins.NO_MARGINS)
+            .build()
+    )
 }
 
 class MainActivity : ComponentActivity() {
@@ -411,10 +499,16 @@ fun KuemmeroApp() {
                             Text(a.leistung)
                             Text(euro(a.stunden * a.stundensatz + a.material + a.fahrt))
 
-                            // PDF direkt aus dem gespeicherten Auftrag erstellen.
+                            // Gespeicherten Auftrag direkt an den Android-Druckdialog senden.
                             Button(onClick = {
-                                auftragFuerPdf = a
-                                pdfLauncher.launch("KÜMMERO-Angebot-$nummer-${a.kunde}.pdf")
+                                druckePdf(
+                                    context,
+                                    "KÜMMERO-Angebot-${a.kunde}.pdf",
+                                    nummer,
+                                    datum,
+                                    gueltigBis,
+                                    a
+                                )
                             }, modifier = Modifier.fillMaxWidth()) {
                                 Text("PDF drucken")
                             }
