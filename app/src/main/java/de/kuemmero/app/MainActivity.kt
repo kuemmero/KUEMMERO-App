@@ -220,58 +220,46 @@ private fun sichereBackupAutomatisch(context: Context): Boolean {
     } catch (_: Exception) { false }
 }
 
-private fun zeichneUnterschriftInsPdf(
-    canvas: android.graphics.Canvas,
-    pfad: String,
-    ziel: android.graphics.RectF,
-    paint: Paint
-) {
-    if (pfad.isBlank()) return
-    try {
-        val original = android.graphics.BitmapFactory.decodeFile(pfad) ?: return
-        var left = 0
-        var top = 0
-        var right = original.width
-        var bottom = original.height
-        val pixels = IntArray(original.width * original.height)
-        original.getPixels(pixels, 0, original.width, 0, 0, original.width, original.height)
-        fun isInk(x: Int, y: Int): Boolean {
-            val c = pixels[y * original.width + x]
+private fun ladeUnterschriftBitmap(pfad: String): android.graphics.Bitmap? {
+    if (pfad.isBlank()) return null
+    val original = android.graphics.BitmapFactory.decodeFile(pfad) ?: return null
+    val width = original.width
+    val height = original.height
+    var left = width
+    var top = height
+    var right = -1
+    var bottom = -1
+    val pixels = IntArray(width)
+    for (y in 0 until height) {
+        original.getPixels(pixels, 0, width, 0, y, width, 1)
+        for (x in 0 until width) {
+            val c = pixels[x]
             val r = android.graphics.Color.red(c)
             val g = android.graphics.Color.green(c)
             val b = android.graphics.Color.blue(c)
-            return !(r > 245 && g > 245 && b > 245)
-        }
-        var found = false
-        var minX = original.width
-        var minY = original.height
-        var maxX = -1
-        var maxY = -1
-        for (y in 0 until original.height) {
-            for (x in 0 until original.width) {
-                if (isInk(x, y)) {
-                    found = true
-                    if (x < minX) minX = x
-                    if (x > maxX) maxX = x
-                    if (y < minY) minY = y
-                    if (y > maxY) maxY = y
-                }
+            val alpha = android.graphics.Color.alpha(c)
+            if (alpha > 20 && (r < 245 || g < 245 || b < 245)) {
+                left = minOf(left, x)
+                top = minOf(top, y)
+                right = maxOf(right, x)
+                bottom = maxOf(bottom, y)
             }
         }
-        if (found) {
-            val margin = 12
-            left = (minX - margin).coerceAtLeast(0)
-            top = (minY - margin).coerceAtLeast(0)
-            right = (maxX + margin + 1).coerceAtMost(original.width)
-            bottom = (maxY + margin + 1).coerceAtMost(original.height)
-        }
-        val cropped = android.graphics.Bitmap.createBitmap(original, left, top, right - left, bottom - top)
-        canvas.drawBitmap(cropped, null, ziel, paint)
-        cropped.recycle()
-        original.recycle()
-    } catch (_: Exception) {
-        // PDF bleibt auch ohne Unterschrift druckbar.
     }
+    if (right < left || bottom < top) {
+        original.recycle()
+        return null
+    }
+    val margin = 10
+    val cropLeft = maxOf(0, left - margin)
+    val cropTop = maxOf(0, top - margin)
+    val cropRight = minOf(width, right + margin + 1)
+    val cropBottom = minOf(height, bottom + margin + 1)
+    val cropped = android.graphics.Bitmap.createBitmap(
+        original, cropLeft, cropTop, cropRight - cropLeft, cropBottom - cropTop
+    )
+    if (cropped !== original) original.recycle()
+    return cropped
 }
 
 private fun erstellePdf(
@@ -326,13 +314,17 @@ private fun erstellePdf(
     p.textSize = 11f
     c.drawText("Gemäß § 19 UStG wird keine Umsatzsteuer berechnet.", 40f, 578f, p)
     c.drawText("Auftragserteilung / Unterschrift Kunde:", 40f, 643f, p)
-    // Das Unterschriftsfeld ist exakt auf die Linie abgestimmt.
-    zeichneUnterschriftInsPdf(
-        c,
-        unterschriftPfad,
-        android.graphics.RectF(48f, 652f, 272f, 688f),
-        p
-    )
+    val signBitmap = ladeUnterschriftBitmap(unterschriftPfad)
+    if (signBitmap != null) {
+        val maxW = 225f
+        val maxH = 48f
+        val scale = minOf(maxW / signBitmap.width.toFloat(), maxH / signBitmap.height.toFloat())
+        val drawW = signBitmap.width * scale
+        val drawH = signBitmap.height * scale
+        val dst = android.graphics.RectF(40f, 645f, 40f + drawW, 645f + drawH)
+        c.drawBitmap(signBitmap, null, dst, null)
+        signBitmap.recycle()
+    }
     c.drawLine(40f, 693f, 280f, 693f, p)
     c.drawText("Unterschrift", 40f, 711f, p)
     c.drawLine(330f, 693f, 550f, 693f, p)
@@ -396,17 +388,20 @@ private fun erstelleRechnungPdf(
     p.textSize = 11f
     c.drawText("Gemäß § 19 UStG wird keine Umsatzsteuer berechnet.", 40f, 558f, p)
     c.drawText("Bitte überweisen Sie den Rechnungsbetrag innerhalb von 14 Tagen.", 40f, 590f, p)
-    if (unterschriftPfad.isNotBlank()) {
-        zeichneUnterschriftInsPdf(
-            c,
-            unterschriftPfad,
-            android.graphics.RectF(40f, 575f, 280f, 615f),
-            p
-        )
-        c.drawLine(40f, 620f, 280f, 620f, p)
-        c.drawText("Kunden-Unterschrift", 40f, 638f, p)
+    c.drawText("Kunden-Unterschrift:", 40f, 620f, p)
+    val signBitmap = ladeUnterschriftBitmap(unterschriftPfad)
+    if (signBitmap != null) {
+        val maxW = 225f
+        val maxH = 48f
+        val scale = minOf(maxW / signBitmap.width.toFloat(), maxH / signBitmap.height.toFloat())
+        val drawW = signBitmap.width * scale
+        val drawH = signBitmap.height * scale
+        c.drawBitmap(signBitmap, null, android.graphics.RectF(40f, 622f, 40f + drawW, 622f + drawH), null)
+        signBitmap.recycle()
     }
-    c.drawText("Vielen Dank für Ihr Vertrauen.", 40f, 665f, p)
+    c.drawLine(40f, 675f, 280f, 675f, p)
+    c.drawText("Unterschrift", 40f, 693f, p)
+    c.drawText("Vielen Dank für Ihr Vertrauen.", 40f, 730f, p)
     pdf.finishPage(page)
     return pdf
 }
@@ -1615,6 +1610,12 @@ fun KuemmeroApp() {
                                     status = a.status
                                     zahlungsstatus = a.zahlungsstatus
                                     bezahltAm = a.bezahltAm
+                                    terminDatum = a.terminDatum
+                                    terminUhrzeit = a.terminUhrzeit
+                                    notiz = a.notiz
+                                    fotosVorher = a.fotosVorher
+                                    fotosNachher = a.fotosNachher
+                                    unterschriftPfad = a.unterschriftPfad
                                 },
                                 modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp),
                                 shape = RoundedCornerShape(26.dp),
