@@ -985,16 +985,54 @@ fun KuemmeroApp() {
         ActivityResultContracts.CreateDocument("application/json")
     ) { uri ->
         uri?.let {
-            context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE).edit()
-                .putString(BACKUP_URI_KEY, it.toString()).apply()
             try {
                 context.contentResolver.openOutputStream(it, "wt")?.use { out ->
                     out.write(backupText(context).toByteArray(Charsets.UTF_8))
                     out.flush()
+                } ?: throw Exception("Datei konnte nicht geöffnet werden")
+
+                try {
+                    context.contentResolver.takePersistableUriPermission(
+                        it,
+                        Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION
+                    )
+                } catch (_: Exception) {
+                    // Nicht jeder Dateianbieter unterstützt persistente Rechte.
                 }
+
+                context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE).edit()
+                    .putString(BACKUP_URI_KEY, it.toString()).apply()
                 android.widget.Toast.makeText(context, "Sicherung gespeichert. Diese Datei wird künftig aktualisiert.", 0).show()
-            } catch (e: Exception) {
+            } catch (_: Exception) {
                 android.widget.Toast.makeText(context, "Sicherung fehlgeschlagen", 1).show()
+            }
+        }
+    }
+
+    // Wird nur benutzt, wenn die bisher hinterlegte Sicherungsdatei nicht mehr erreichbar ist.
+    // Dadurch wird nicht automatisch wieder eine Datei mit (1), (2) usw. angelegt.
+    val selectBackup = rememberLauncherForActivityResult(
+        ActivityResultContracts.OpenDocument()
+    ) { uri ->
+        uri?.let {
+            try {
+                try {
+                    context.contentResolver.takePersistableUriPermission(
+                        it,
+                        Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION
+                    )
+                } catch (_: Exception) { }
+
+                context.contentResolver.openOutputStream(it, "wt")?.use { out ->
+                    out.write(backupText(context).toByteArray(Charsets.UTF_8))
+                    out.flush()
+                } ?: throw Exception("Datei konnte nicht geöffnet werden")
+
+                context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE).edit()
+                    .putString(BACKUP_URI_KEY, it.toString()).apply()
+                android.widget.Toast.makeText(context, "Diese Sicherungsdatei wird künftig aktualisiert.", 0).show()
+            } catch (_: Exception) {
+                android.widget.Toast.makeText(context, "Sicherungsdatei konnte nicht verwendet werden.", 1).show()
             }
         }
     }
@@ -1188,10 +1226,10 @@ fun KuemmeroApp() {
                         } else {
                             android.widget.Toast.makeText(
                                 context,
-                                "Die bisherige Sicherungsdatei wurde nicht gefunden. Bitte eine neue Datei auswählen.",
+                                "Die bisherige Sicherungsdatei wurde nicht gefunden. Bitte eine vorhandene Sicherungsdatei auswählen.",
                                 1
                             ).show()
-                            createBackup.launch("kuemmero-backup.json")
+                            selectBackup.launch(arrayOf("application/json", "text/plain", "application/octet-stream"))
                         }
                     } else {
                         createBackup.launch("kuemmero-backup.json")
@@ -2679,55 +2717,6 @@ fun KuemmeroApp() {
                                         Text(a.kunde, color = KuemmeroText, style = MaterialTheme.typography.titleMedium)
                                         Text(a.leistung, color = KuemmeroText)
                                         Text(a.kundenStrasse + if (a.kundenOrt.isBlank()) "" else ", ${a.kundenOrt}", color = KuemmeroText)
-                                    }
-                                }
-                            }
-                        }
-                        if (naechsteTermine.isNotEmpty()) {
-                            item {
-                                Text(
-                                    "Nächster Termin",
-                                    style = MaterialTheme.typography.titleLarge,
-                                    color = KuemmeroGreen,
-                                    fontWeight = FontWeight.Bold
-                                )
-                            }
-                            item {
-                                val naechsterIndex = auftraege.indexOf(naechsteTermine.first())
-                                val a = naechsteTermine.first()
-                                Card(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .clickable {
-                                            if (naechsterIndex >= 0) {
-                                                hauptseite = "Aufträge"
-                                                auftragFormOffen = false
-                                                auftragDetailIndex = naechsterIndex
-                                            }
-                                        },
-                                    colors = CardDefaults.cardColors(containerColor = KuemmeroSurface),
-                                    shape = RoundedCornerShape(18.dp),
-                                    border = BorderStroke(1.5.dp, KuemmeroGreenLight)
-                                ) {
-                                    Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                                        Text(
-                                            "${a.terminDatum}${if (a.terminUhrzeit.isNotBlank()) " · ${a.terminUhrzeit}" else ""}",
-                                            color = KuemmeroGreen,
-                                            fontWeight = FontWeight.Bold
-                                        )
-                                        Text(a.kunde, color = KuemmeroText, style = MaterialTheme.typography.titleMedium)
-                                        if (a.leistung.isNotBlank()) Text(a.leistung, color = KuemmeroText)
-                                        if (a.kundenStrasse.isNotBlank() || a.kundenOrt.isNotBlank()) {
-                                            Text(
-                                                listOf(a.kundenStrasse, a.kundenOrt).filter { it.isNotBlank() }.joinToString(", "),
-                                                color = KuemmeroText
-                                            )
-                                        }
-                                        Text(
-                                            "Tippen, um den Auftrag zu öffnen →",
-                                            color = KuemmeroGreen,
-                                            fontWeight = FontWeight.SemiBold
-                                        )
                                     }
                                 }
                             }
