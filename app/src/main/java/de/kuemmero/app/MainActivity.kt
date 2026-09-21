@@ -828,6 +828,7 @@ fun KuemmeroApp() {
     var unterschriftBereichOffen by remember { mutableStateOf(false) }
     var sicherungBereichOffen by remember { mutableStateOf(false) }
     var hauptseite by remember { mutableStateOf("Heute") }
+    var auftragsSeite by remember { mutableStateOf("Liste") }
     val listeState = rememberLazyListState()
 
     // Laufende Arbeitszeit
@@ -1407,7 +1408,13 @@ fun KuemmeroApp() {
                     ).forEach { (label, iconText, page) ->
                         NavigationBarItem(
                             selected = hauptseite == page,
-                            onClick = { hauptseite = page },
+                            onClick = {
+                                hauptseite = page
+                                if (page == "Aufträge") {
+                                    auftragsSeite = "Liste"
+                                    bearbeiteIndex = null
+                                }
+                            },
                             icon = { Text(iconText, fontSize = 20.sp) },
                             label = { Text(label) },
                             colors = NavigationBarItemDefaults.colors(
@@ -1440,6 +1447,49 @@ fun KuemmeroApp() {
                 modifier = Modifier.padding(padding).padding(16.dp),
                 verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
+                item {
+                    Row(
+                        modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        listOf("Liste" to "📋 Aufträge", "Neu" to "➕ Neuer Auftrag").forEach { (seite, text) ->
+                            val aktiv = auftragsSeite == seite
+                            Surface(
+                                modifier = Modifier.height(44.dp).clickable {
+                                    if (seite == "Neu") {
+                                        bearbeiteIndex = null
+                                        kunde = ""; strasse = ""; ort = ""; leistung = ""
+                                        stunden = ""; material = ""; fahrt = ""
+                                        status = "Offen"; zahlungsstatus = "Offen"; bezahltAm = ""
+                                        terminDatum = ""; terminUhrzeit = ""; notiz = ""
+                                        fotosVorher = emptyList(); fotosNachher = emptyList(); unterschriftPfad = ""
+                                    }
+                                    auftragsSeite = seite
+                                },
+                                shape = RoundedCornerShape(22.dp),
+                                color = if (aktiv) KuemmeroGreen else KuemmeroMint,
+                                border = BorderStroke(1.5.dp, if (aktiv) KuemmeroGreen else Color(0xFF7A8A82))
+                            ) {
+                                Box(Modifier.padding(horizontal = 16.dp), contentAlignment = Alignment.Center) {
+                                    Text(text, color = if (aktiv) Color.White else KuemmeroGreen, fontWeight = FontWeight.Bold)
+                                }
+                            }
+                        }
+                        if (bearbeiteIndex != null) {
+                            Surface(
+                                modifier = Modifier.height(44.dp),
+                                shape = RoundedCornerShape(22.dp),
+                                color = KuemmeroGreen
+                            ) {
+                                Box(Modifier.padding(horizontal = 16.dp), contentAlignment = Alignment.Center) {
+                                    Text("✏️ Auftrag bearbeiten", color = Color.White, fontWeight = FontWeight.Bold)
+                                }
+                            }
+                        }
+                    }
+                }
+
+                if (auftragsSeite == "Liste") {
                 item {
                     Card(
                         modifier = Modifier.fillMaxWidth(),
@@ -1478,7 +1528,9 @@ fun KuemmeroApp() {
                         }
                     }
                 }
+                }
 
+                if (auftragsSeite != "Liste") {
                 item {
                     Card(
                         modifier = Modifier.fillMaxWidth(),
@@ -1826,6 +1878,7 @@ fun KuemmeroApp() {
                         OutlinedButton(onClick = { val ok = sichereBackupAutomatisch(context); android.widget.Toast.makeText(context, if (ok) "Sicherung aktualisiert." else "Bitte zuerst eine Backup-Datei speichern.", 1).show() }, modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp), shape = RoundedCornerShape(26.dp), border = BorderStroke(2.dp, KuemmeroGreen), colors = ButtonDefaults.outlinedButtonColors(contentColor = KuemmeroGreen)) { Text("Sicherung jetzt aktualisieren", fontWeight = FontWeight.SemiBold) }
                     }
                 }
+                } // Ende Neu/Bearbeiten
 
                 item { HorizontalDivider() }
                 item {
@@ -2180,6 +2233,7 @@ fun KuemmeroApp() {
                                     fotosVorher = a.fotosVorher
                                     fotosNachher = a.fotosNachher
                                     unterschriftPfad = a.unterschriftPfad
+                                    auftragsSeite = "Bearbeiten"
                                 },
                                 modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp),
                                 shape = RoundedCornerShape(26.dp),
