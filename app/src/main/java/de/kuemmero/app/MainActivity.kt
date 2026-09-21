@@ -19,6 +19,7 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
@@ -295,6 +296,9 @@ fun KuemmeroApp() {
         mutableStateOf(datumFormat.format(cal.time))
     }
     var loeschIndex by remember { mutableStateOf<Int?>(null) }
+    var bearbeiteIndex by remember { mutableStateOf<Int?>(null) }
+    val listeState = rememberLazyListState()
+    val coroutineScope = rememberCoroutineScope()
 
     // Speichert den Auftrag, dessen PDF für einen gespeicherten Auftrag erstellt werden soll.
     var auftragFuerPdf by remember { mutableStateOf<Auftrag?>(null) }
@@ -390,6 +394,7 @@ fun KuemmeroApp() {
             containerColor = Color(0xFFF1F8F3)
         ) { padding ->
             LazyColumn(
+                state = listeState,
                 modifier = Modifier.padding(padding).padding(16.dp),
                 verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
@@ -445,13 +450,35 @@ fun KuemmeroApp() {
                         } else {
                             val a = Auftrag(kunde.trim(), strasse.trim(), ort.trim(), leistung.trim(),
                                 arbeitsstunden, materialKosten, fahrtKosten, rate)
-                            auftraege = auftraege + a
-                            speichereAuftraege(context, auftraege)
-                            android.widget.Toast.makeText(context, "Auftrag gespeichert.", 0).show()
+                            val index = bearbeiteIndex
+                            if (index != null) {
+                                auftraege = auftraege.toMutableList().apply { set(index, a) }
+                                speichereAuftraege(context, auftraege)
+                                bearbeiteIndex = null
+                                android.widget.Toast.makeText(context, "Auftrag geändert.", 0).show()
+                            } else {
+                                auftraege = auftraege + a
+                                speichereAuftraege(context, auftraege)
+                                android.widget.Toast.makeText(context, "Auftrag gespeichert.", 0).show()
+                            }
                             kunde = ""; strasse = ""; ort = ""; leistung = ""
                             stunden = ""; material = ""; fahrt = ""
                         }
-                    }, modifier = Modifier.fillMaxWidth()) { Text("Auftrag speichern") }
+                    }, modifier = Modifier.fillMaxWidth()) {
+                        Text(if (bearbeiteIndex != null) "Änderungen speichern" else "Auftrag speichern")
+                    }
+                }
+
+                if (bearbeiteIndex != null) {
+                    item {
+                        OutlinedButton(onClick = {
+                            bearbeiteIndex = null
+                            kunde = ""; strasse = ""; ort = ""; leistung = ""
+                            stunden = ""; material = ""; fahrt = ""
+                        }, modifier = Modifier.fillMaxWidth()) {
+                            Text("Bearbeiten abbrechen")
+                        }
+                    }
                 }
 
                 item {
@@ -499,7 +526,21 @@ fun KuemmeroApp() {
                             Text(a.leistung)
                             Text(euro(a.stunden * a.stundensatz + a.material + a.fahrt))
 
-                            // Gespeicherten Auftrag direkt an den Android-Druckdialog senden.
+                            Button(onClick = {
+                                bearbeiteIndex = index
+                                kunde = a.kunde
+                                strasse = a.kundenStrasse
+                                ort = a.kundenOrt
+                                leistung = a.leistung
+                                stunden = a.stunden.toString().replace(".", ",")
+                                material = a.material.toString().replace(".", ",")
+                                fahrt = a.fahrt.toString().replace(".", ",")
+                                stundensatz = a.stundensatz.toString().replace(".", ",")
+                                coroutineScope.launch { listeState.animateScrollToItem(0) }
+                            }, modifier = Modifier.fillMaxWidth()) {
+                                Text("Auftrag bearbeiten")
+                            }
+
                             Button(onClick = {
                                 druckePdf(
                                     context,
