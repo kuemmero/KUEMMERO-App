@@ -85,7 +85,10 @@ data class Auftrag(
     val unterschriftPfad: String = "",
     val rechnungsnummer: String = "",
     val rechnungsdatum: String = "",
-    val faelligAm: String = ""
+    val faelligAm: String = "",
+    val arbeitsStart: Long = 0L,
+    val arbeitsEnde: Long = 0L,
+    val arbeitsSekunden: Long = 0L
 )
 
 private const val PREFS_NAME = "kuemmero_speicher"
@@ -130,7 +133,10 @@ private fun ladeAuftraege(context: Context): List<Auftrag> {
             o.optString("unterschriftPfad", ""),
             o.optString("rechnungsnummer", ""),
             o.optString("rechnungsdatum", ""),
-            o.optString("faelligAm", "")
+            o.optString("faelligAm", ""),
+            o.optLong("arbeitsStart", 0L),
+            o.optLong("arbeitsEnde", 0L),
+            o.optLong("arbeitsSekunden", 0L)
         )
     }
 }
@@ -202,6 +208,9 @@ private fun speichereAuftraege(context: Context, liste: List<Auftrag>) {
             put("rechnungsnummer", a.rechnungsnummer)
             put("rechnungsdatum", a.rechnungsdatum)
             put("faelligAm", a.faelligAm)
+            put("arbeitsStart", a.arbeitsStart)
+            put("arbeitsEnde", a.arbeitsEnde)
+            put("arbeitsSekunden", a.arbeitsSekunden)
         })
     }
     context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
@@ -494,6 +503,13 @@ private fun druckePdf(
             .setMinMargins(PrintAttributes.Margins.NO_MARGINS)
             .build()
     )
+}
+
+private fun zeitText(sekunden: Long): String {
+    val h = sekunden / 3600
+    val m = (sekunden % 3600) / 60
+    val s = sekunden % 60
+    return "%02d:%02d:%02d".format(Locale.GERMANY, h, m, s)
 }
 
 private val KuemmeroGreen = Color(0xFF087F3E)
@@ -1403,7 +1419,13 @@ fun KuemmeroApp() {
                                     nummer.trim(), datum.trim(), gueltigBis.trim(),
                                     kunde.trim(), strasse.trim(), ort.trim(), leistung.trim(),
                                     arbeitsstunden, materialKosten, fahrtKosten, rate, status, zahlungsstatus, bezahltAm,
-                                    terminDatum.trim(), terminUhrzeit.trim(), notiz.trim(), fotosVorher, fotosNachher, unterschriftPfad
+                                    terminDatum.trim(), terminUhrzeit.trim(), notiz.trim(), fotosVorher, fotosNachher, unterschriftPfad,
+                                    bearbeiteIndex?.let { auftraege.getOrNull(it)?.rechnungsnummer } ?: "",
+                                    bearbeiteIndex?.let { auftraege.getOrNull(it)?.rechnungsdatum } ?: "",
+                                    bearbeiteIndex?.let { auftraege.getOrNull(it)?.faelligAm } ?: "",
+                                    bearbeiteIndex?.let { auftraege.getOrNull(it)?.arbeitsStart } ?: 0L,
+                                    bearbeiteIndex?.let { auftraege.getOrNull(it)?.arbeitsEnde } ?: 0L,
+                                    bearbeiteIndex?.let { auftraege.getOrNull(it)?.arbeitsSekunden } ?: 0L
                                 )
                                 val index = bearbeiteIndex
                                 if (index != null) {
@@ -1763,6 +1785,58 @@ fun KuemmeroApp() {
                                     if (a.zahlungsstatus == "Bezahlt") "Zahlung zurücksetzen" else "Als bezahlt markieren",
                                     fontWeight = FontWeight.Bold
                                 )
+                            }
+
+                            val laufend = timerIndex == index && a.arbeitsStart > 0L
+                            val gespeicherteZeit = a.arbeitsSekunden + if (laufend) timerSekunden else 0L
+
+                            Text(
+                                "Arbeitszeit: ${zeitText(gespeicherteZeit)}",
+                                color = KuemmeroText,
+                                fontWeight = FontWeight.Bold
+                            )
+
+                            if (laufend) {
+                                Button(
+                                    onClick = {
+                                        val jetzt = System.currentTimeMillis()
+                                        val dauer = ((jetzt - a.arbeitsStart) / 1000L).coerceAtLeast(0L)
+                                        val aktualisiert = a.copy(
+                                            arbeitsEnde = jetzt,
+                                            arbeitsSekunden = a.arbeitsSekunden + dauer,
+                                            arbeitsStart = 0L
+                                        )
+                                        auftraege = auftraege.toMutableList().apply { set(index, aktualisiert) }
+                                        speichereAuftraege(context, auftraege)
+                                        timerIndex = null
+                                        timerSekunden = 0L
+                                    },
+                                    modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp),
+                                    shape = RoundedCornerShape(26.dp),
+                                    colors = ButtonDefaults.buttonColors(containerColor = KuemmeroError)
+                                ) {
+                                    Text("⏹ Arbeit beenden", fontWeight = FontWeight.Bold)
+                                }
+                            } else {
+                                OutlinedButton(
+                                    onClick = {
+                                        val jetzt = System.currentTimeMillis()
+                                        val aktualisiert = a.copy(
+                                            arbeitsStart = jetzt,
+                                            arbeitsEnde = 0L
+                                        )
+                                        auftraege = auftraege.toMutableList().apply { set(index, aktualisiert) }
+                                        speichereAuftraege(context, auftraege)
+                                        timerIndex = index
+                                        timerSekunden = 0L
+                                    },
+                                    modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp),
+                                    shape = RoundedCornerShape(26.dp),
+                                    border = BorderStroke(2.dp, KuemmeroGreen),
+                                    colors = ButtonDefaults.outlinedButtonColors(contentColor = KuemmeroGreen)
+                                ) {
+                                    Text("▶ Arbeit starten", fontWeight = FontWeight.Bold)
+                                }
                             }
 
                             Button(
