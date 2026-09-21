@@ -26,6 +26,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.ui.text.input.KeyboardType
 import org.json.JSONArray
@@ -259,6 +261,27 @@ private fun druckePdf(
     )
 }
 
+private val KuemmeroGreen = Color(0xFF087F3E)
+private val KuemmeroGreenLight = Color(0xFF4CAF50)
+private val KuemmeroMint = Color(0xFFE8F5E9)
+private val KuemmeroBackground = Color(0xFFF1F8F3)
+private val KuemmeroSurface = Color(0xFFFFFFFF)
+private val KuemmeroText = Color(0xFF18352A)
+private val KuemmeroError = Color(0xFFC62828)
+
+private val KuemmeroColors = lightColorScheme(
+    primary = KuemmeroGreen,
+    onPrimary = Color.White,
+    secondary = KuemmeroGreenLight,
+    onSecondary = Color.White,
+    background = KuemmeroBackground,
+    onBackground = KuemmeroText,
+    surface = KuemmeroSurface,
+    onSurface = KuemmeroText,
+    error = KuemmeroError,
+    onError = Color.White
+)
+
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -394,17 +417,58 @@ fun KuemmeroApp() {
         )
     }
 
-    MaterialTheme {
+    MaterialTheme(colorScheme = KuemmeroColors) {
         Scaffold(
-            topBar = { TopAppBar(title = { Text("KÜMMERO") }) },
-            containerColor = Color(0xFFF1F8F3)
+            topBar = {
+                TopAppBar(
+                    title = {
+                        Column {
+                            Text(
+                                "KÜMMERO",
+                                fontWeight = FontWeight.Bold,
+                                color = KuemmeroGreen
+                            )
+                            Text(
+                                "Haus & Alltag – wir kümmern uns.",
+                                style = MaterialTheme.typography.labelMedium,
+                                color = KuemmeroGreenLight
+                            )
+                        }
+                    },
+                    colors = TopAppBarDefaults.topAppBarColors(
+                        containerColor = KuemmeroSurface,
+                        titleContentColor = KuemmeroGreen
+                    )
+                )
+            },
+            containerColor = KuemmeroBackground
         ) { padding ->
             LazyColumn(
                 state = listeState,
                 modifier = Modifier.padding(padding).padding(16.dp),
                 verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
-                item { Text("Haus & Alltag – wir kümmern uns.", style = MaterialTheme.typography.titleMedium) }
+                item {
+                    Card(
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = CardDefaults.cardColors(containerColor = KuemmeroSurface),
+                        shape = RoundedCornerShape(20.dp)
+                    ) {
+                        Column(Modifier.padding(16.dp)) {
+                            Text(
+                                "Haus & Alltag – wir kümmern uns.",
+                                style = MaterialTheme.typography.titleMedium,
+                                color = KuemmeroGreen,
+                                fontWeight = FontWeight.SemiBold
+                            )
+                            Text(
+                                "Hausmeisterservice & Seniorenbetreuung",
+                                color = KuemmeroText
+                            )
+                            Text("Markus Becker · 58675 Hemer", color = KuemmeroText)
+                        }
+                    }
+                }
 
                 item { OutlinedTextField(nummer, { nummer = it }, label = { Text("Angebotsnummer") }, modifier = Modifier.fillMaxWidth()) }
                 item { OutlinedTextField(datum, { datum = it }, label = { Text("Datum") }, modifier = Modifier.fillMaxWidth()) }
@@ -450,7 +514,8 @@ fun KuemmeroApp() {
                 item { Text("Aktueller Gesamtbetrag: ${euro(gesamt)}", style = MaterialTheme.typography.headlineSmall) }
 
                 item {
-                    Button(onClick = {
+                    Button(
+                    onClick = {
                         if (kunde.isBlank()) {
                             android.widget.Toast.makeText(context, "Bitte Kundennamen eingeben.", 0).show()
                         } else {
@@ -470,69 +535,152 @@ fun KuemmeroApp() {
                             kunde = ""; strasse = ""; ort = ""; leistung = ""
                             stunden = ""; material = ""; fahrt = ""
                         }
-                    }, modifier = Modifier.fillMaxWidth()) {
-                        Text(if (bearbeiteIndex != null) "Änderungen speichern" else "Auftrag speichern")
-                    }
+                    },
+                    modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp),
+                    shape = RoundedCornerShape(28.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = KuemmeroGreen)
+                ) {
+                    Text(if (bearbeiteIndex != null) "Änderungen speichern" else "Auftrag speichern", fontWeight = FontWeight.Bold)
+                }
                 }
 
                 if (bearbeiteIndex != null) {
                     item {
-                        OutlinedButton(onClick = {
+                        OutlinedButton(
+                        onClick = {
                             bearbeiteIndex = null
                             kunde = ""; strasse = ""; ort = ""; leistung = ""
                             stunden = ""; material = ""; fahrt = ""
-                        }, modifier = Modifier.fillMaxWidth()) {
-                            Text("Bearbeiten abbrechen")
-                        }
+                        },
+                        modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp),
+                        shape = RoundedCornerShape(26.dp),
+                        colors = ButtonDefaults.outlinedButtonColors(contentColor = KuemmeroGreen)
+                    ) {
+                        Text("Bearbeiten abbrechen", fontWeight = FontWeight.SemiBold)
+                    }
                     }
                 }
 
                 item {
-                    Button(onClick = {
+                    Button(
+                    onClick = {
                         if (kunde.isBlank()) {
                             android.widget.Toast.makeText(context, "Bitte Kundennamen eingeben.", 0).show()
                         } else {
                             pdfLauncher.launch("KÜMMERO-Angebot-$nummer.pdf")
                         }
-                    }, modifier = Modifier.fillMaxWidth()) { Text("PDF-Angebot erstellen") }
+                    },
+                    modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp),
+                    shape = RoundedCornerShape(28.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = KuemmeroGreenLight)
+                ) { Text("PDF-Angebot erstellen", fontWeight = FontWeight.Bold) }
                 }
 
                 item {
-                    OutlinedButton(onClick = { createBackup.launch("kuemmero-backup.json") },
-                        modifier = Modifier.fillMaxWidth()) { Text("Sicherung speichern") }
+                    OutlinedButton(
+                    onClick = { createBackup.launch("kuemmero-backup.json") },
+                    modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp),
+                    shape = RoundedCornerShape(28.dp),
+                    border = ButtonDefaults.outlinedButtonBorder.copy(width = 2.dp),
+                    colors = ButtonDefaults.outlinedButtonColors(contentColor = KuemmeroGreen)
+                ) { Text("Sicherung speichern", fontWeight = FontWeight.SemiBold) }
                 }
                 item {
-                    Button(onClick = {
+                    Button(
+                    onClick = {
                         restoreBackup.launch(arrayOf("application/json", "text/plain", "application/octet-stream"))
-                    }, modifier = Modifier.fillMaxWidth()) { Text("Daten wiederherstellen") }
+                    },
+                    modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp),
+                    shape = RoundedCornerShape(28.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = KuemmeroGreenLight)
+                ) { Text("Daten wiederherstellen", fontWeight = FontWeight.Bold) }
                 }
                 item {
-                    OutlinedButton(onClick = {
+                    OutlinedButton(
+                    onClick = {
                         val ok = sichereBackupAutomatisch(context)
                         android.widget.Toast.makeText(
                             context,
                             if (ok) "Sicherung aktualisiert." else "Bitte zuerst eine Backup-Datei speichern.",
                             1
                         ).show()
-                    }, modifier = Modifier.fillMaxWidth()) { Text("Sicherung jetzt aktualisieren") }
+                    },
+                    modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp),
+                    shape = RoundedCornerShape(28.dp),
+                    border = ButtonDefaults.outlinedButtonBorder.copy(width = 2.dp),
+                    colors = ButtonDefaults.outlinedButtonColors(contentColor = KuemmeroGreen)
+                ) { Text("Sicherung jetzt aktualisieren", fontWeight = FontWeight.SemiBold) }
                 }
 
                 item { HorizontalDivider() }
-                item { Text("Übersicht", style = MaterialTheme.typography.titleLarge) }
-                item { Text("Gespeicherte Aufträge: ${auftraege.size}") }
-                item { Text("Gesamtumsatz gespeicherter Aufträge: ${euro(umsatz)}") }
+                item {
+                    Text(
+                        "Übersicht",
+                        style = MaterialTheme.typography.headlineSmall,
+                        color = KuemmeroGreen,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+                item {
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                        Card(
+                            modifier = Modifier.weight(1f),
+                            colors = CardDefaults.cardColors(containerColor = KuemmeroSurface),
+                            shape = RoundedCornerShape(18.dp)
+                        ) {
+                            Column(Modifier.padding(16.dp)) {
+                                Text("Gespeicherte", color = KuemmeroText)
+                                Text("Aufträge", color = KuemmeroText)
+                                Text(
+                                    "${auftraege.size}",
+                                    style = MaterialTheme.typography.headlineMedium,
+                                    color = KuemmeroGreen,
+                                    fontWeight = FontWeight.Bold
+                                )
+                            }
+                        }
+                        Card(
+                            modifier = Modifier.weight(1f),
+                            colors = CardDefaults.cardColors(containerColor = KuemmeroSurface),
+                            shape = RoundedCornerShape(18.dp)
+                        ) {
+                            Column(Modifier.padding(16.dp)) {
+                                Text("Gesamtumsatz", color = KuemmeroText)
+                                Text("gespeicherter Aufträge", color = KuemmeroText)
+                                Text(
+                                    euro(umsatz),
+                                    style = MaterialTheme.typography.headlineSmall,
+                                    color = KuemmeroGreen,
+                                    fontWeight = FontWeight.Bold
+                                )
+                            }
+                        }
+                    }
+                }
 
-                item { Text("Gespeicherte Aufträge", style = MaterialTheme.typography.titleLarge) }
+                item {
+                    Text(
+                        "Gespeicherte Aufträge",
+                        style = MaterialTheme.typography.headlineSmall,
+                        color = KuemmeroGreen,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
                 itemsIndexed(auftraege) { index, a ->
-                    Card(modifier = Modifier.fillMaxWidth()) {
-                        Column(Modifier.padding(12.dp)) {
-                            Text(a.kunde, style = MaterialTheme.typography.titleMedium)
+                    Card(
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = CardDefaults.cardColors(containerColor = KuemmeroSurface),
+                        shape = RoundedCornerShape(22.dp)
+                    ) {
+                        Column(Modifier.padding(16.dp)) {
+                            Text(a.kunde, style = MaterialTheme.typography.titleLarge, color = KuemmeroText, fontWeight = FontWeight.Bold)
                             if (a.kundenStrasse.isNotBlank() || a.kundenOrt.isNotBlank())
                                 Text(listOf(a.kundenStrasse, a.kundenOrt).filter { it.isNotBlank() }.joinToString(", "))
                             Text(a.leistung)
                             Text(euro(a.stunden * a.stundensatz + a.material + a.fahrt))
 
-                            Button(onClick = {
+                            Button(
+                            onClick = {
                                 bearbeiteIndex = index
                                 kunde = a.kunde
                                 strasse = a.kundenStrasse
@@ -542,11 +690,16 @@ fun KuemmeroApp() {
                                 material = a.material.toString().replace(".", ",")
                                 fahrt = a.fahrt.toString().replace(".", ",")
                                 stundensatz = a.stundensatz.toString().replace(".", ",")
-                            }, modifier = Modifier.fillMaxWidth()) {
-                                Text("Auftrag bearbeiten")
-                            }
+                            },
+                            modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp),
+                            shape = RoundedCornerShape(26.dp),
+                            colors = ButtonDefaults.buttonColors(containerColor = KuemmeroGreen)
+                        ) {
+                            Text("Auftrag bearbeiten", fontWeight = FontWeight.Bold)
+                        }
 
-                            Button(onClick = {
+                            Button(
+                            onClick = {
                                 druckePdf(
                                     context,
                                     "KÜMMERO-Angebot-${a.kunde}.pdf",
@@ -555,13 +708,23 @@ fun KuemmeroApp() {
                                     gueltigBis,
                                     a
                                 )
-                            }, modifier = Modifier.fillMaxWidth()) {
-                                Text("PDF drucken")
-                            }
+                            },
+                            modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp),
+                            shape = RoundedCornerShape(26.dp),
+                            colors = ButtonDefaults.buttonColors(containerColor = KuemmeroGreenLight)
+                        ) {
+                            Text("PDF drucken", fontWeight = FontWeight.Bold)
+                        }
 
-                            OutlinedButton(onClick = { loeschIndex = index }, modifier = Modifier.fillMaxWidth()) {
-                                Text("Auftrag löschen")
-                            }
+                            OutlinedButton(
+                            onClick = { loeschIndex = index },
+                            modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp),
+                            shape = RoundedCornerShape(26.dp),
+                            border = ButtonDefaults.outlinedButtonBorder.copy(width = 2.dp),
+                            colors = ButtonDefaults.outlinedButtonColors(contentColor = KuemmeroError)
+                        ) {
+                            Text("Auftrag löschen", fontWeight = FontWeight.Bold)
+                        }
                         }
                     }
                 }
