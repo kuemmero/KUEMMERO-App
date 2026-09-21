@@ -1,0 +1,54 @@
+name: Build KÜMMERO APK
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Code herunterladen
+        uses: actions/checkout@v4
+
+      - name: Java 17 einrichten
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Gradle einrichten
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.10'
+
+      - name: Signatur-Schlüssel bereitstellen
+        env:
+          KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
+        run: |
+          if [ -z "$KEYSTORE_BASE64" ]; then
+            echo "KEYSTORE_BASE64 fehlt in den GitHub Secrets."
+            exit 1
+          fi
+          echo "$KEYSTORE_BASE64" | base64 --decode > kuemmero-release.jks
+
+      - name: APK bauen
+        env:
+          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+        run: |
+          gradle :app:assembleDebug \
+            -PkuemmeroStoreFile="$GITHUB_WORKSPACE/kuemmero-release.jks" \
+            -PkuemmeroStorePassword="$KEYSTORE_PASSWORD" \
+            -PkuemmeroKeyAlias="$KEY_ALIAS" \
+            -PkuemmeroKeyPassword="$KEY_PASSWORD"
+
+      - name: APK bereitstellen
+        uses: actions/upload-artifact@v4
+        with:
+          name: KUEMMERO-v1.2-12-feste-signatur
+          path: app/build/outputs/apk/debug/app-debug.apk
