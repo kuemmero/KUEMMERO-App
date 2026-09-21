@@ -827,6 +827,7 @@ fun KuemmeroApp() {
     var fotosBereichOffen by remember { mutableStateOf(false) }
     var unterschriftBereichOffen by remember { mutableStateOf(false) }
     var sicherungBereichOffen by remember { mutableStateOf(false) }
+    var hauptseite by remember { mutableStateOf("Heute") }
     val listeState = rememberLazyListState()
 
     // Laufende Arbeitszeit
@@ -1395,6 +1396,31 @@ fun KuemmeroApp() {
                     )
                 )
             },
+            bottomBar = {
+                NavigationBar(containerColor = KuemmeroSurface) {
+                    listOf(
+                        Triple("Heute", "⌂", "Heute"),
+                        Triple("Aufträge", "▣", "Aufträge"),
+                        Triple("Kunden", "♙", "Kunden"),
+                        Triple("Kalender", "▦", "Kalender"),
+                        Triple("Mehr", "⋯", "Mehr")
+                    ).forEach { (label, iconText, page) ->
+                        NavigationBarItem(
+                            selected = hauptseite == page,
+                            onClick = { hauptseite = page },
+                            icon = { Text(iconText, fontSize = 20.sp) },
+                            label = { Text(label) },
+                            colors = NavigationBarItemDefaults.colors(
+                                selectedIconColor = KuemmeroGreen,
+                                selectedTextColor = KuemmeroGreen,
+                                indicatorColor = KuemmeroMint,
+                                unselectedIconColor = KuemmeroText,
+                                unselectedTextColor = KuemmeroText
+                            )
+                        )
+                    }
+                }
+            },
             containerColor = KuemmeroBackground
         ) { padding ->
             val gefilterteAuftraege = auftraege.mapIndexed { index, auftrag -> index to auftrag }
@@ -1408,7 +1434,8 @@ fun KuemmeroApp() {
                 passtSuche && passtStatus && passtZahlung
             }
 
-        LazyColumn(
+        if (hauptseite == "Aufträge") {
+            LazyColumn(
                 state = listeState,
                 modifier = Modifier.padding(padding).padding(16.dp),
                 verticalArrangement = Arrangement.spacedBy(10.dp)
@@ -2266,6 +2293,115 @@ fun KuemmeroApp() {
                                 colors = ButtonDefaults.outlinedButtonColors(contentColor = KuemmeroError)
                             ) {
                                 Text("Auftrag löschen", fontWeight = FontWeight.Bold)
+                            }
+                        }
+                    }
+                }
+            }
+        } else {
+            LazyColumn(
+                modifier = Modifier.padding(padding).padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                when (hauptseite) {
+                    "Heute" -> {
+                        item {
+                            Card(
+                                modifier = Modifier.fillMaxWidth(),
+                                colors = CardDefaults.cardColors(containerColor = KuemmeroGreen),
+                                shape = RoundedCornerShape(22.dp)
+                            ) {
+                                Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                                    Text("Heute · $heuteText", color = Color.White, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
+                                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                        Column(Modifier.weight(1f)) { Text("Termine", color = Color.White); Text("${termineHeute.size}", color = Color.White, fontSize = 26.sp, fontWeight = FontWeight.Bold) }
+                                        Column(Modifier.weight(1f)) { Text("Offene Aufträge", color = Color.White); Text("$offeneAuftraege", color = Color.White, fontSize = 26.sp, fontWeight = FontWeight.Bold) }
+                                        Column(Modifier.weight(1f)) { Text("Offen €", color = Color.White); Text(euro(offeneZahlungSumme), color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.Bold) }
+                                    }
+                                }
+                            }
+                        }
+                        item {
+                            Text("Heutige Termine", style = MaterialTheme.typography.titleLarge, color = KuemmeroGreen, fontWeight = FontWeight.Bold)
+                        }
+                        if (termineHeute.isEmpty()) {
+                            item {
+                                Card(Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = KuemmeroSurface), shape = RoundedCornerShape(18.dp)) {
+                                    Text("Heute keine Termine.", Modifier.padding(18.dp), color = KuemmeroText)
+                                }
+                            }
+                        } else {
+                            itemsIndexed(termineHeute) { _, a ->
+                                Card(Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = KuemmeroSurface), shape = RoundedCornerShape(18.dp), border = BorderStroke(1.5.dp, KuemmeroGreenLight)) {
+                                    Column(Modifier.padding(16.dp)) {
+                                        Text(a.terminUhrzeit.ifBlank { "Ohne Uhrzeit" }, color = KuemmeroGreen, fontWeight = FontWeight.Bold)
+                                        Text(a.kunde, color = KuemmeroText, style = MaterialTheme.typography.titleMedium)
+                                        Text(a.leistung, color = KuemmeroText)
+                                        Text(a.kundenStrasse + if (a.kundenOrt.isBlank()) "" else ", ${a.kundenOrt}", color = KuemmeroText)
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    "Kunden" -> {
+                        item { Text("Kunden", style = MaterialTheme.typography.headlineSmall, color = KuemmeroGreen, fontWeight = FontWeight.Bold) }
+                        item {
+                            Button(onClick = { neuerKundeDialog = true }, modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp), shape = RoundedCornerShape(26.dp), colors = ButtonDefaults.buttonColors(containerColor = KuemmeroGreen)) {
+                                Text("+ Neuer Kunde", fontWeight = FontWeight.Bold)
+                            }
+                        }
+                        if (kunden.isEmpty()) {
+                            item { Text("Noch keine Kunden gespeichert.", color = KuemmeroText) }
+                        } else {
+                            itemsIndexed(kunden) { _, k ->
+                                Card(Modifier.fillMaxWidth().clickable { kundenAkteName = k.name }, colors = CardDefaults.cardColors(containerColor = KuemmeroSurface), shape = RoundedCornerShape(18.dp), border = BorderStroke(1.5.dp, KuemmeroGreenLight)) {
+                                    Column(Modifier.padding(16.dp)) {
+                                        Text(k.name, style = MaterialTheme.typography.titleMedium, color = KuemmeroGreen, fontWeight = FontWeight.Bold)
+                                        Text(k.adresse, color = KuemmeroText)
+                                        Text(k.ort, color = KuemmeroText)
+                                        Text("Aufträge: ${auftraege.count { it.kunde == k.name }}", color = KuemmeroText)
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    "Kalender" -> {
+                        item { Text("Kalender", style = MaterialTheme.typography.headlineSmall, color = KuemmeroGreen, fontWeight = FontWeight.Bold) }
+                        val geplante = auftraege.filter { it.terminDatum.isNotBlank() }.sortedWith(compareBy({ it.terminDatum }, { it.terminUhrzeit }))
+                        if (geplante.isEmpty()) {
+                            item { Text("Keine Termine gespeichert.", color = KuemmeroText) }
+                        } else {
+                            itemsIndexed(geplante) { _, a ->
+                                Card(Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = KuemmeroSurface), shape = RoundedCornerShape(18.dp), border = BorderStroke(1.5.dp, KuemmeroGreenLight)) {
+                                    Column(Modifier.padding(16.dp)) {
+                                        Text(a.terminDatum, color = KuemmeroGreen, fontWeight = FontWeight.Bold)
+                                        Text(a.terminUhrzeit.ifBlank { "Ohne Uhrzeit" }, color = KuemmeroText)
+                                        Text(a.kunde, style = MaterialTheme.typography.titleMedium, color = KuemmeroText, fontWeight = FontWeight.Bold)
+                                        Text(a.leistung, color = KuemmeroText)
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    "Mehr" -> {
+                        item { Text("Mehr", style = MaterialTheme.typography.headlineSmall, color = KuemmeroGreen, fontWeight = FontWeight.Bold) }
+                        item {
+                            Card(Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = KuemmeroSurface), shape = RoundedCornerShape(18.dp)) {
+                                Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                                    Text("Sicherung & Daten", style = MaterialTheme.typography.titleMedium, color = KuemmeroGreen, fontWeight = FontWeight.Bold)
+                                    OutlinedButton(onClick = { createBackup.launch("kuemmero-backup.json") }, modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp), shape = RoundedCornerShape(26.dp), border = BorderStroke(2.dp, KuemmeroGreen), colors = ButtonDefaults.outlinedButtonColors(contentColor = KuemmeroGreen)) { Text("Sicherung speichern") }
+                                    Button(onClick = { restoreBackup.launch(arrayOf("application/json", "text/plain", "application/octet-stream")) }, modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp), shape = RoundedCornerShape(26.dp), colors = ButtonDefaults.buttonColors(containerColor = KuemmeroGreenLight)) { Text("Daten wiederherstellen", fontWeight = FontWeight.Bold) }
+                                    OutlinedButton(onClick = { val ok = sichereBackupAutomatisch(context); android.widget.Toast.makeText(context, if (ok) "Sicherung aktualisiert." else "Bitte zuerst eine Backup-Datei speichern.", 1).show() }, modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp), shape = RoundedCornerShape(26.dp), border = BorderStroke(2.dp, KuemmeroGreen), colors = ButtonDefaults.outlinedButtonColors(contentColor = KuemmeroGreen)) { Text("Sicherung jetzt aktualisieren") }
+                                }
+                            }
+                        }
+                        item {
+                            Card(Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = KuemmeroSurface), shape = RoundedCornerShape(18.dp)) {
+                                Column(Modifier.padding(16.dp)) {
+                                    Text("KÜMMERO", style = MaterialTheme.typography.titleLarge, color = KuemmeroGreen, fontWeight = FontWeight.Bold)
+                                    Text("Haus & Alltag – wir kümmern uns.", color = KuemmeroText)
+                                    Text("${auftraege.size} Aufträge · ${kunden.size} Kunden", color = KuemmeroText)
+                                }
                             }
                         }
                     }
