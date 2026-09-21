@@ -4,6 +4,7 @@ import android.content.Context
 import android.graphics.Paint
 import android.graphics.pdf.PdfDocument
 import android.net.Uri
+import android.content.Intent
 import android.os.Bundle
 import android.os.CancellationSignal
 import android.os.ParcelFileDescriptor
@@ -19,6 +20,10 @@ import androidx.activity.ComponentActivity
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.gestures.detectDragGestures
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.horizontalScroll
@@ -70,7 +75,13 @@ data class Auftrag(
     val stundensatz: Double,
     val status: String = "Offen",
     val zahlungsstatus: String = "Offen",
-    val bezahltAm: String = ""
+    val bezahltAm: String = "",
+    val terminDatum: String = "",
+    val terminUhrzeit: String = "",
+    val notiz: String = "",
+    val fotosVorher: List<String> = emptyList(),
+    val fotosNachher: List<String> = emptyList(),
+    val unterschriftPfad: String = ""
 )
 
 private const val PREFS_NAME = "kuemmero_speicher"
@@ -106,7 +117,13 @@ private fun ladeAuftraege(context: Context): List<Auftrag> {
             o.optDouble("stundensatz", 42.0),
             o.optString("status", "Offen").ifBlank { "Offen" },
             o.optString("zahlungsstatus", "Offen").ifBlank { "Offen" },
-            o.optString("bezahltAm", "")
+            o.optString("bezahltAm", ""),
+            o.optString("terminDatum", ""),
+            o.optString("terminUhrzeit", ""),
+            o.optString("notiz", ""),
+            o.optJSONArray("fotosVorher")?.let { arr -> List(arr.length()) { j -> arr.optString(j) } } ?: emptyList(),
+            o.optJSONArray("fotosNachher")?.let { arr -> List(arr.length()) { j -> arr.optString(j) } } ?: emptyList(),
+            o.optString("unterschriftPfad", "")
         )
     }
 }
@@ -169,6 +186,12 @@ private fun speichereAuftraege(context: Context, liste: List<Auftrag>) {
             put("status", a.status)
             put("zahlungsstatus", a.zahlungsstatus)
             put("bezahltAm", a.bezahltAm)
+            put("terminDatum", a.terminDatum)
+            put("terminUhrzeit", a.terminUhrzeit)
+            put("notiz", a.notiz)
+            put("fotosVorher", JSONArray(a.fotosVorher))
+            put("fotosNachher", JSONArray(a.fotosNachher))
+            put("unterschriftPfad", a.unterschriftPfad)
         })
     }
     context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
@@ -463,6 +486,14 @@ fun KuemmeroApp() {
     var status by remember { mutableStateOf("Offen") }
     var zahlungsstatus by remember { mutableStateOf("Offen") }
     var bezahltAm by remember { mutableStateOf("") }
+    var terminDatum by remember { mutableStateOf("") }
+    var terminUhrzeit by remember { mutableStateOf("") }
+    var notiz by remember { mutableStateOf("") }
+    var fotosVorher by remember { mutableStateOf<List<String>>(emptyList()) }
+    var fotosNachher by remember { mutableStateOf<List<String>>(emptyList()) }
+    var unterschriftPfad by remember { mutableStateOf("") }
+    var fotoTyp by remember { mutableStateOf("Vorher") }
+    var unterschriftDialog by remember { mutableStateOf(false) }
     var auftragsSuche by remember { mutableStateOf("") }
     var statusFilter by remember { mutableStateOf("Alle") }
     var zahlungsFilterOffen by remember { mutableStateOf(false) }
@@ -529,6 +560,19 @@ fun KuemmeroApp() {
             }
         }
     }
+
+    val fotoLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.GetMultipleContents()
+    ) { uris ->
+        if (uris.isNotEmpty()) {
+            val neue = uris.map { it.toString() }
+            if (fotoTyp == "Vorher") fotosVorher = (fotosVorher + neue).distinct()
+            else fotosNachher = (fotosNachher + neue).distinct()
+            android.widget.Toast.makeText(context, "${neue.size} Foto(s) hinzugefügt.", 0).show()
+        }
+    }
+
+    val datumJetzt = datumFormat.format(Date())
 
     val pdfLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.CreateDocument("application/pdf")
@@ -720,6 +764,67 @@ fun KuemmeroApp() {
             dismissButton = {
                 TextButton(onClick = { neuerKundeDialog = false }) { Text("Abbrechen") }
             }
+        )
+    }
+
+    if (unterschriftDialog) {
+        AlertDialog(
+            onDismissRequest = { unterschriftDialog = false },
+            title = { Text("Kunden-Unterschrift") },
+            text = {
+                Column {
+                    Text("Bitte hier unterschreiben:", color = KuemmeroText)
+                    Spacer(Modifier.height(8.dp))
+                    var pathPoints by remember { mutableStateOf<List<Offset>>(emptyList()) }
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(180.dp)
+                            .background(Color.White, RoundedCornerShape(12.dp))
+                            .border(1.dp, KuemmeroGreen, RoundedCornerShape(12.dp))
+                            .pointerInput(Unit) {
+                                detectDragGestures(
+                                    onDragStart = { offset -> pathPoints = pathPoints + offset },
+                                    onDrag = { change, _ -> pathPoints = pathPoints + change.position },
+                                    onDragEnd = {}
+                                )
+                            }
+                    ) {
+                        Canvas(Modifier.fillMaxSize()) {
+                            if (pathPoints.size > 1) {
+                                val path = Path().apply {
+                                    moveTo(pathPoints.first().x, pathPoints.first().y)
+                                    pathPoints.drop(1).forEach { lineTo(it.x, it.y) }
+                                }
+                                drawPath(path, KuemmeroGreen, style = Stroke(width = 4f))
+                            }
+                        }
+                    }
+                    TextButton(onClick = { pathPoints = emptyList() }) { Text("Unterschrift löschen") }
+                    Button(
+                        onClick = {
+                            val file = java.io.File(context.filesDir, "unterschrift_${System.currentTimeMillis()}.png")
+                            val bitmap = android.graphics.Bitmap.createBitmap(900, 360, android.graphics.Bitmap.Config.ARGB_8888)
+                            val canvas = android.graphics.Canvas(bitmap)
+                            canvas.drawColor(android.graphics.Color.WHITE)
+                            val paint = android.graphics.Paint().apply { color = android.graphics.Color.rgb(8,127,62); strokeWidth = 7f; style = android.graphics.Paint.Style.STROKE; strokeCap = android.graphics.Paint.Cap.ROUND }
+                            if (pathPoints.size > 1) {
+                                val path = android.graphics.Path()
+                                path.moveTo(pathPoints.first().x * 2f, pathPoints.first().y * 2f)
+                                pathPoints.drop(1).forEach { path.lineTo(it.x * 2f, it.y * 2f) }
+                                canvas.drawPath(path, paint)
+                            }
+                            file.outputStream().use { bitmap.compress(android.graphics.Bitmap.CompressFormat.PNG, 100, it) }
+                            unterschriftPfad = file.absolutePath
+                            unterschriftDialog = false
+                            android.widget.Toast.makeText(context, "Unterschrift gespeichert.", 0).show()
+                        },
+                        modifier = Modifier.fillMaxWidth()
+                    ) { Text("Unterschrift übernehmen") }
+                }
+            },
+            confirmButton = {},
+            dismissButton = { TextButton(onClick = { unterschriftDialog = false }) { Text("Abbrechen") } }
         )
     }
 
@@ -991,6 +1096,63 @@ fun KuemmeroApp() {
                 }
 
                 item {
+                    Text("Termin", fontWeight = FontWeight.Bold, color = KuemmeroText)
+                    Spacer(Modifier.height(8.dp))
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+                        OutlinedTextField(
+                            terminDatum, { terminDatum = it },
+                            label = { Text("Datum") },
+                            placeholder = { Text(datumJetzt) },
+                            colors = feldFarben, modifier = Modifier.weight(1f)
+                        )
+                        OutlinedTextField(
+                            terminUhrzeit, { terminUhrzeit = it },
+                            label = { Text("Uhrzeit") },
+                            placeholder = { Text("09:00") },
+                            colors = feldFarben, modifier = Modifier.weight(1f)
+                        )
+                    }
+                }
+
+                item {
+                    OutlinedTextField(
+                        notiz, { notiz = it },
+                        label = { Text("Notiz zum Auftrag") },
+                        minLines = 3,
+                        colors = feldFarben, modifier = Modifier.fillMaxWidth()
+                    )
+                }
+
+                item {
+                    Text("Auftragsfotos", fontWeight = FontWeight.Bold, color = KuemmeroText)
+                    Spacer(Modifier.height(8.dp))
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+                        OutlinedButton(
+                            onClick = { fotoTyp = "Vorher"; fotoLauncher.launch("image/*") },
+                            modifier = Modifier.weight(1f),
+                            colors = ButtonDefaults.outlinedButtonColors(contentColor = KuemmeroGreen)
+                        ) { Text("📷 Vorher (${fotosVorher.size})") }
+                        OutlinedButton(
+                            onClick = { fotoTyp = "Nachher"; fotoLauncher.launch("image/*") },
+                            modifier = Modifier.weight(1f),
+                            colors = ButtonDefaults.outlinedButtonColors(contentColor = KuemmeroGreen)
+                        ) { Text("📷 Nachher (${fotosNachher.size})") }
+                    }
+                }
+
+                item {
+                    OutlinedButton(
+                        onClick = { unterschriftDialog = true },
+                        modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp),
+                        shape = RoundedCornerShape(26.dp),
+                        border = BorderStroke(2.dp, KuemmeroGreen),
+                        colors = ButtonDefaults.outlinedButtonColors(contentColor = KuemmeroGreen)
+                    ) {
+                        Text(if (unterschriftPfad.isBlank()) "✍ Kunden-Unterschrift aufnehmen" else "✓ Unterschrift vorhanden", fontWeight = FontWeight.Bold)
+                    }
+                }
+
+                item {
                     Text("Aktueller Gesamtbetrag: ${euro(gesamt)}", style = MaterialTheme.typography.headlineSmall)
                 }
 
@@ -1008,7 +1170,8 @@ fun KuemmeroApp() {
                                 val a = Auftrag(
                                     nummer.trim(), datum.trim(), gueltigBis.trim(),
                                     kunde.trim(), strasse.trim(), ort.trim(), leistung.trim(),
-                                    arbeitsstunden, materialKosten, fahrtKosten, rate, status, zahlungsstatus, bezahltAm
+                                    arbeitsstunden, materialKosten, fahrtKosten, rate, status, zahlungsstatus, bezahltAm,
+                                    terminDatum.trim(), terminUhrzeit.trim(), notiz.trim(), fotosVorher, fotosNachher, unterschriftPfad
                                 )
                                 val index = bearbeiteIndex
                                 if (index != null) {
@@ -1031,6 +1194,12 @@ fun KuemmeroApp() {
                                 status = "Offen"
                                 zahlungsstatus = "Offen"
                                 bezahltAm = ""
+                                terminDatum = ""
+                                terminUhrzeit = ""
+                                notiz = ""
+                                fotosVorher = emptyList()
+                                fotosNachher = emptyList()
+                                unterschriftPfad = ""
                             }
                         },
                         modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp),
