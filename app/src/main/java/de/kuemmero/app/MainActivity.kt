@@ -82,7 +82,10 @@ data class Auftrag(
     val notiz: String = "",
     val fotosVorher: List<String> = emptyList(),
     val fotosNachher: List<String> = emptyList(),
-    val unterschriftPfad: String = ""
+    val unterschriftPfad: String = "",
+    val rechnungsnummer: String = "",
+    val rechnungsdatum: String = "",
+    val faelligAm: String = ""
 )
 
 private const val PREFS_NAME = "kuemmero_speicher"
@@ -124,7 +127,10 @@ private fun ladeAuftraege(context: Context): List<Auftrag> {
             o.optString("notiz", ""),
             o.optJSONArray("fotosVorher")?.let { arr -> List(arr.length()) { j -> arr.optString(j) } } ?: emptyList(),
             o.optJSONArray("fotosNachher")?.let { arr -> List(arr.length()) { j -> arr.optString(j) } } ?: emptyList(),
-            o.optString("unterschriftPfad", "")
+            o.optString("unterschriftPfad", ""),
+            o.optString("rechnungsnummer", ""),
+            o.optString("rechnungsdatum", ""),
+            o.optString("faelligAm", "")
         )
     }
 }
@@ -193,6 +199,9 @@ private fun speichereAuftraege(context: Context, liste: List<Auftrag>) {
             put("fotosVorher", JSONArray(a.fotosVorher))
             put("fotosNachher", JSONArray(a.fotosNachher))
             put("unterschriftPfad", a.unterschriftPfad)
+            put("rechnungsnummer", a.rechnungsnummer)
+            put("rechnungsdatum", a.rechnungsdatum)
+            put("faelligAm", a.faelligAm)
         })
     }
     context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
@@ -339,6 +348,7 @@ private fun erstellePdf(
 private fun erstelleRechnungPdf(
     nummer: String,
     rechnungsdatum: String,
+    faelligAm: String,
     kunde: String,
     strasse: String,
     ort: String,
@@ -368,28 +378,29 @@ private fun erstelleRechnungPdf(
     p.textSize = 12f
     c.drawText("Rechnungsnummer: $nummer", 40f, 255f, p)
     c.drawText("Rechnungsdatum: $rechnungsdatum", 40f, 275f, p)
-    c.drawText("Kunde: $kunde", 40f, 305f, p)
-    c.drawText("Adresse: $strasse", 40f, 325f, p)
-    c.drawText("PLZ und Ort: $ort", 40f, 345f, p)
-    c.drawText("Leistung: $leistung", 40f, 375f, p)
+    c.drawText("Fällig am: $faelligAm", 40f, 295f, p)
+    c.drawText("Kunde: $kunde", 40f, 325f, p)
+    c.drawText("Adresse: $strasse", 40f, 345f, p)
+    c.drawText("PLZ und Ort: $ort", 40f, 365f, p)
+    c.drawText("Leistung: $leistung", 40f, 395f, p)
 
-    c.drawLine(40f, 400f, 550f, 400f, p)
-    c.drawText("Arbeitszeit", 40f, 425f, p)
-    c.drawText("%.2f Std.".format(Locale.GERMANY, stunden), 250f, 425f, p)
-    c.drawText(euro(stunden * stundensatz), 450f, 425f, p)
-    c.drawText("Material", 40f, 450f, p)
-    c.drawText(euro(material), 450f, 450f, p)
-    c.drawText("Fahrtkosten", 40f, 475f, p)
-    c.drawText(euro(fahrt), 450f, 475f, p)
-    c.drawLine(40f, 490f, 550f, 490f, p)
+    c.drawLine(40f, 420f, 550f, 420f, p)
+    c.drawText("Arbeitszeit", 40f, 445f, p)
+    c.drawText("%.2f Std.".format(Locale.GERMANY, stunden), 250f, 445f, p)
+    c.drawText(euro(stunden * stundensatz), 450f, 445f, p)
+    c.drawText("Material", 40f, 470f, p)
+    c.drawText(euro(material), 450f, 470f, p)
+    c.drawText("Fahrtkosten", 40f, 495f, p)
+    c.drawText(euro(fahrt), 450f, 495f, p)
+    c.drawLine(40f, 510f, 550f, 510f, p)
 
     val gesamt = stunden * stundensatz + material + fahrt
     p.textSize = 18f
-    c.drawText("Gesamtsumme: ${euro(gesamt)}", 40f, 530f, p)
+    c.drawText("Gesamtsumme: ${euro(gesamt)}", 40f, 550f, p)
     p.textSize = 11f
-    c.drawText("Gemäß § 19 UStG wird keine Umsatzsteuer berechnet.", 40f, 558f, p)
-    c.drawText("Bitte überweisen Sie den Rechnungsbetrag innerhalb von 14 Tagen.", 40f, 590f, p)
-    c.drawText("Kunden-Unterschrift:", 40f, 620f, p)
+    c.drawText("Gemäß § 19 UStG wird keine Umsatzsteuer berechnet.", 40f, 578f, p)
+    c.drawText("Bitte überweisen Sie den Rechnungsbetrag bis zum $faelligAm.", 40f, 600f, p)
+    c.drawText("Kunden-Unterschrift:", 40f, 625f, p)
     val signBitmap = ladeUnterschriftBitmap(unterschriftPfad)
     if (signBitmap != null) {
         val maxW = 225f
@@ -680,9 +691,12 @@ fun KuemmeroApp() {
                 try {
                     val rechnungsnummer = "RE-" + SimpleDateFormat("yyyyMMdd-HHmmss", Locale.GERMANY).format(Date())
                     val rechnungsdatum = datumFormat.format(Date())
+                    val faelligCal = Calendar.getInstance().apply { add(Calendar.DAY_OF_YEAR, 14) }
+                    val faelligAm = datumFormat.format(faelligCal.time)
                     val pdf = erstelleRechnungPdf(
                         rechnungsnummer,
                         rechnungsdatum,
+                        faelligAm,
                         a.kunde,
                         a.kundenStrasse,
                         a.kundenOrt,
@@ -696,7 +710,15 @@ fun KuemmeroApp() {
                     context.contentResolver.openOutputStream(it)?.use { out -> pdf.writeTo(out) }
                     pdf.close()
                     auftraege = auftraege.toMutableList().apply {
-                        set(index, a.copy(status = "Abgerechnet"))
+                        set(
+                            index,
+                            a.copy(
+                                status = "Abgerechnet",
+                                rechnungsnummer = rechnungsnummer,
+                                rechnungsdatum = rechnungsdatum,
+                                faelligAm = faelligAm
+                            )
+                        )
                     }
                     speichereAuftraege(context, auftraege)
                     android.widget.Toast.makeText(context, "Rechnung gespeichert: $rechnungsnummer", 0).show()
@@ -954,6 +976,15 @@ fun KuemmeroApp() {
                     Text("Umsatz: ${euro(kundenAuftraege.sumOf { it.stunden * it.stundensatz + it.material + it.fahrt })}")
                     val offen = kundenAuftraege.filter { it.zahlungsstatus != "Bezahlt" }
                     Text("Offene Zahlungen: ${euro(offen.sumOf { it.stunden * it.stundensatz + it.material + it.fahrt })}", color = if (offen.isEmpty()) KuemmeroGreen else KuemmeroError, fontWeight = FontWeight.Bold)
+                    val rechnungen = kundenAuftraege.filter { it.rechnungsnummer.isNotBlank() }
+                    Text("Rechnungen: ${rechnungen.size}", fontWeight = FontWeight.Bold)
+                    rechnungen.takeLast(5).reversed().forEach { r ->
+                        Text(
+                            "${r.rechnungsnummer} · ${euro(r.stunden * r.stundensatz + r.material + r.fahrt)} · ${if (r.zahlungsstatus == "Bezahlt") "Bezahlt" else "Offen"}",
+                            color = if (r.zahlungsstatus == "Bezahlt") KuemmeroGreen else KuemmeroError,
+                            style = MaterialTheme.typography.bodySmall
+                        )
+                    }
                 }
             },
             confirmButton = { TextButton(onClick = { kundenAkteName = null }) { Text("Schließen") } }
@@ -1700,6 +1731,13 @@ fun KuemmeroApp() {
                                 color = if (a.zahlungsstatus == "Bezahlt") KuemmeroGreen else KuemmeroError,
                                 fontWeight = FontWeight.Bold
                             )
+                            if (a.rechnungsnummer.isNotBlank()) {
+                                Text(
+                                    "Rechnung: ${a.rechnungsnummer} · fällig ${a.faelligAm}",
+                                    color = KuemmeroText,
+                                    style = MaterialTheme.typography.bodySmall
+                                )
+                            }
 
                             OutlinedButton(
                                 onClick = {
