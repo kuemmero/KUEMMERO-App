@@ -35,6 +35,8 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.relocation.BringIntoViewRequester
+import androidx.compose.foundation.relocation.bringIntoViewRequester
 import androidx.compose.material3.*
 import androidx.compose.foundation.Image
 import androidx.compose.ui.graphics.asImageBitmap
@@ -699,9 +701,13 @@ private fun KlappBereich(
     titel: String,
     offen: Boolean,
     onToggle: () -> Unit,
-    content: @Composable ColumnScope.() -> Unit
+    content: @Composable ColumnScope.() -> Unit,
+    modifier: Modifier = Modifier
 ) {
-    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+    Column(
+        modifier = modifier,
+        verticalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
         Surface(
             modifier = Modifier.fillMaxWidth().clickable { onToggle() },
             shape = RoundedCornerShape(14.dp),
@@ -827,9 +833,8 @@ fun KuemmeroApp() {
     var fotosBereichOffen by remember { mutableStateOf(false) }
     var unterschriftBereichOffen by remember { mutableStateOf(false) }
     var sicherungBereichOffen by remember { mutableStateOf(false) }
+    val sicherungBringRequester = remember { BringIntoViewRequester() }
     var hauptseite by remember { mutableStateOf("Heute") }
-    var auftragsSeite by remember { mutableIntStateOf(0) }
-    var auftragFormOffen by remember { mutableStateOf(false) }
     val listeState = rememberLazyListState()
 
     // Laufende Arbeitszeit
@@ -873,6 +878,13 @@ fun KuemmeroApp() {
     LaunchedEffect(bearbeiteIndex) {
         if (bearbeiteIndex != null) {
             listeState.animateScrollToItem(0)
+        }
+    }
+
+    LaunchedEffect(sicherungBereichOffen) {
+        if (sicherungBereichOffen) {
+            kotlinx.coroutines.delay(80L)
+            sicherungBringRequester.bringIntoView()
         }
     }
 
@@ -1442,7 +1454,6 @@ fun KuemmeroApp() {
                 modifier = Modifier.padding(padding).padding(16.dp),
                 verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
-                if (auftragFormOffen || bearbeiteIndex != null) {
                 item {
                     Card(
                         modifier = Modifier.fillMaxWidth(),
@@ -1745,7 +1756,6 @@ fun KuemmeroApp() {
                                     auftraege = auftraege.toMutableList().apply { set(index, a) }
                                     speichereAuftraege(context, auftraege)
                                     bearbeiteIndex = null
-                                    auftragFormOffen = false
                                     android.widget.Toast.makeText(context, "Auftrag geändert.", 0).show()
                                 } else {
                                     auftraege = auftraege + a
@@ -1786,7 +1796,6 @@ fun KuemmeroApp() {
                         OutlinedButton(
                             onClick = {
                                 bearbeiteIndex = null
-                                auftragFormOffen = false
                                 kunde = ""
                                 strasse = ""
                                 ort = ""
@@ -1825,48 +1834,22 @@ fun KuemmeroApp() {
                 }
 
                 item {
-                    KlappBereich("💾 Sicherung", sicherungBereichOffen, { sicherungBereichOffen = !sicherungBereichOffen }) {
+                    KlappBereich(
+                        "💾 Sicherung",
+                        sicherungBereichOffen,
+                        { sicherungBereichOffen = !sicherungBereichOffen },
+                        modifier = Modifier.bringIntoViewRequester(sicherungBringRequester)
+                    ) {
                         OutlinedButton(onClick = { createBackup.launch("kuemmero-backup.json") }, modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp), shape = RoundedCornerShape(28.dp), border = BorderStroke(2.dp, KuemmeroGreen), colors = ButtonDefaults.outlinedButtonColors(contentColor = KuemmeroGreen)) { Text("Sicherung speichern", fontWeight = FontWeight.SemiBold) }
                         Button(onClick = { restoreBackup.launch(arrayOf("application/json", "text/plain", "application/octet-stream")) }, modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp), shape = RoundedCornerShape(28.dp), colors = ButtonDefaults.buttonColors(containerColor = KuemmeroGreenLight)) { Text("Daten wiederherstellen", fontWeight = FontWeight.Bold) }
                         OutlinedButton(onClick = { val ok = sichereBackupAutomatisch(context); android.widget.Toast.makeText(context, if (ok) "Sicherung aktualisiert." else "Bitte zuerst eine Backup-Datei speichern.", 1).show() }, modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp), shape = RoundedCornerShape(26.dp), border = BorderStroke(2.dp, KuemmeroGreen), colors = ButtonDefaults.outlinedButtonColors(contentColor = KuemmeroGreen)) { Text("Sicherung jetzt aktualisieren", fontWeight = FontWeight.SemiBold) }
                     }
                 }
 
-            } else {
-                item {
-                    Button(
-                        onClick = {
-                            bearbeiteIndex = null
-                            auftragFormOffen = true
-                            nummer = ""
-                            datum = datumFormat.format(Date())
-                            gueltigBis = ""
-                            kunde = ""
-                            strasse = ""
-                            ort = ""
-                            leistung = ""
-                            stunden = ""
-                            material = ""
-                            fahrt = ""
-                            status = "Offen"
-                            zahlungsstatus = "Offen"
-                            bezahltAm = ""
-                            terminDatum = ""
-                            terminUhrzeit = ""
-                            notiz = ""
-                            fotosVorher = emptyList()
-                            fotosNachher = emptyList()
-                            unterschriftPfad = ""
-                        },
-                        modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp),
-                        shape = RoundedCornerShape(28.dp),
-                        colors = ButtonDefaults.buttonColors(containerColor = KuemmeroGreen)
-                    ) { Text("+ Neuer Auftrag", fontWeight = FontWeight.Bold) }
-                }
                 item { HorizontalDivider() }
                 item {
                     Text(
-                        "Aufträge",
+                        "Übersicht",
                         style = MaterialTheme.typography.headlineSmall,
                         color = KuemmeroGreen,
                         fontWeight = FontWeight.Bold
@@ -2013,36 +1996,7 @@ fun KuemmeroApp() {
                         style = MaterialTheme.typography.bodyMedium
                     )
                 }
-                if (gefilterteAuftraege.isNotEmpty()) {
-                    val maxSeite = gefilterteAuftraege.size - 1
-                    if (auftragsSeite > maxSeite) auftragsSeite = maxSeite
-                    item {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            OutlinedButton(
-                                onClick = { auftragsSeite = (auftragsSeite - 1).coerceAtLeast(0) },
-                                enabled = auftragsSeite > 0,
-                                shape = RoundedCornerShape(22.dp),
-                                colors = ButtonDefaults.outlinedButtonColors(contentColor = KuemmeroGreen)
-                            ) { Text("‹ Zurück") }
-                            Text(
-                                "Auftrag ${auftragsSeite + 1} von ${gefilterteAuftraege.size}",
-                                color = KuemmeroGreen,
-                                fontWeight = FontWeight.Bold
-                            )
-                            OutlinedButton(
-                                onClick = { auftragsSeite = (auftragsSeite + 1).coerceAtMost(maxSeite) },
-                                enabled = auftragsSeite < maxSeite,
-                                shape = RoundedCornerShape(22.dp),
-                                colors = ButtonDefaults.outlinedButtonColors(contentColor = KuemmeroGreen)
-                            ) { Text("Weiter ›") }
-                        }
-                    }
-                }
-                itemsIndexed(gefilterteAuftraege.drop(auftragsSeite).take(1)) { _, pair ->
+                itemsIndexed(gefilterteAuftraege) { _, pair ->
                     val index = pair.first
                     val a = pair.second
                     Card(
@@ -2225,7 +2179,6 @@ fun KuemmeroApp() {
                             Button(
                                 onClick = {
                                     bearbeiteIndex = index
-                                    auftragFormOffen = true
                                     nummer = a.nummer.ifBlank { nummer }
                                     datum = a.datum.ifBlank { datum }
                                     gueltigBis = a.gueltigBis.ifBlank { gueltigBis }
@@ -2363,7 +2316,6 @@ fun KuemmeroApp() {
                         }
                     }
                 }
-            }
             }
         } else {
             LazyColumn(
