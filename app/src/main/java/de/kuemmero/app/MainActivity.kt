@@ -479,14 +479,6 @@ private fun erstellePdf(
     c.drawLine(40f, 693f, 280f, 693f, p)
     c.drawText("Unterschrift", 40f, 711f, p)
     c.drawLine(330f, 693f, 550f, 693f, p)
-    val signDate = if (signBitmap != null) {
-        unterschriftDatum.ifBlank { SimpleDateFormat("dd.MM.yyyy", Locale.GERMANY).format(Date()) }
-    } else {
-        ""
-    }
-    if (signDate.isNotBlank()) {
-        c.drawText(signDate, 330f, 687f, p)
-    }
     c.drawText("Datum", 330f, 711f, p)
     c.drawText("Vielen Dank für Ihr Vertrauen.", 40f, 763f, p)
     pdf.finishPage(page)
@@ -1173,6 +1165,18 @@ fun KuemmeroApp() {
             try { datumFormat.parse(it.terminDatum)?.time ?: Long.MAX_VALUE } catch (_: Exception) { Long.MAX_VALUE }
         }.thenBy { it.terminUhrzeit })
         .take(8)
+    val heuteStart = try {
+        datumFormat.parse(heuteText)?.time ?: 0L
+    } catch (_: Exception) {
+        0L
+    }
+    val naechsterTermin = naechsteTermine.firstOrNull { a ->
+        try {
+            (datumFormat.parse(a.terminDatum)?.time ?: Long.MAX_VALUE) >= heuteStart
+        } catch (_: Exception) {
+            false
+        }
+    }
 
     if (sicherungBestaetigung) {
         val vorhandeneSicherung = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
@@ -1706,9 +1710,24 @@ fun KuemmeroApp() {
                             }
                             if (termineHeute.isEmpty()) {
                                 Text("Heute keine Termine.", color = Color.White)
+                                naechsterTermin?.let { a ->
+                                    Text(
+                                        "Nächster Termin: ${a.terminDatum}${if (a.terminUhrzeit.isBlank()) "" else " · " + a.terminUhrzeit}",
+                                        color = Color.White,
+                                        fontWeight = FontWeight.SemiBold
+                                    )
+                                    Text("${a.kunde}${if (a.leistung.isBlank()) "" else " – " + a.leistung}", color = Color.White)
+                                }
                             } else {
                                 termineHeute.take(3).forEach { a ->
                                     Text("${if (a.terminUhrzeit.isBlank()) "" else a.terminUhrzeit + " · "}${a.kunde}${if (a.leistung.isBlank()) "" else " – " + a.leistung}", color = Color.White, fontWeight = FontWeight.SemiBold)
+                                }
+                                naechsterTermin?.takeIf { it.terminDatum != heuteText }?.let { a ->
+                                    Text(
+                                        "Nächster Termin: ${a.terminDatum}${if (a.terminUhrzeit.isBlank()) "" else " · " + a.terminUhrzeit}",
+                                        color = Color.White,
+                                        fontWeight = FontWeight.SemiBold
+                                    )
                                 }
                             }
                             OutlinedButton(
@@ -2683,9 +2702,17 @@ fun KuemmeroApp() {
                                 Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                                     Text("Heute · $heuteText", color = Color.White, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
                                     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                        Column(Modifier.weight(1f)) { Text("Termine", color = Color.White); Text("${termineHeute.size}", color = Color.White, fontSize = 26.sp, fontWeight = FontWeight.Bold) }
+                                        Column(Modifier.weight(1f)) { Text("Termine heute", color = Color.White); Text("${termineHeute.size}", color = Color.White, fontSize = 26.sp, fontWeight = FontWeight.Bold) }
                                         Column(Modifier.weight(1f)) { Text("Offene Aufträge", color = Color.White); Text("$offeneAuftraege", color = Color.White, fontSize = 26.sp, fontWeight = FontWeight.Bold) }
                                         Column(Modifier.weight(1f)) { Text("Offen €", color = Color.White); Text(euro(offeneZahlungSumme), color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.Bold) }
+                                    }
+                                    naechsterTermin?.let { a ->
+                                        Text(
+                                            "Nächster Termin: ${a.terminDatum}${if (a.terminUhrzeit.isBlank()) "" else " · " + a.terminUhrzeit}",
+                                            color = Color.White,
+                                            fontWeight = FontWeight.SemiBold
+                                        )
+                                        Text("${a.kunde}${if (a.leistung.isBlank()) "" else " – " + a.leistung}", color = Color.White)
                                     }
                                 }
                             }
