@@ -701,8 +701,8 @@ private fun KlappBereich(
     titel: String,
     offen: Boolean,
     onToggle: () -> Unit,
-    content: @Composable ColumnScope.() -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    content: @Composable ColumnScope.() -> Unit
 ) {
     Column(
         modifier = modifier,
