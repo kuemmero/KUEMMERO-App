@@ -68,7 +68,9 @@ data class Auftrag(
     val material: Double,
     val fahrt: Double,
     val stundensatz: Double,
-    val status: String = "Offen"
+    val status: String = "Offen",
+    val zahlungsstatus: String = "Offen",
+    val bezahltAm: String = ""
 )
 
 private const val PREFS_NAME = "kuemmero_speicher"
@@ -102,7 +104,9 @@ private fun ladeAuftraege(context: Context): List<Auftrag> {
             o.optDouble("material", 0.0),
             o.optDouble("fahrt", 0.0),
             o.optDouble("stundensatz", 42.0),
-            o.optString("status", "Offen").ifBlank { "Offen" }
+            o.optString("status", "Offen").ifBlank { "Offen" },
+            o.optString("zahlungsstatus", "Offen").ifBlank { "Offen" },
+            o.optString("bezahltAm", "")
         )
     }
 }
@@ -163,6 +167,8 @@ private fun speichereAuftraege(context: Context, liste: List<Auftrag>) {
             put("fahrt", a.fahrt)
             put("stundensatz", a.stundensatz)
             put("status", a.status)
+            put("zahlungsstatus", a.zahlungsstatus)
+            put("bezahltAm", a.bezahltAm)
         })
     }
     context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
@@ -455,6 +461,8 @@ fun KuemmeroApp() {
     var loeschIndex by remember { mutableStateOf<Int?>(null) }
     var bearbeiteIndex by remember { mutableStateOf<Int?>(null) }
     var status by remember { mutableStateOf("Offen") }
+    var zahlungsstatus by remember { mutableStateOf("Offen") }
+    var bezahltAm by remember { mutableStateOf("") }
     var auftragsSuche by remember { mutableStateOf("") }
     var statusFilter by remember { mutableStateOf("Alle") }
     val listeState = rememberLazyListState()
@@ -998,7 +1006,7 @@ fun KuemmeroApp() {
                                 val a = Auftrag(
                                     nummer.trim(), datum.trim(), gueltigBis.trim(),
                                     kunde.trim(), strasse.trim(), ort.trim(), leistung.trim(),
-                                    arbeitsstunden, materialKosten, fahrtKosten, rate, status
+                                    arbeitsstunden, materialKosten, fahrtKosten, rate, status, zahlungsstatus, bezahltAm
                                 )
                                 val index = bearbeiteIndex
                                 if (index != null) {
@@ -1019,6 +1027,8 @@ fun KuemmeroApp() {
                                 material = ""
                                 fahrt = ""
                                 status = "Offen"
+                                zahlungsstatus = "Offen"
+                                bezahltAm = ""
                             }
                         },
                         modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp),
@@ -1045,6 +1055,8 @@ fun KuemmeroApp() {
                                 material = ""
                                 fahrt = ""
                                 status = "Offen"
+                                zahlungsstatus = "Offen"
+                                bezahltAm = ""
                             },
                             modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp),
                             shape = RoundedCornerShape(26.dp),
@@ -1254,6 +1266,41 @@ fun KuemmeroApp() {
                                 color = KuemmeroGreen,
                                 fontWeight = FontWeight.Bold
                             )
+                            Text(
+                                if (a.zahlungsstatus == "Bezahlt") {
+                                    "Zahlung: Bezahlt${if (a.bezahltAm.isNotBlank()) " – ${a.bezahltAm}" else ""}"
+                                } else {
+                                    "Zahlung: Offen"
+                                },
+                                color = if (a.zahlungsstatus == "Bezahlt") KuemmeroGreen else KuemmeroError,
+                                fontWeight = FontWeight.Bold
+                            )
+
+                            OutlinedButton(
+                                onClick = {
+                                    val heuteBezahlt = datumFormat.format(Date())
+                                    val bezahlt = a.zahlungsstatus != "Bezahlt"
+                                    auftraege = auftraege.toMutableList().apply {
+                                        set(
+                                            index,
+                                            if (bezahlt) a.copy(zahlungsstatus = "Bezahlt", bezahltAm = heuteBezahlt)
+                                            else a.copy(zahlungsstatus = "Offen", bezahltAm = "")
+                                        )
+                                    }
+                                    speichereAuftraege(context, auftraege)
+                                },
+                                modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp),
+                                shape = RoundedCornerShape(26.dp),
+                                border = BorderStroke(2.dp, if (a.zahlungsstatus == "Bezahlt") KuemmeroGreen else KuemmeroGreenLight),
+                                colors = ButtonDefaults.outlinedButtonColors(
+                                    contentColor = if (a.zahlungsstatus == "Bezahlt") KuemmeroGreen else KuemmeroGreenLight
+                                )
+                            ) {
+                                Text(
+                                    if (a.zahlungsstatus == "Bezahlt") "Zahlung zurücksetzen" else "Als bezahlt markieren",
+                                    fontWeight = FontWeight.Bold
+                                )
+                            }
 
                             Button(
                                 onClick = {
@@ -1270,6 +1317,8 @@ fun KuemmeroApp() {
                                     fahrt = a.fahrt.toString().replace(".", ",")
                                     stundensatz = a.stundensatz.toString().replace(".", ",")
                                     status = a.status
+                                    zahlungsstatus = a.zahlungsstatus
+                                    bezahltAm = a.bezahltAm
                                 },
                                 modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp),
                                 shape = RoundedCornerShape(26.dp),
