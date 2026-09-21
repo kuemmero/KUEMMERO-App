@@ -89,7 +89,8 @@ data class Auftrag(
     val faelligAm: String = "",
     val arbeitsStart: Long = 0L,
     val arbeitsEnde: Long = 0L,
-    val arbeitsSekunden: Long = 0L
+    val arbeitsSekunden: Long = 0L,
+    val arbeitszeitUebernommen: Boolean = false
 )
 
 private const val PREFS_NAME = "kuemmero_speicher"
@@ -137,7 +138,8 @@ private fun ladeAuftraege(context: Context): List<Auftrag> {
             o.optString("faelligAm", ""),
             o.optLong("arbeitsStart", 0L),
             o.optLong("arbeitsEnde", 0L),
-            o.optLong("arbeitsSekunden", 0L)
+            o.optLong("arbeitsSekunden", 0L),
+            o.optBoolean("arbeitszeitUebernommen", false)
         )
     }
 }
@@ -212,6 +214,7 @@ private fun speichereAuftraege(context: Context, liste: List<Auftrag>) {
             put("arbeitsStart", a.arbeitsStart)
             put("arbeitsEnde", a.arbeitsEnde)
             put("arbeitsSekunden", a.arbeitsSekunden)
+            put("arbeitszeitUebernommen", a.arbeitszeitUebernommen)
         })
     }
     context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
@@ -1851,7 +1854,8 @@ fun KuemmeroApp() {
                                         val jetzt = System.currentTimeMillis()
                                         val aktualisiert = a.copy(
                                             arbeitsStart = jetzt,
-                                            arbeitsEnde = 0L
+                                            arbeitsEnde = 0L,
+                                            arbeitszeitUebernommen = false
                                         )
                                         auftraege = auftraege.toMutableList().apply { set(index, aktualisiert) }
                                         speichereAuftraege(context, auftraege)
@@ -1868,23 +1872,45 @@ fun KuemmeroApp() {
                             }
 
                             if (gespeicherteZeit > 0L) {
-                                OutlinedButton(
-                                    onClick = {
-                                        val neueStunden = gespeicherteZeit / 3600.0
-                                        val aktualisiert = a.copy(stunden = neueStunden)
-                                        auftraege = auftraege.toMutableList().apply { set(index, aktualisiert) }
-                                        speichereAuftraege(context, auftraege)
-                                        stunden = String.format(Locale.GERMANY, "%.2f", neueStunden)
-                                    },
-                                    modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp),
-                                    shape = RoundedCornerShape(26.dp),
-                                    border = BorderStroke(2.dp, KuemmeroGreen),
-                                    colors = ButtonDefaults.outlinedButtonColors(contentColor = KuemmeroGreen)
-                                ) {
-                                    Text(
-                                        "⏱ Arbeitszeit übernehmen (${String.format(Locale.GERMANY, "%.2f", gespeicherteZeit / 3600.0)} Std.)",
-                                        fontWeight = FontWeight.Bold
-                                    )
+                                if (a.arbeitszeitUebernommen) {
+                                    OutlinedButton(
+                                        onClick = { },
+                                        enabled = false,
+                                        modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp),
+                                        shape = RoundedCornerShape(26.dp),
+                                        border = BorderStroke(2.dp, KuemmeroGreenLight),
+                                        colors = ButtonDefaults.outlinedButtonColors(
+                                            contentColor = KuemmeroGreenLight,
+                                            disabledContentColor = KuemmeroGreenLight
+                                        )
+                                    ) {
+                                        Text(
+                                            "✓ Arbeitszeit übernommen (${String.format(Locale.GERMANY, "%.2f", gespeicherteZeit / 3600.0)} Std.)",
+                                            fontWeight = FontWeight.Bold
+                                        )
+                                    }
+                                } else {
+                                    OutlinedButton(
+                                        onClick = {
+                                            val neueStunden = gespeicherteZeit / 3600.0
+                                            val aktualisiert = a.copy(
+                                                stunden = neueStunden,
+                                                arbeitszeitUebernommen = true
+                                            )
+                                            auftraege = auftraege.toMutableList().apply { set(index, aktualisiert) }
+                                            speichereAuftraege(context, auftraege)
+                                            stunden = String.format(Locale.GERMANY, "%.2f", neueStunden)
+                                        },
+                                        modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp),
+                                        shape = RoundedCornerShape(26.dp),
+                                        border = BorderStroke(2.dp, KuemmeroGreen),
+                                        colors = ButtonDefaults.outlinedButtonColors(contentColor = KuemmeroGreen)
+                                    ) {
+                                        Text(
+                                            "⏱ Arbeitszeit übernehmen (${String.format(Locale.GERMANY, "%.2f", gespeicherteZeit / 3600.0)} Std.)",
+                                            fontWeight = FontWeight.Bold
+                                        )
+                                    }
                                 }
                             }
 
