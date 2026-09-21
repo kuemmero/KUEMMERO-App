@@ -1158,6 +1158,7 @@ fun KuemmeroApp() {
     val termineHeute = auftraege.filter { it.terminDatum == heuteText }
         .sortedBy { it.terminUhrzeit }
     val offeneAuftraege = auftraege.count { it.status != "Abgerechnet" }
+    val abgearbeiteteAuftraege = auftraege.count { it.status == "Erledigt" || it.status == "Abgerechnet" }
     val offeneZahlungen = auftraege.filter { it.zahlungsstatus != "Bezahlt" }
     val offeneZahlungSumme = offeneZahlungen.sumOf { gesamtbetrag(it.stunden, it.material, it.fahrt, it.stundensatz) }
     val naechsteTermine = auftraege.filter { it.terminDatum.isNotBlank() }
@@ -1696,12 +1697,18 @@ fun KuemmeroApp() {
                             Text("Heute · $heuteText", color = Color.White, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
                             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                                 Column(Modifier.weight(1f)) {
-                                    Text("Termine", color = Color.White)
+                                    Text("Termine heute", color = Color.White)
                                     Text("${termineHeute.size}", color = Color.White, fontSize = 25.sp, fontWeight = FontWeight.Bold)
                                 }
                                 Column(Modifier.weight(1f)) {
                                     Text("Offene Aufträge", color = Color.White)
                                     Text("$offeneAuftraege", color = Color.White, fontSize = 25.sp, fontWeight = FontWeight.Bold)
+                                }
+                            }
+                            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                Column(Modifier.weight(1f)) {
+                                    Text("Abgearbeitet", color = Color.White)
+                                    Text("$abgearbeiteteAuftraege", color = Color.White, fontSize = 25.sp, fontWeight = FontWeight.Bold)
                                 }
                                 Column(Modifier.weight(1f)) {
                                     Text("Offen €", color = Color.White)
