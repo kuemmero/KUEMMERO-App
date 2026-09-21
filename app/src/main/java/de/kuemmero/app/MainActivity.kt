@@ -61,7 +61,8 @@ data class Auftrag(
     val stunden: Double,
     val material: Double,
     val fahrt: Double,
-    val stundensatz: Double
+    val stundensatz: Double,
+    val status: String = "Offen"
 )
 
 private const val PREFS_NAME = "kuemmero_speicher"
@@ -94,7 +95,8 @@ private fun ladeAuftraege(context: Context): List<Auftrag> {
             o.optDouble("stunden", 0.0),
             o.optDouble("material", 0.0),
             o.optDouble("fahrt", 0.0),
-            o.optDouble("stundensatz", 42.0)
+            o.optDouble("stundensatz", 42.0),
+            o.optString("status", "Offen").ifBlank { "Offen" }
         )
     }
 }
@@ -154,6 +156,7 @@ private fun speichereAuftraege(context: Context, liste: List<Auftrag>) {
             put("material", a.material)
             put("fahrt", a.fahrt)
             put("stundensatz", a.stundensatz)
+            put("status", a.status)
         })
     }
     context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
@@ -387,6 +390,7 @@ fun KuemmeroApp() {
     }
     var loeschIndex by remember { mutableStateOf<Int?>(null) }
     var bearbeiteIndex by remember { mutableStateOf<Int?>(null) }
+    var status by remember { mutableStateOf("Offen") }
     val listeState = rememberLazyListState()
 
     val feldFarben = OutlinedTextFieldDefaults.colors(
@@ -826,6 +830,27 @@ fun KuemmeroApp() {
                 }
 
                 item {
+                    Text("Auftragsstatus", fontWeight = FontWeight.Bold, color = KuemmeroText)
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        listOf("Offen", "In Bearbeitung", "Erledigt", "Abgerechnet").forEach { option ->
+                            FilterChip(
+                                selected = status == option,
+                                onClick = { status = option },
+                                label = { Text(option) },
+                                colors = FilterChipDefaults.filterChipColors(
+                                    selectedContainerColor = KuemmeroGreen,
+                                    selectedLabelColor = Color.White,
+                                    containerColor = KuemmeroMint
+                                )
+                            )
+                        }
+                    }
+                }
+
+                item {
                     Text("Aktueller Gesamtbetrag: ${euro(gesamt)}", style = MaterialTheme.typography.headlineSmall)
                 }
 
@@ -843,7 +868,7 @@ fun KuemmeroApp() {
                                 val a = Auftrag(
                                     nummer.trim(), datum.trim(), gueltigBis.trim(),
                                     kunde.trim(), strasse.trim(), ort.trim(), leistung.trim(),
-                                    arbeitsstunden, materialKosten, fahrtKosten, rate
+                                    arbeitsstunden, materialKosten, fahrtKosten, rate, status
                                 )
                                 val index = bearbeiteIndex
                                 if (index != null) {
@@ -863,6 +888,7 @@ fun KuemmeroApp() {
                                 stunden = ""
                                 material = ""
                                 fahrt = ""
+                                status = "Offen"
                             }
                         },
                         modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp),
@@ -888,6 +914,7 @@ fun KuemmeroApp() {
                                 stunden = ""
                                 material = ""
                                 fahrt = ""
+                                status = "Offen"
                             },
                             modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp),
                             shape = RoundedCornerShape(26.dp),
@@ -1032,6 +1059,7 @@ fun KuemmeroApp() {
                             if (a.datum.isNotBlank()) {
                                 Text("Datum: ${a.datum}", color = KuemmeroText)
                             }
+                            Text("Status: ${a.status}", color = KuemmeroGreen, fontWeight = FontWeight.SemiBold)
                             if (a.kundenStrasse.isNotBlank() || a.kundenOrt.isNotBlank()) {
                                 Text(
                                     listOf(a.kundenStrasse, a.kundenOrt)
@@ -1063,6 +1091,7 @@ fun KuemmeroApp() {
                                     material = a.material.toString().replace(".", ",")
                                     fahrt = a.fahrt.toString().replace(".", ",")
                                     stundensatz = a.stundensatz.toString().replace(".", ",")
+                                    status = a.status
                                 },
                                 modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp),
                                 shape = RoundedCornerShape(26.dp),
@@ -1087,6 +1116,27 @@ fun KuemmeroApp() {
                                 colors = ButtonDefaults.buttonColors(containerColor = KuemmeroGreenLight)
                             ) {
                                 Text("PDF drucken", fontWeight = FontWeight.Bold)
+                            }
+
+                            OutlinedButton(
+                                onClick = {
+                                    val nextStatus = when (a.status) {
+                                        "Offen" -> "In Bearbeitung"
+                                        "In Bearbeitung" -> "Erledigt"
+                                        "Erledigt" -> "Abgerechnet"
+                                        else -> "Offen"
+                                    }
+                                    auftraege = auftraege.toMutableList().apply {
+                                        set(index, a.copy(status = nextStatus))
+                                    }
+                                    speichereAuftraege(context, auftraege)
+                                },
+                                modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp),
+                                shape = RoundedCornerShape(26.dp),
+                                border = BorderStroke(2.dp, KuemmeroGreen),
+                                colors = ButtonDefaults.outlinedButtonColors(contentColor = KuemmeroGreen)
+                            ) {
+                                Text("Status weiter →", fontWeight = FontWeight.Bold)
                             }
 
                             OutlinedButton(
