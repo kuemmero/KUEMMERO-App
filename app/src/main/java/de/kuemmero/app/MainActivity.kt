@@ -2,6 +2,8 @@ package de.kuemmero.app
 
 import android.content.Context
 import android.graphics.Paint
+import android.graphics.Bitmap
+import android.graphics.BitmapFactory
 import android.graphics.pdf.PdfDocument
 import android.net.Uri
 import android.content.Intent
@@ -26,6 +28,7 @@ import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.foundation.clickable
+import androidx.compose.ui.draw.clip
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.rememberScrollState
@@ -33,6 +36,10 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material3.*
+import androidx.compose.foundation.Image
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -696,6 +703,42 @@ class MainActivity : ComponentActivity() {
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
+private fun FotoVorschau(
+    context: Context,
+    uri: String,
+    onClick: () -> Unit,
+    onDelete: () -> Unit
+) {
+    val bitmap = remember(uri) { ladeFotoBitmap(context, uri) }
+    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+        Box(
+            modifier = Modifier
+                .size(112.dp)
+                .border(1.dp, KuemmeroGreen, RoundedCornerShape(12.dp))
+                .clip(RoundedCornerShape(12.dp))
+                .clickable { onClick() }
+        ) {
+            if (bitmap != null) {
+                Image(
+                    bitmap = bitmap.asImageBitmap(),
+                    contentDescription = "Auftragsfoto",
+                    modifier = Modifier.fillMaxSize(),
+                    contentScale = ContentScale.Crop
+                )
+            } else {
+                Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                    Text("Foto\nnicht lesbar", color = KuemmeroText, fontSize = 12.sp)
+                }
+            }
+        }
+        TextButton(
+            onClick = onDelete,
+            colors = ButtonDefaults.textButtonColors(contentColor = KuemmeroError)
+        ) { Text("Löschen", fontSize = 12.sp) }
+    }
+}
+
+@Composable
 fun KuemmeroApp() {
     val context = LocalContext.current
     val heute = remember { Date() }
@@ -745,6 +788,7 @@ fun KuemmeroApp() {
     var unterschriftPfad by remember { mutableStateOf("") }
     var fotoTyp by remember { mutableStateOf("Vorher") }
     var unterschriftDialog by remember { mutableStateOf(false) }
+    var fotoVorschauUri by remember { mutableStateOf<String?>(null) }
     var auftragsSuche by remember { mutableStateOf("") }
     var statusFilter by remember { mutableStateOf("Alle") }
     var zahlungsFilterOffen by remember { mutableStateOf(false) }
@@ -1073,6 +1117,40 @@ fun KuemmeroApp() {
             },
             dismissButton = {
                 TextButton(onClick = { neuerKundeDialog = false }) { Text("Abbrechen") }
+            }
+        )
+    }
+
+    if (fotoVorschauUri != null) {
+        val uri = fotoVorschauUri!!
+        val bitmap = remember(uri) { ladeFotoBitmap(context, uri) }
+        AlertDialog(
+            onDismissRequest = { fotoVorschauUri = null },
+            title = { Text("Auftragsfoto") },
+            text = {
+                if (bitmap != null) {
+                    Image(
+                        bitmap = bitmap.asImageBitmap(),
+                        contentDescription = "Auftragsfoto",
+                        modifier = Modifier.fillMaxWidth().heightIn(max = 420.dp),
+                        contentScale = ContentScale.Fit
+                    )
+                } else {
+                    Text("Foto konnte nicht geladen werden.")
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { fotoVorschauUri = null }) { Text("Schließen") }
+            },
+            dismissButton = {
+                TextButton(
+                    onClick = {
+                        fotosVorher = fotosVorher.filterNot { it == uri }
+                        fotosNachher = fotosNachher.filterNot { it == uri }
+                        fotoVorschauUri = null
+                    },
+                    colors = ButtonDefaults.textButtonColors(contentColor = KuemmeroError)
+                ) { Text("Löschen") }
             }
         )
     }
@@ -1570,6 +1648,44 @@ fun KuemmeroApp() {
                             modifier = Modifier.weight(1f),
                             colors = ButtonDefaults.outlinedButtonColors(contentColor = KuemmeroGreen)
                         ) { Text("📷 Nachher (${fotosNachher.size})") }
+                    }
+                }
+
+                item {
+                    if (fotosVorher.isNotEmpty()) {
+                        Text("Vorher-Fotos", fontWeight = FontWeight.Bold, color = KuemmeroText)
+                        Spacer(Modifier.height(6.dp))
+                        Row(
+                            modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            fotosVorher.forEach { uri ->
+                                FotoVorschau(
+                                    context = context,
+                                    uri = uri,
+                                    onClick = { fotoVorschauUri = uri },
+                                    onDelete = { fotosVorher = fotosVorher.filterNot { it == uri } }
+                                )
+                            }
+                        }
+                        Spacer(Modifier.height(10.dp))
+                    }
+                    if (fotosNachher.isNotEmpty()) {
+                        Text("Nachher-Fotos", fontWeight = FontWeight.Bold, color = KuemmeroText)
+                        Spacer(Modifier.height(6.dp))
+                        Row(
+                            modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            fotosNachher.forEach { uri ->
+                                FotoVorschau(
+                                    context = context,
+                                    uri = uri,
+                                    onClick = { fotoVorschauUri = uri },
+                                    onDelete = { fotosNachher = fotosNachher.filterNot { it == uri } }
+                                )
+                            }
+                        }
                     }
                 }
 
