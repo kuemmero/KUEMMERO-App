@@ -1377,6 +1377,10 @@ fun KuemmeroApp() {
                 TextButton(onClick = {
                     auftraege = auftraege.toMutableList().apply { removeAt(index) }
                     speichereAuftraege(context, auftraege)
+                    // Nach dem Löschen immer zurück zur Auftragsübersicht.
+                    auftragDetailIndex = null
+                    auftragFormOffen = false
+                    bearbeiteIndex = null
                     loeschIndex = null
                 }) { Text("Löschen") }
             },
