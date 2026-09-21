@@ -119,7 +119,9 @@ data class Kostenvoranschlag(
     val stunden: Double = 0.0,
     val material: Double = 0.0,
     val fahrt: Double = 0.0,
-    val stundensatz: Double = 42.0
+    val stundensatz: Double = 42.0,
+    val materialBonUri: String = "",
+    val fotosVorher: List<String> = emptyList()
 )
 
 private fun ladeKostenvoranschlaege(context: Context): List<Kostenvoranschlag> {
@@ -132,7 +134,8 @@ private fun ladeKostenvoranschlaege(context: Context): List<Kostenvoranschlag> {
             o.optString("nummer"), o.optString("datum"), o.optString("gueltigBis"),
             o.optString("kunde"), o.optString("kundenStrasse"), o.optString("kundenOrt"),
             o.optString("leistung"), o.optDouble("stunden", 0.0), o.optDouble("material", 0.0),
-            o.optDouble("fahrt", 0.0), o.optDouble("stundensatz", 42.0)
+            o.optDouble("fahrt", 0.0), o.optDouble("stundensatz", 42.0), o.optString("materialBonUri", ""),
+            run { val a = o.optJSONArray("fotosVorher") ?: JSONArray(); List(a.length()) { j -> a.optString(j) } }
         )
     }
 }
@@ -144,7 +147,8 @@ private fun speichereKostenvoranschlaege(context: Context, liste: List<Kostenvor
             put("nummer", k.nummer); put("datum", k.datum); put("gueltigBis", k.gueltigBis)
             put("kunde", k.kunde); put("kundenStrasse", k.kundenStrasse); put("kundenOrt", k.kundenOrt)
             put("leistung", k.leistung); put("stunden", k.stunden); put("material", k.material)
-            put("fahrt", k.fahrt); put("stundensatz", k.stundensatz)
+            put("fahrt", k.fahrt); put("stundensatz", k.stundensatz); put("materialBonUri", k.materialBonUri)
+            put("fotosVorher", JSONArray(k.fotosVorher))
         })
     }
     context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
@@ -897,6 +901,8 @@ fun KuemmeroApp() {
     var kvLeistung by remember { mutableStateOf("") }
     var kvStunden by remember { mutableStateOf("") }
     var kvMaterial by remember { mutableStateOf("") }
+    var kvMaterialBonUri by remember { mutableStateOf("") }
+    var kvFotosVorher by remember { mutableStateOf<List<String>>(emptyList()) }
     var kvFahrt by remember { mutableStateOf("") }
     var kvStundensatz by remember { mutableStateOf(context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE).getString(STUNDENSATZ_KEY, "42.00") ?: "42.00") }
     var auftragDetailIndex by remember { mutableStateOf<Int?>(null) }
@@ -1027,6 +1033,15 @@ fun KuemmeroApp() {
             }
             materialBonUri = it.toString()
             android.widget.Toast.makeText(context, "Kassenbon hinzugefügt.", 0).show()
+        }
+    }
+
+    val kvFotoVorherLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.GetMultipleContents()
+    ) { uris ->
+        if (uris.isNotEmpty()) {
+            kvFotosVorher = (kvFotosVorher + uris.map { it.toString() }).distinct()
+            android.widget.Toast.makeText(context, "${uris.size} Bild(er) vorher hinzugefügt.", 0).show()
         }
     }
 
@@ -2635,6 +2650,8 @@ fun KuemmeroApp() {
                                         kvLeistung = ""
                                         kvStunden = ""
                                         kvMaterial = ""
+                                        kvMaterialBonUri = ""
+                                        kvFotosVorher = emptyList()
                                         kvFahrt = ""
                                         kvFormOffen = true
                                     },
@@ -2669,6 +2686,12 @@ fun KuemmeroApp() {
                                             color = KuemmeroGreen,
                                             fontWeight = FontWeight.Bold
                                         )
+                                        if (k.materialBonUri.isNotBlank()) {
+                                            Text("🧾 Material-Kassenbon vorhanden", color = KuemmeroGreen, fontWeight = FontWeight.SemiBold)
+                                        }
+                                        if (k.fotosVorher.isNotEmpty()) {
+                                            Text("📷 Bild vorher: ${k.fotosVorher.size}", color = KuemmeroGreen, fontWeight = FontWeight.SemiBold)
+                                        }
                                         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                                             OutlinedButton(
                                                 onClick = {
@@ -2682,6 +2705,8 @@ fun KuemmeroApp() {
                                                     kvLeistung = k.leistung
                                                     kvStunden = k.stunden.toString().replace(".", ",")
                                                     kvMaterial = k.material.toString().replace(".", ",")
+                                                    kvMaterialBonUri = k.materialBonUri
+                                                    kvFotosVorher = k.fotosVorher
                                                     kvFahrt = k.fahrt.toString().replace(".", ",")
                                                     kvStundensatz = k.stundensatz.toString().replace(".", ",")
                                                     kvFormOffen = true
@@ -2693,7 +2718,8 @@ fun KuemmeroApp() {
                                                     val a = Auftrag(
                                                         k.nummer, k.datum, k.gueltigBis, k.kunde,
                                                         k.kundenStrasse, k.kundenOrt, k.leistung,
-                                                        k.stunden, k.material, "", k.fahrt, k.stundensatz
+                                                        k.stunden, k.material, k.materialBonUri, k.fahrt, k.stundensatz,
+                                                        fotosVorher = k.fotosVorher
                                                     )
                                                     druckePdf(
                                                         context,
@@ -2730,8 +2756,57 @@ fun KuemmeroApp() {
                                         OutlinedTextField(kvStrasse, { kvStrasse = it }, label = { Text("Adresse") }, colors = feldFarben, modifier = Modifier.fillMaxWidth())
                                         OutlinedTextField(kvOrt, { kvOrt = it }, label = { Text("PLZ und Ort") }, colors = feldFarben, modifier = Modifier.fillMaxWidth())
                                         OutlinedTextField(kvLeistung, { kvLeistung = it }, label = { Text("Leistung") }, colors = feldFarben, modifier = Modifier.fillMaxWidth())
+                                        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                            Text("📷 Bild vorher", color = KuemmeroGreen, fontWeight = FontWeight.Bold)
+                                            OutlinedButton(
+                                                onClick = { kvFotoVorherLauncher.launch("image/*") },
+                                                modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp),
+                                                shape = RoundedCornerShape(26.dp),
+                                                border = BorderStroke(2.dp, KuemmeroGreen),
+                                                colors = ButtonDefaults.outlinedButtonColors(contentColor = KuemmeroGreen)
+                                            ) {
+                                                Text("📷 Bild vorher hinzufügen", fontWeight = FontWeight.Bold)
+                                            }
+                                            if (kvFotosVorher.isNotEmpty()) {
+                                                Row(
+                                                    modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+                                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                                ) {
+                                                    kvFotosVorher.forEach { uri ->
+                                                        FotoVorschau(
+                                                            context, uri,
+                                                            onClick = { fotoVorschauUri = uri },
+                                                            onDelete = { kvFotosVorher = kvFotosVorher.filterNot { it == uri } }
+                                                        )
+                                                    }
+                                                }
+                                            }
+                                        }
                                         OutlinedTextField(kvStunden, { kvStunden = it }, label = { Text("Arbeitsstunden") }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal), colors = feldFarben, modifier = Modifier.fillMaxWidth())
                                         OutlinedTextField(kvMaterial, { kvMaterial = it }, label = { Text("Material (€)") }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal), colors = feldFarben, modifier = Modifier.fillMaxWidth())
+                                        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                            OutlinedButton(
+                                                onClick = { materialBonLauncher.launch(arrayOf("image/*", "application/pdf")) },
+                                                modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp),
+                                                shape = RoundedCornerShape(26.dp),
+                                                border = BorderStroke(2.dp, KuemmeroGreen),
+                                                colors = ButtonDefaults.outlinedButtonColors(contentColor = KuemmeroGreen)
+                                            ) {
+                                                Text(
+                                                    if (kvMaterialBonUri.isBlank()) "🧾 Kassenbon zum Material hinzufügen" else "✓ Material-Kassenbon vorhanden",
+                                                    fontWeight = FontWeight.Bold
+                                                )
+                                            }
+                                            if (kvMaterialBonUri.isNotBlank()) {
+                                                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                                    Text(
+                                                        if (kvMaterialBonUri.lowercase(Locale.GERMANY).contains(".pdf")) "🧾 Material-Kassenbon: PDF" else "🧾 Material-Kassenbon: Foto",
+                                                        modifier = Modifier.weight(1f), color = KuemmeroText
+                                                    )
+                                                    TextButton(onClick = { kvMaterialBonUri = "" }, colors = ButtonDefaults.textButtonColors(contentColor = KuemmeroError)) { Text("Entfernen") }
+                                                }
+                                            }
+                                        }
                                         OutlinedTextField(kvFahrt, { kvFahrt = it }, label = { Text("Fahrtkosten (€)") }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal), colors = feldFarben, modifier = Modifier.fillMaxWidth())
                                         OutlinedTextField(kvStundensatz, { kvStundensatz = it }, label = { Text("Stundensatz (€ / Stunde)") }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal), colors = feldFarben, modifier = Modifier.fillMaxWidth())
                                         Text(
@@ -2748,7 +2823,8 @@ fun KuemmeroApp() {
                                                     val k = Kostenvoranschlag(
                                                         kvNummer.trim(), kvDatum.trim(), kvGueltigBis.trim(),
                                                         kvKunde.trim(), kvStrasse.trim(), kvOrt.trim(), kvLeistung.trim(),
-                                                        zahl(kvStunden), zahl(kvMaterial), zahl(kvFahrt), zahl(kvStundensatz, 42.0)
+                                                        zahl(kvStunden), zahl(kvMaterial), zahl(kvFahrt), zahl(kvStundensatz, 42.0),
+                                                        kvMaterialBonUri, kvFotosVorher
                                                     )
                                                     val list = kostenvoranschlaege.toMutableList()
                                                     if (kvBearbeiteIndex != null) list[kvBearbeiteIndex!!] = k else list.add(k)
@@ -2785,17 +2861,6 @@ fun KuemmeroApp() {
                                 border = BorderStroke(2.dp, KuemmeroGreen),
                                 colors = ButtonDefaults.outlinedButtonColors(contentColor = KuemmeroGreen)
                             ) { Text("📅 Kalender", fontWeight = FontWeight.Bold) }
-                        }
-                        item {
-                            Card(Modifier.fillMaxWidth().clickable { hauptseite = "Kostenvoranschläge" }, colors = CardDefaults.cardColors(containerColor = KuemmeroSurface), shape = RoundedCornerShape(18.dp)) {
-                                Row(Modifier.fillMaxWidth().padding(16.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
-                                    Column {
-                                        Text("📄 Kostenvoranschläge", style = MaterialTheme.typography.titleMedium, color = KuemmeroGreen, fontWeight = FontWeight.Bold)
-                                        Text("Eigene Übersicht und PDF-Kostenvoranschläge", color = KuemmeroText)
-                                    }
-                                    Text("→", color = KuemmeroGreen, fontSize = 24.sp, fontWeight = FontWeight.Bold)
-                                }
-                            }
                         }
                         item {
                             Card(Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = KuemmeroSurface), shape = RoundedCornerShape(18.dp)) {
