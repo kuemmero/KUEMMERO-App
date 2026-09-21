@@ -1776,28 +1776,57 @@ fun KuemmeroApp() {
                                 Text("PDF drucken", fontWeight = FontWeight.Bold)
                             }
 
+                            Text(
+                                when (a.status) {
+                                    "Offen" -> "Ablauf: Angebot → Auftrag annehmen"
+                                    "In Bearbeitung" -> "Ablauf: Auftrag → Arbeit erledigen"
+                                    "Erledigt" -> "Ablauf: Erledigt → Rechnung erstellen"
+                                    "Abgerechnet" -> "Ablauf abgeschlossen"
+                                    else -> "Ablauf"
+                                },
+                                style = MaterialTheme.typography.labelMedium,
+                                color = KuemmeroText,
+                                modifier = Modifier.padding(top = 4.dp, bottom = 2.dp)
+                            )
+
                             OutlinedButton(
                                 onClick = {
                                     val nextStatus = when (a.status) {
                                         "Offen" -> "In Bearbeitung"
                                         "In Bearbeitung" -> "Erledigt"
-                                        "Erledigt" -> "Abgerechnet"
-                                        else -> "Offen"
+                                        else -> a.status
                                     }
-                                    auftraege = auftraege.toMutableList().apply {
-                                        set(index, a.copy(status = nextStatus))
+                                    if (nextStatus != a.status) {
+                                        auftraege = auftraege.toMutableList().apply {
+                                            set(index, a.copy(status = nextStatus))
+                                        }
+                                        speichereAuftraege(context, auftraege)
                                     }
-                                    speichereAuftraege(context, auftraege)
                                 },
+                                enabled = a.status == "Offen" || a.status == "In Bearbeitung",
                                 modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp),
                                 shape = RoundedCornerShape(26.dp),
                                 border = BorderStroke(2.dp, KuemmeroGreen),
                                 colors = ButtonDefaults.outlinedButtonColors(contentColor = KuemmeroGreen)
                             ) {
-                                Text("Status weiter →", fontWeight = FontWeight.Bold)
+                                Text(
+                                    when (a.status) {
+                                        "Offen" -> "Auftrag annehmen →"
+                                        "In Bearbeitung" -> "Arbeit erledigt →"
+                                        "Erledigt" -> "Bereit für Rechnung ✓"
+                                        "Abgerechnet" -> "Abgerechnet ✓"
+                                        else -> "Status"
+                                    },
+                                    fontWeight = FontWeight.Bold
+                                )
                             }
 
                             if (a.status == "Erledigt") {
+                                Text(
+                                    "Rechnung wird direkt aus diesem Auftrag erstellt.",
+                                    style = MaterialTheme.typography.labelMedium,
+                                    color = KuemmeroText
+                                )
                                 Button(
                                     onClick = {
                                         rechnungFuerIndex = index
