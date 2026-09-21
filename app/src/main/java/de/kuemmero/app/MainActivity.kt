@@ -603,6 +603,16 @@ fun KuemmeroApp() {
     var timerIndex by remember { mutableStateOf<Int?>(null) }
     var timerSekunden by remember { mutableStateOf(0L) }
 
+    // Laufende Arbeitszeit nach App-Neustart automatisch wieder aufnehmen
+    LaunchedEffect(auftraege) {
+        if (timerIndex == null) {
+            val laufenderIndex = auftraege.indexOfFirst { it.arbeitsStart > 0L }
+            if (laufenderIndex >= 0) {
+                timerIndex = laufenderIndex
+            }
+        }
+    }
+
     LaunchedEffect(timerIndex) {
         while (timerIndex != null) {
             val i = timerIndex ?: break
