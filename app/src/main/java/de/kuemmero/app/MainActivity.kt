@@ -232,7 +232,8 @@ private fun erstellePdf(
     stunden: Double,
     material: Double,
     fahrt: Double,
-    stundensatz: Double
+    stundensatz: Double,
+    unterschriftPfad: String = ""
 ): PdfDocument {
     val pdf = PdfDocument()
     val page = pdf.startPage(PdfDocument.PageInfo.Builder(595, 842, 1).create())
@@ -271,6 +272,21 @@ private fun erstellePdf(
     p.textSize = 11f
     c.drawText("Gemäß § 19 UStG wird keine Umsatzsteuer berechnet.", 40f, 578f, p)
     c.drawText("Auftragserteilung / Unterschrift Kunde:", 40f, 643f, p)
+
+    // Gespeicherte Kunden-Unterschrift direkt in das PDF übernehmen
+    if (unterschriftPfad.isNotBlank()) {
+        try {
+            val unterschrift = android.graphics.BitmapFactory.decodeFile(unterschriftPfad)
+            if (unterschrift != null) {
+                val ziel = android.graphics.RectF(40f, 655f, 280f, 690f)
+                c.drawBitmap(unterschrift, null, ziel, p)
+                unterschrift.recycle()
+            }
+        } catch (_: Exception) {
+            // PDF bleibt auch ohne Unterschriftsbild druckbar.
+        }
+    }
+
     c.drawLine(40f, 693f, 280f, 693f, p)
     c.drawText("Unterschrift", 40f, 711f, p)
     c.drawLine(330f, 693f, 550f, 693f, p)
@@ -291,7 +307,8 @@ private fun erstelleRechnungPdf(
     stunden: Double,
     material: Double,
     fahrt: Double,
-    stundensatz: Double
+    stundensatz: Double,
+    unterschriftPfad: String = ""
 ): PdfDocument {
     val pdf = PdfDocument()
     val page = pdf.startPage(PdfDocument.PageInfo.Builder(595, 842, 1).create())
@@ -333,7 +350,21 @@ private fun erstelleRechnungPdf(
     p.textSize = 11f
     c.drawText("Gemäß § 19 UStG wird keine Umsatzsteuer berechnet.", 40f, 558f, p)
     c.drawText("Bitte überweisen Sie den Rechnungsbetrag innerhalb von 14 Tagen.", 40f, 590f, p)
-    c.drawText("Vielen Dank für Ihr Vertrauen.", 40f, 640f, p)
+
+    if (unterschriftPfad.isNotBlank()) {
+        try {
+            val unterschrift = android.graphics.BitmapFactory.decodeFile(unterschriftPfad)
+            if (unterschrift != null) {
+                val ziel = android.graphics.RectF(40f, 600f, 280f, 635f)
+                c.drawBitmap(unterschrift, null, ziel, p)
+                unterschrift.recycle()
+            }
+        } catch (_: Exception) {
+            // Rechnung bleibt auch ohne Unterschriftsbild druckbar.
+        }
+    }
+
+    c.drawText("Vielen Dank für Ihr Vertrauen.", 40f, 665f, p)
     pdf.finishPage(page)
     return pdf
 }
@@ -365,7 +396,7 @@ private fun druckePdf(
             pdf = erstellePdf(
                 context, nummer, datum, gueltigBis,
                 auftrag.kunde, auftrag.kundenStrasse, auftrag.kundenOrt, auftrag.leistung,
-                auftrag.stunden, auftrag.material, auftrag.fahrt, auftrag.stundensatz
+                auftrag.stunden, auftrag.material, auftrag.fahrt, auftrag.stundensatz, auftrag.unterschriftPfad
             )
             val info = PrintDocumentInfo.Builder(dateiname)
                 .setContentType(PrintDocumentInfo.CONTENT_TYPE_DOCUMENT)
@@ -583,12 +614,12 @@ fun KuemmeroApp() {
                 erstellePdf(
                     context, nummer, datum, gueltigBis,
                     a.kunde, a.kundenStrasse, a.kundenOrt, a.leistung,
-                    a.stunden, a.material, a.fahrt, a.stundensatz
+                    a.stunden, a.material, a.fahrt, a.stundensatz, a.unterschriftPfad
                 )
             } else {
                 erstellePdf(
                     context, nummer, datum, gueltigBis, kunde, strasse, ort, leistung,
-                    zahl(stunden), zahl(material), zahl(fahrt), zahl(stundensatz, 42.0)
+                    zahl(stunden), zahl(material), zahl(fahrt), zahl(stundensatz, 42.0), unterschriftPfad
                 )
             }
             context.contentResolver.openOutputStream(it)?.use { out -> pdf.writeTo(out) }
@@ -618,7 +649,8 @@ fun KuemmeroApp() {
                         a.stunden,
                         a.material,
                         a.fahrt,
-                        a.stundensatz
+                        a.stundensatz,
+                        a.unterschriftPfad
                     )
                     context.contentResolver.openOutputStream(it)?.use { out -> pdf.writeTo(out) }
                     pdf.close()
