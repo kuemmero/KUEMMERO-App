@@ -1111,6 +1111,7 @@ fun KuemmeroApp() {
                         a.fahrt,
                         a.stundensatz,
                         a.unterschriftPfad,
+                        a.unterschriftDatum,
                         a.fotosVorher, a.fotosNachher
                     )
                     context.contentResolver.openOutputStream(it)?.use { out -> pdf.writeTo(out) }
