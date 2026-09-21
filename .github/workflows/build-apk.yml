@@ -25,12 +25,6 @@ jobs:
         with:
           gradle-version: '8.10'
 
-      # Für eine feste Signatur müssen diese vier GitHub Secrets
-      # im Repository hinterlegt sein:
-      # KEYSTORE_BASE64
-      # KEYSTORE_PASSWORD
-      # KEY_ALIAS
-      # KEY_PASSWORD
       - name: Signatur-Schlüssel bereitstellen
         env:
           KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
@@ -39,7 +33,15 @@ jobs:
             echo "KEYSTORE_BASE64 fehlt in den GitHub Secrets."
             exit 1
           fi
-          echo "$KEYSTORE_BASE64" | base64 --decode > kuemmero-release.jks
+
+          # Entfernt versehentlich mitkopierte Leerzeichen/Zeilenumbrüche
+          # und ignoriert sonstige Zeichen außerhalb des Base64-Inhalts.
+          printf '%s' "$KEYSTORE_BASE64" | base64 --decode --ignore-garbage > kuemmero-release.jks
+
+          if [ ! -s kuemmero-release.jks ]; then
+            echo "Der KEYSTORE_BASE64-Inhalt ist leer oder ungültig."
+            exit 1
+          fi
 
       - name: APK bauen
         env:
@@ -47,10 +49,14 @@ jobs:
           KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
           KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
         run: |
-          gradle :app:assembleDebug             -PkuemmeroStoreFile="$GITHUB_WORKSPACE/kuemmero-release.jks"             -PkuemmeroStorePassword="$KEYSTORE_PASSWORD"             -PkuemmeroKeyAlias="$KEY_ALIAS"             -PkuemmeroKeyPassword="$KEY_PASSWORD"
+          gradle :app:assembleDebug \
+            -PkuemmeroStoreFile="$GITHUB_WORKSPACE/kuemmero-release.jks" \
+            -PkuemmeroStorePassword="$KEYSTORE_PASSWORD" \
+            -PkuemmeroKeyAlias="$KEY_ALIAS" \
+            -PkuemmeroKeyPassword="$KEY_PASSWORD"
 
       - name: APK bereitstellen
         uses: actions/upload-artifact@v4
         with:
-          name: KUEMMERO-v1.1-11
+          name: KUEMMERO-v1.2-12-feste-signatur
           path: app/build/outputs/apk/debug/app-debug.apk
