@@ -42,6 +42,9 @@ import java.util.Date
 import java.util.Locale
 
 data class Auftrag(
+    val nummer: String = "",
+    val datum: String = "",
+    val gueltigBis: String = "",
     val kunde: String,
     val kundenStrasse: String,
     val kundenOrt: String,
@@ -71,6 +74,9 @@ private fun ladeAuftraege(context: Context): List<Auftrag> {
     return List(json.length()) { i ->
         val o = json.optJSONObject(i) ?: JSONObject()
         Auftrag(
+            o.optString("nummer"),
+            o.optString("datum"),
+            o.optString("gueltigBis"),
             o.optString("kunde"),
             o.optString("kundenStrasse"),
             o.optString("kundenOrt"),
@@ -87,6 +93,9 @@ private fun speichereAuftraege(context: Context, liste: List<Auftrag>) {
     val json = JSONArray()
     liste.forEach { a ->
         json.put(JSONObject().apply {
+            put("nummer", a.nummer)
+            put("datum", a.datum)
+            put("gueltigBis", a.gueltigBis)
             put("kunde", a.kunde)
             put("kundenStrasse", a.kundenStrasse)
             put("kundenOrt", a.kundenOrt)
@@ -607,6 +616,7 @@ fun KuemmeroApp() {
                                 android.widget.Toast.makeText(context, "Bitte Kundennamen eingeben.", 0).show()
                             } else {
                                 val a = Auftrag(
+                                    nummer.trim(), datum.trim(), gueltigBis.trim(),
                                     kunde.trim(), strasse.trim(), ort.trim(), leistung.trim(),
                                     arbeitsstunden, materialKosten, fahrtKosten, rate
                                 )
@@ -791,6 +801,12 @@ fun KuemmeroApp() {
                                 color = KuemmeroText,
                                 fontWeight = FontWeight.Bold
                             )
+                            if (a.nummer.isNotBlank()) {
+                                Text("Angebot: ${a.nummer}", color = KuemmeroGreen, fontWeight = FontWeight.SemiBold)
+                            }
+                            if (a.datum.isNotBlank()) {
+                                Text("Datum: ${a.datum}", color = KuemmeroText)
+                            }
                             if (a.kundenStrasse.isNotBlank() || a.kundenOrt.isNotBlank()) {
                                 Text(
                                     listOf(a.kundenStrasse, a.kundenOrt)
@@ -798,12 +814,22 @@ fun KuemmeroApp() {
                                         .joinToString(", ")
                                 )
                             }
-                            Text(a.leistung)
-                            Text(euro(a.stunden * a.stundensatz + a.material + a.fahrt))
+                            if (a.leistung.isNotBlank()) {
+                                Text(a.leistung)
+                            }
+                            Text(
+                                euro(a.stunden * a.stundensatz + a.material + a.fahrt),
+                                style = MaterialTheme.typography.titleMedium,
+                                color = KuemmeroGreen,
+                                fontWeight = FontWeight.Bold
+                            )
 
                             Button(
                                 onClick = {
                                     bearbeiteIndex = index
+                                    nummer = a.nummer.ifBlank { nummer }
+                                    datum = a.datum.ifBlank { datum }
+                                    gueltigBis = a.gueltigBis.ifBlank { gueltigBis }
                                     kunde = a.kunde
                                     strasse = a.kundenStrasse
                                     ort = a.kundenOrt
@@ -825,9 +851,9 @@ fun KuemmeroApp() {
                                     druckePdf(
                                         context,
                                         "KÜMMERO-Angebot-${a.kunde}.pdf",
-                                        nummer,
-                                        datum,
-                                        gueltigBis,
+                                        a.nummer.ifBlank { nummer },
+                                        a.datum.ifBlank { datum },
+                                        a.gueltigBis.ifBlank { gueltigBis },
                                         a
                                     )
                                 },
