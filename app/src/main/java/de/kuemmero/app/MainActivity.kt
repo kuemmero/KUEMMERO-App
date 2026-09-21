@@ -493,6 +493,7 @@ fun KuemmeroApp() {
                             )
                             Text("Hausmeisterservice & Seniorenbetreuung", color = KuemmeroText)
                             Text("Markus Becker · 58675 Hemer", color = KuemmeroText)
+                            Text("E-Mail: kuemmero@web.de", color = KuemmeroText)
                         }
                     }
                 }
