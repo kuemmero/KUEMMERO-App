@@ -245,6 +245,64 @@ private fun erstellePdf(
     return pdf
 }
 
+
+private fun erstelleRechnungPdf(
+    nummer: String,
+    rechnungsdatum: String,
+    kunde: String,
+    strasse: String,
+    ort: String,
+    leistung: String,
+    stunden: Double,
+    material: Double,
+    fahrt: Double,
+    stundensatz: Double
+): PdfDocument {
+    val pdf = PdfDocument()
+    val page = pdf.startPage(PdfDocument.PageInfo.Builder(595, 842, 1).create())
+    val c = page.canvas
+    val p = Paint()
+    p.textSize = 28f
+    c.drawText("KÜMMERO", 40f, 60f, p)
+    p.textSize = 13f
+    c.drawText("Haus & Alltag – wir kümmern uns.", 40f, 88f, p)
+    c.drawText("Hausmeisterservice & Seniorenbetreuung", 40f, 108f, p)
+    c.drawText("Markus Becker", 40f, 132f, p)
+    c.drawText("58675 Hemer", 40f, 150f, p)
+    c.drawText("Telefon: +49 176 16712509", 40f, 168f, p)
+    c.drawText("E-Mail: kuemmero@web.de", 40f, 186f, p)
+
+    p.textSize = 18f
+    c.drawText("RECHNUNG", 40f, 230f, p)
+    p.textSize = 12f
+    c.drawText("Rechnungsnummer: $nummer", 40f, 255f, p)
+    c.drawText("Rechnungsdatum: $rechnungsdatum", 40f, 275f, p)
+    c.drawText("Kunde: $kunde", 40f, 305f, p)
+    c.drawText("Adresse: $strasse", 40f, 325f, p)
+    c.drawText("PLZ und Ort: $ort", 40f, 345f, p)
+    c.drawText("Leistung: $leistung", 40f, 375f, p)
+
+    c.drawLine(40f, 400f, 550f, 400f, p)
+    c.drawText("Arbeitszeit", 40f, 425f, p)
+    c.drawText("%.2f Std.".format(Locale.GERMANY, stunden), 250f, 425f, p)
+    c.drawText(euro(stunden * stundensatz), 450f, 425f, p)
+    c.drawText("Material", 40f, 450f, p)
+    c.drawText(euro(material), 450f, 450f, p)
+    c.drawText("Fahrtkosten", 40f, 475f, p)
+    c.drawText(euro(fahrt), 450f, 475f, p)
+    c.drawLine(40f, 490f, 550f, 490f, p)
+
+    val gesamt = stunden * stundensatz + material + fahrt
+    p.textSize = 18f
+    c.drawText("Gesamtsumme: ${euro(gesamt)}", 40f, 530f, p)
+    p.textSize = 11f
+    c.drawText("Gemäß § 19 UStG wird keine Umsatzsteuer berechnet.", 40f, 558f, p)
+    c.drawText("Bitte überweisen Sie den Rechnungsbetrag innerhalb von 14 Tagen.", 40f, 590f, p)
+    c.drawText("Vielen Dank für Ihr Vertrauen.", 40f, 640f, p)
+    pdf.finishPage(page)
+    return pdf
+}
+
 private fun druckePdf(
     context: Context,
     dateiname: String,
@@ -411,6 +469,7 @@ fun KuemmeroApp() {
     }
 
     var auftragFuerPdf by remember { mutableStateOf<Auftrag?>(null) }
+    var rechnungFuerIndex by remember { mutableStateOf<Int?>(null) }
 
     val createBackup = rememberLauncherForActivityResult(
         ActivityResultContracts.CreateDocument("application/json")
@@ -474,6 +533,44 @@ fun KuemmeroApp() {
             context.contentResolver.openOutputStream(it)?.use { out -> pdf.writeTo(out) }
             pdf.close()
             auftragFuerPdf = null
+        }
+    }
+
+
+    val rechnungLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.CreateDocument("application/pdf")
+    ) { uri ->
+        uri?.let {
+            val index = rechnungFuerIndex
+            val a = index?.let { i -> auftraege.getOrNull(i) }
+            if (a != null) {
+                try {
+                    val rechnungsnummer = "RE-" + SimpleDateFormat("yyyyMMdd-HHmmss", Locale.GERMANY).format(Date())
+                    val rechnungsdatum = datumFormat.format(Date())
+                    val pdf = erstelleRechnungPdf(
+                        rechnungsnummer,
+                        rechnungsdatum,
+                        a.kunde,
+                        a.kundenStrasse,
+                        a.kundenOrt,
+                        a.leistung,
+                        a.stunden,
+                        a.material,
+                        a.fahrt,
+                        a.stundensatz
+                    )
+                    context.contentResolver.openOutputStream(it)?.use { out -> pdf.writeTo(out) }
+                    pdf.close()
+                    auftraege = auftraege.toMutableList().apply {
+                        set(index, a.copy(status = "Abgerechnet"))
+                    }
+                    speichereAuftraege(context, auftraege)
+                    android.widget.Toast.makeText(context, "Rechnung gespeichert: $rechnungsnummer", 0).show()
+                } catch (e: Exception) {
+                    android.widget.Toast.makeText(context, "Rechnung konnte nicht erstellt werden.", 1).show()
+                }
+            }
+            rechnungFuerIndex = null
         }
     }
 
@@ -1137,6 +1234,21 @@ fun KuemmeroApp() {
                                 colors = ButtonDefaults.outlinedButtonColors(contentColor = KuemmeroGreen)
                             ) {
                                 Text("Status weiter →", fontWeight = FontWeight.Bold)
+                            }
+
+                            if (a.status == "Erledigt") {
+                                Button(
+                                    onClick = {
+                                        rechnungFuerIndex = index
+                                        val name = a.kunde.ifBlank { "Kunde" }
+                                        rechnungLauncher.launch("KÜMMERO-Rechnung-$name.pdf")
+                                    },
+                                    modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp),
+                                    shape = RoundedCornerShape(26.dp),
+                                    colors = ButtonDefaults.buttonColors(containerColor = KuemmeroGreenLight)
+                                ) {
+                                    Text("Rechnung erstellen", fontWeight = FontWeight.Bold)
+                                }
                             }
 
                             OutlinedButton(
