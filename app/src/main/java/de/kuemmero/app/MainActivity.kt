@@ -220,6 +220,60 @@ private fun sichereBackupAutomatisch(context: Context): Boolean {
     } catch (_: Exception) { false }
 }
 
+private fun zeichneUnterschriftInsPdf(
+    canvas: android.graphics.Canvas,
+    pfad: String,
+    ziel: android.graphics.RectF,
+    paint: Paint
+) {
+    if (pfad.isBlank()) return
+    try {
+        val original = android.graphics.BitmapFactory.decodeFile(pfad) ?: return
+        var left = 0
+        var top = 0
+        var right = original.width
+        var bottom = original.height
+        val pixels = IntArray(original.width * original.height)
+        original.getPixels(pixels, 0, original.width, 0, 0, original.width, original.height)
+        fun isInk(x: Int, y: Int): Boolean {
+            val c = pixels[y * original.width + x]
+            val r = android.graphics.Color.red(c)
+            val g = android.graphics.Color.green(c)
+            val b = android.graphics.Color.blue(c)
+            return !(r > 245 && g > 245 && b > 245)
+        }
+        var found = false
+        var minX = original.width
+        var minY = original.height
+        var maxX = -1
+        var maxY = -1
+        for (y in 0 until original.height) {
+            for (x in 0 until original.width) {
+                if (isInk(x, y)) {
+                    found = true
+                    if (x < minX) minX = x
+                    if (x > maxX) maxX = x
+                    if (y < minY) minY = y
+                    if (y > maxY) maxY = y
+                }
+            }
+        }
+        if (found) {
+            val margin = 12
+            left = (minX - margin).coerceAtLeast(0)
+            top = (minY - margin).coerceAtLeast(0)
+            right = (maxX + margin + 1).coerceAtMost(original.width)
+            bottom = (maxY + margin + 1).coerceAtMost(original.height)
+        }
+        val cropped = android.graphics.Bitmap.createBitmap(original, left, top, right - left, bottom - top)
+        canvas.drawBitmap(cropped, null, ziel, paint)
+        cropped.recycle()
+        original.recycle()
+    } catch (_: Exception) {
+        // PDF bleibt auch ohne Unterschrift druckbar.
+    }
+}
+
 private fun erstellePdf(
     context: Context,
     nummer: String,
@@ -233,12 +287,7 @@ private fun erstellePdf(
     material: Double,
     fahrt: Double,
     stundensatz: Double,
-    unterschriftPfad: String = "",
-    terminDatum: String = "",
-    terminUhrzeit: String = "",
-    notiz: String = "",
-    fotosVorher: List<String> = emptyList(),
-    fotosNachher: List<String> = emptyList()
+    unterschriftPfad: String = ""
 ): PdfDocument {
     val pdf = PdfDocument()
     val page = pdf.startPage(PdfDocument.PageInfo.Builder(595, 842, 1).create())
@@ -276,62 +325,20 @@ private fun erstellePdf(
     c.drawText("Gesamtsumme: ${euro(gesamt)}", 40f, 548f, p)
     p.textSize = 11f
     c.drawText("Gemäß § 19 UStG wird keine Umsatzsteuer berechnet.", 40f, 578f, p)
-    var yZusatz = 605f
-    if (terminDatum.isNotBlank() || terminUhrzeit.isNotBlank()) {
-        c.drawText("Termin: ${terminDatum.ifBlank { "-" }} ${terminUhrzeit.ifBlank { "-" }}", 40f, yZusatz, p)
-        yZusatz += 18f
-    }
-    if (notiz.isNotBlank()) {
-        c.drawText("Notiz: ${notiz.take(80)}", 40f, yZusatz, p)
-    }
     c.drawText("Auftragserteilung / Unterschrift Kunde:", 40f, 643f, p)
-
-    // Gespeicherte Kunden-Unterschrift direkt in das PDF übernehmen
-    if (unterschriftPfad.isNotBlank()) {
-        try {
-            val unterschrift = android.graphics.BitmapFactory.decodeFile(unterschriftPfad)
-            if (unterschrift != null) {
-                val ziel = android.graphics.RectF(40f, 655f, 280f, 690f)
-                c.drawBitmap(unterschrift, null, ziel, p)
-                unterschrift.recycle()
-            }
-        } catch (_: Exception) {
-            // PDF bleibt auch ohne Unterschriftsbild druckbar.
-        }
-    }
-
+    // Das Unterschriftsfeld ist exakt auf die Linie abgestimmt.
+    zeichneUnterschriftInsPdf(
+        c,
+        unterschriftPfad,
+        android.graphics.RectF(48f, 652f, 272f, 688f),
+        p
+    )
     c.drawLine(40f, 693f, 280f, 693f, p)
     c.drawText("Unterschrift", 40f, 711f, p)
     c.drawLine(330f, 693f, 550f, 693f, p)
     c.drawText("Datum", 330f, 711f, p)
     c.drawText("Vielen Dank für Ihr Vertrauen.", 40f, 763f, p)
     pdf.finishPage(page)
-
-    fun fuegeFotoSeiteHinzu(titel: String, pfad: String) {
-        try {
-            val bitmap = android.graphics.BitmapFactory.decodeFile(pfad) ?: return
-            val seite = pdf.startPage(PdfDocument.PageInfo.Builder(595, 842, pdf.pages.size + 1).create())
-            val canvasFoto = seite.canvas
-            val paintFoto = Paint(Paint.ANTI_ALIAS_FLAG)
-            paintFoto.textSize = 20f
-            canvasFoto.drawText(titel, 40f, 50f, paintFoto)
-            paintFoto.textSize = 11f
-            canvasFoto.drawText("KÜMMERO – ${kunde}", 40f, 72f, paintFoto)
-            val maxW = 515f
-            val maxH = 720f
-            val scale = minOf(maxW / bitmap.width.toFloat(), maxH / bitmap.height.toFloat())
-            val w = bitmap.width * scale
-            val h = bitmap.height * scale
-            val left = (595f - w) / 2f
-            val top = 95f
-            canvasFoto.drawBitmap(bitmap, null, android.graphics.RectF(left, top, left + w, top + h), paintFoto)
-            pdf.finishPage(seite)
-            bitmap.recycle()
-        } catch (_: Exception) { }
-    }
-
-    fotosVorher.forEachIndexed { i, pfad -> fuegeFotoSeiteHinzu("Foto vorher ${i + 1}", pfad) }
-    fotosNachher.forEachIndexed { i, pfad -> fuegeFotoSeiteHinzu("Foto nachher ${i + 1}", pfad) }
     return pdf
 }
 
@@ -347,9 +354,7 @@ private fun erstelleRechnungPdf(
     material: Double,
     fahrt: Double,
     stundensatz: Double,
-    unterschriftPfad: String = "",
-    fotosVorher: List<String> = emptyList(),
-    fotosNachher: List<String> = emptyList()
+    unterschriftPfad: String = ""
 ): PdfDocument {
     val pdf = PdfDocument()
     val page = pdf.startPage(PdfDocument.PageInfo.Builder(595, 842, 1).create())
@@ -391,48 +396,18 @@ private fun erstelleRechnungPdf(
     p.textSize = 11f
     c.drawText("Gemäß § 19 UStG wird keine Umsatzsteuer berechnet.", 40f, 558f, p)
     c.drawText("Bitte überweisen Sie den Rechnungsbetrag innerhalb von 14 Tagen.", 40f, 590f, p)
-
     if (unterschriftPfad.isNotBlank()) {
-        try {
-            val unterschrift = android.graphics.BitmapFactory.decodeFile(unterschriftPfad)
-            if (unterschrift != null) {
-                val ziel = android.graphics.RectF(40f, 600f, 280f, 635f)
-                c.drawBitmap(unterschrift, null, ziel, p)
-                unterschrift.recycle()
-            }
-        } catch (_: Exception) {
-            // Rechnung bleibt auch ohne Unterschriftsbild druckbar.
-        }
+        zeichneUnterschriftInsPdf(
+            c,
+            unterschriftPfad,
+            android.graphics.RectF(40f, 575f, 280f, 615f),
+            p
+        )
+        c.drawLine(40f, 620f, 280f, 620f, p)
+        c.drawText("Kunden-Unterschrift", 40f, 638f, p)
     }
-
     c.drawText("Vielen Dank für Ihr Vertrauen.", 40f, 665f, p)
     pdf.finishPage(page)
-
-    fun fuegeFotoSeiteHinzu(titel: String, pfad: String) {
-        try {
-            val bitmap = android.graphics.BitmapFactory.decodeFile(pfad) ?: return
-            val seite = pdf.startPage(PdfDocument.PageInfo.Builder(595, 842, pdf.pages.size + 1).create())
-            val canvasFoto = seite.canvas
-            val paintFoto = Paint(Paint.ANTI_ALIAS_FLAG)
-            paintFoto.textSize = 20f
-            canvasFoto.drawText(titel, 40f, 50f, paintFoto)
-            paintFoto.textSize = 11f
-            canvasFoto.drawText("KÜMMERO – ${kunde}", 40f, 72f, paintFoto)
-            val maxW = 515f
-            val maxH = 720f
-            val scale = minOf(maxW / bitmap.width.toFloat(), maxH / bitmap.height.toFloat())
-            val w = bitmap.width * scale
-            val h = bitmap.height * scale
-            val left = (595f - w) / 2f
-            val top = 95f
-            canvasFoto.drawBitmap(bitmap, null, android.graphics.RectF(left, top, left + w, top + h), paintFoto)
-            pdf.finishPage(seite)
-            bitmap.recycle()
-        } catch (_: Exception) { }
-    }
-
-    fotosVorher.forEachIndexed { i, pfad -> fuegeFotoSeiteHinzu("Foto vorher ${i + 1}", pfad) }
-    fotosNachher.forEachIndexed { i, pfad -> fuegeFotoSeiteHinzu("Foto nachher ${i + 1}", pfad) }
     return pdf
 }
 
@@ -463,12 +438,12 @@ private fun druckePdf(
             pdf = erstellePdf(
                 context, nummer, datum, gueltigBis,
                 auftrag.kunde, auftrag.kundenStrasse, auftrag.kundenOrt, auftrag.leistung,
-                auftrag.stunden, auftrag.material, auftrag.fahrt, auftrag.stundensatz, auftrag.unterschriftPfad,
-                auftrag.terminDatum, auftrag.terminUhrzeit, auftrag.notiz, auftrag.fotosVorher, auftrag.fotosNachher
+                auftrag.stunden, auftrag.material, auftrag.fahrt, auftrag.stundensatz,
+                auftrag.unterschriftPfad
             )
             val info = PrintDocumentInfo.Builder(dateiname)
                 .setContentType(PrintDocumentInfo.CONTENT_TYPE_DOCUMENT)
-                .setPageCount(1 + auftrag.fotosVorher.size + auftrag.fotosNachher.size)
+                .setPageCount(1)
                 .build()
             callback.onLayoutFinished(info, true)
         }
@@ -664,16 +639,7 @@ fun KuemmeroApp() {
         ActivityResultContracts.GetMultipleContents()
     ) { uris ->
         if (uris.isNotEmpty()) {
-            val neue = mutableListOf<String>()
-            uris.forEachIndexed { index, uri ->
-                try {
-                    val ziel = java.io.File(context.filesDir, "foto_${System.currentTimeMillis()}_${index}.jpg")
-                    context.contentResolver.openInputStream(uri)?.use { input ->
-                        ziel.outputStream().use { output -> input.copyTo(output) }
-                    }
-                    if (ziel.exists() && ziel.length() > 0) neue.add(ziel.absolutePath)
-                } catch (_: Exception) { }
-            }
+            val neue = uris.map { it.toString() }
             if (fotoTyp == "Vorher") fotosVorher = (fotosVorher + neue).distinct()
             else fotosNachher = (fotosNachher + neue).distinct()
             android.widget.Toast.makeText(context, "${neue.size} Foto(s) hinzugefügt.", 0).show()
@@ -691,14 +657,12 @@ fun KuemmeroApp() {
                 erstellePdf(
                     context, nummer, datum, gueltigBis,
                     a.kunde, a.kundenStrasse, a.kundenOrt, a.leistung,
-                    a.stunden, a.material, a.fahrt, a.stundensatz, a.unterschriftPfad,
-                    a.terminDatum, a.terminUhrzeit, a.notiz, a.fotosVorher, a.fotosNachher
+                    a.stunden, a.material, a.fahrt, a.stundensatz, a.unterschriftPfad
                 )
             } else {
                 erstellePdf(
                     context, nummer, datum, gueltigBis, kunde, strasse, ort, leistung,
-                    zahl(stunden), zahl(material), zahl(fahrt), zahl(stundensatz, 42.0), unterschriftPfad,
-                    terminDatum, terminUhrzeit, notiz, fotosVorher, fotosNachher
+                    zahl(stunden), zahl(material), zahl(fahrt), zahl(stundensatz, 42.0), unterschriftPfad
                 )
             }
             context.contentResolver.openOutputStream(it)?.use { out -> pdf.writeTo(out) }
@@ -729,9 +693,7 @@ fun KuemmeroApp() {
                         a.material,
                         a.fahrt,
                         a.stundensatz,
-                        a.unterschriftPfad,
-                        a.fotosVorher,
-                        a.fotosNachher
+                        a.unterschriftPfad
                     )
                     context.contentResolver.openOutputStream(it)?.use { out -> pdf.writeTo(out) }
                     pdf.close()
@@ -1653,12 +1615,6 @@ fun KuemmeroApp() {
                                     status = a.status
                                     zahlungsstatus = a.zahlungsstatus
                                     bezahltAm = a.bezahltAm
-                                    terminDatum = a.terminDatum
-                                    terminUhrzeit = a.terminUhrzeit
-                                    notiz = a.notiz
-                                    fotosVorher = a.fotosVorher
-                                    fotosNachher = a.fotosNachher
-                                    unterschriftPfad = a.unterschriftPfad
                                 },
                                 modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp),
                                 shape = RoundedCornerShape(26.dp),
