@@ -16,6 +16,7 @@ import androidx.activity.compose.setContent
 import androidx.activity.ComponentActivity
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
@@ -24,6 +25,9 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -425,13 +429,39 @@ fun KuemmeroApp() {
             topBar = {
                 TopAppBar(
                     title = {
-                        Column {
-                            Text("KÜMMERO", fontWeight = FontWeight.Bold, color = Color.White)
-                            Text(
-                                "Haus & Alltag – wir kümmern uns.",
-                                style = MaterialTheme.typography.labelMedium,
-                                color = Color(0xFFD9F2E3)
-                            )
+                        Row(
+                            verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(10.dp)
+                        ) {
+                            Canvas(modifier = Modifier.size(54.dp)) {
+                                val w = size.width
+                                val h = size.height
+                                val stroke = Stroke(width = 3.2f)
+                                val roof = Path().apply {
+                                    moveTo(w * 0.08f, h * 0.48f)
+                                    lineTo(w * 0.50f, h * 0.12f)
+                                    lineTo(w * 0.92f, h * 0.48f)
+                                }
+                                drawPath(roof, Color.White, style = stroke)
+                                drawLine(Color.White, Offset(w * 0.22f, h * 0.38f), Offset(w * 0.22f, h * 0.82f), strokeWidth = 3.2f)
+                                drawLine(Color.White, Offset(w * 0.78f, h * 0.38f), Offset(w * 0.78f, h * 0.82f), strokeWidth = 3.2f)
+                                drawLine(Color.White, Offset(w * 0.22f, h * 0.82f), Offset(w * 0.78f, h * 0.82f), strokeWidth = 3.2f)
+                                val leaf = Path().apply {
+                                    moveTo(w * 0.50f, h * 0.72f)
+                                    cubicTo(w * 0.35f, h * 0.62f, w * 0.34f, h * 0.48f, w * 0.48f, h * 0.50f)
+                                    cubicTo(w * 0.63f, h * 0.52f, w * 0.62f, h * 0.65f, w * 0.50f, h * 0.72f)
+                                }
+                                drawPath(leaf, Color.White, style = stroke)
+                                drawLine(Color.White, Offset(w * 0.50f, h * 0.72f), Offset(w * 0.50f, h * 0.90f), strokeWidth = 3.2f)
+                            }
+                            Column {
+                                Text("KÜMMERO", fontWeight = FontWeight.Bold, color = Color.White)
+                                Text(
+                                    "Haus & Alltag – wir kümmern uns.",
+                                    style = MaterialTheme.typography.labelMedium,
+                                    color = Color(0xFFD9F2E3)
+                                )
+                            }
                         }
                     },
                     colors = TopAppBarDefaults.topAppBarColors(
