@@ -465,6 +465,7 @@ fun KuemmeroApp() {
     var bezahltAm by remember { mutableStateOf("") }
     var auftragsSuche by remember { mutableStateOf("") }
     var statusFilter by remember { mutableStateOf("Alle") }
+    var zahlungsFilterOffen by remember { mutableStateOf(false) }
     val listeState = rememberLazyListState()
 
     val feldFarben = OutlinedTextFieldDefaults.colors(
@@ -793,7 +794,8 @@ fun KuemmeroApp() {
                     a.kunde, a.nummer, a.datum, a.kundenStrasse, a.kundenOrt, a.leistung, a.status
                 ).any { it.lowercase(Locale.GERMANY).contains(suche) }
                 val passtStatus = statusFilter == "Alle" || a.status == statusFilter
-                passtSuche && passtStatus
+                val passtZahlung = !zahlungsFilterOffen || a.zahlungsstatus != "Bezahlt"
+                passtSuche && passtStatus && passtZahlung
             }
 
         LazyColumn(
@@ -1174,6 +1176,56 @@ fun KuemmeroApp() {
                     }
                 }
 
+                item {
+                    val offeneAuftraege = auftraege.filter { it.zahlungsstatus != "Bezahlt" }
+                    val offeneSumme = offeneAuftraege.sumOf { it.stunden * it.stundensatz + it.material + it.fahrt }
+                    Card(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable {
+                                zahlungsFilterOffen = true
+                                statusFilter = "Alle"
+                                auftragsSuche = ""
+                            },
+                        colors = CardDefaults.cardColors(
+                            containerColor = if (zahlungsFilterOffen) KuemmeroMint else KuemmeroSurface
+                        ),
+                        shape = RoundedCornerShape(18.dp),
+                        border = BorderStroke(2.dp, if (zahlungsFilterOffen) KuemmeroGreen else KuemmeroGreenLight)
+                    ) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth().padding(16.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Column(Modifier.weight(1f)) {
+                                Text(
+                                    "Offene Zahlungen",
+                                    color = KuemmeroText,
+                                    fontWeight = FontWeight.Bold
+                                )
+                                Text(
+                                    "${offeneAuftraege.size} Rechnung${if (offeneAuftraege.size == 1) "" else "en"} offen",
+                                    color = KuemmeroText
+                                )
+                            }
+                            Text(
+                                euro(offeneSumme),
+                                style = MaterialTheme.typography.titleLarge,
+                                color = if (offeneAuftraege.isEmpty()) KuemmeroGreen else KuemmeroError,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+                    }
+                    if (zahlungsFilterOffen) {
+                        TextButton(
+                            onClick = { zahlungsFilterOffen = false },
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Text("Alle Aufträge anzeigen", color = KuemmeroGreen, fontWeight = FontWeight.Bold)
+                        }
+                    }
+                }
                 item {
                     Text(
                         "Gespeicherte Aufträge",
