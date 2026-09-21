@@ -736,6 +736,16 @@ private fun zeitText(sekunden: Long): String {
     return "%02d:%02d:%02d".format(Locale.GERMANY, h, m, s)
 }
 
+private fun rechnungIstUeberfaellig(auftrag: Auftrag, heute: String): Boolean {
+    if (auftrag.rechnungsnummer.isBlank() || auftrag.zahlungsstatus == "Bezahlt" || auftrag.faelligAm.isBlank()) return false
+    return try {
+        val format = SimpleDateFormat("dd.MM.yyyy", Locale.GERMANY)
+        val faellig = format.parse(auftrag.faelligAm)?.time ?: return false
+        val heuteZeit = format.parse(heute)?.time ?: return false
+        faellig < heuteZeit
+    } catch (_: Exception) { false }
+}
+
 private val KuemmeroGreen = Color(0xFF087F3E)
 private val KuemmeroGreenLight = Color(0xFF4CAF50)
 private val KuemmeroMint = Color(0xFFE8F5E9)
@@ -963,13 +973,6 @@ fun KuemmeroApp() {
         }
     }
 
-    // Sicherung beim Öffnen automatisch sichtbar machen
-    LaunchedEffect(sicherungBereichOffen) {
-        if (sicherungBereichOffen) {
-            listeState.animateScrollToItem(22)
-        }
-    }
-
     var auftragFuerPdf by remember { mutableStateOf<Auftrag?>(null) }
     var rechnungFuerIndex by remember { mutableStateOf<Int?>(null) }
     var sicherungBestaetigung by remember { mutableStateOf(false) }
@@ -1013,6 +1016,13 @@ fun KuemmeroApp() {
                 auftraege = ladeAuftraege(context)
                 kunden = ladeKunden(context)
                 kostenvoranschlaege = ladeKostenvoranschlaege(context)
+                auftragDetailIndex = null
+                auftragFormOffen = false
+                bearbeiteIndex = null
+                kvFormOffen = false
+                kvBearbeiteIndex = null
+                timerIndex = null
+                timerSekunden = 0L
                 android.widget.Toast.makeText(context, "Daten wiederhergestellt", 0).show()
             } catch (e: Exception) {
                 android.widget.Toast.makeText(context, "Wiederherstellung fehlgeschlagen", 1).show()
@@ -1182,7 +1192,7 @@ fun KuemmeroApp() {
                             if (ok) 0 else 1
                         ).show()
                     } else {
-                        createBackup.launch("kuemmero-backup.json")
+                        createBackup.launch("KÜMMERO-Sicherung.json")
                     }
                 }) { Text("Ja, sichern") }
             },
@@ -1454,6 +1464,8 @@ fun KuemmeroApp() {
                     Text("Umsatz: ${euro(kundenAuftraege.sumOf { gesamtbetrag(it.stunden, it.material, it.fahrt, it.stundensatz) })}")
                     val offen = kundenAuftraege.filter { it.zahlungsstatus != "Bezahlt" }
                     Text("Offene Zahlungen: ${euro(offen.sumOf { gesamtbetrag(it.stunden, it.material, it.fahrt, it.stundensatz) })}", color = if (offen.isEmpty()) KuemmeroGreen else KuemmeroError, fontWeight = FontWeight.Bold)
+                    val kundenKVs = kostenvoranschlaege.filter { it.kunde.equals(name, ignoreCase = true) }
+                    Text("Kostenvoranschläge: ${kundenKVs.size}", fontWeight = FontWeight.Bold)
                     val rechnungen = kundenAuftraege.filter { it.rechnungsnummer.isNotBlank() }
                     Text("Rechnungen: ${rechnungen.size}", fontWeight = FontWeight.Bold)
                     rechnungen.takeLast(5).reversed().forEach { r ->
@@ -1508,6 +1520,8 @@ fun KuemmeroApp() {
                 TextButton(onClick = {
                     auftraege = auftraege.toMutableList().apply { removeAt(index) }
                     speichereAuftraege(context, auftraege)
+                    timerIndex = null
+                    timerSekunden = 0L
                     // Nach dem Löschen immer zurück zur Auftragsübersicht.
                     auftragDetailIndex = null
                     auftragFormOffen = false
@@ -2337,6 +2351,13 @@ fun KuemmeroApp() {
                                     color = KuemmeroText,
                                     style = MaterialTheme.typography.bodySmall
                                 )
+                                if (rechnungIstUeberfaellig(a, heuteText)) {
+                                    Text(
+                                        "⚠ Zahlung überfällig",
+                                        color = KuemmeroError,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                }
                             }
 
                             if (auftragDetailIndex == index) {
@@ -2418,12 +2439,23 @@ fun KuemmeroApp() {
                                 OutlinedButton(
                                     onClick = {
                                         val jetzt = System.currentTimeMillis()
-                                        val aktualisiert = a.copy(
+                                        val laufenderIndex = auftraege.indexOfFirst { it.arbeitsStart > 0L && it != a }
+                                        val neueListe = auftraege.toMutableList()
+                                        if (laufenderIndex >= 0) {
+                                            val laufend = neueListe[laufenderIndex]
+                                            val dauer = ((jetzt - laufend.arbeitsStart) / 1000L).coerceAtLeast(0L)
+                                            neueListe[laufenderIndex] = laufend.copy(
+                                                arbeitsEnde = jetzt,
+                                                arbeitsSekunden = laufend.arbeitsSekunden + dauer,
+                                                arbeitsStart = 0L
+                                            )
+                                        }
+                                        neueListe[index] = a.copy(
                                             arbeitsStart = jetzt,
                                             arbeitsEnde = 0L,
                                             arbeitszeitUebernommen = false
                                         )
-                                        auftraege = auftraege.toMutableList().apply { set(index, aktualisiert) }
+                                        auftraege = neueListe
                                         speichereAuftraege(context, auftraege)
                                         timerIndex = index
                                         timerSekunden = 0L
@@ -2661,7 +2693,15 @@ fun KuemmeroApp() {
                             }
                         } else {
                             itemsIndexed(termineHeute) { _, a ->
-                                Card(Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = KuemmeroSurface), shape = RoundedCornerShape(18.dp), border = BorderStroke(1.5.dp, KuemmeroGreenLight)) {
+                                Card(
+                                    Modifier.fillMaxWidth().clickable {
+                                        val index = auftraege.indexOfFirst { it.nummer == a.nummer && it.kunde == a.kunde && it.terminDatum == a.terminDatum }
+                                        if (index >= 0) { hauptseite = "Aufträge"; auftragDetailIndex = index }
+                                    },
+                                    colors = CardDefaults.cardColors(containerColor = KuemmeroSurface),
+                                    shape = RoundedCornerShape(18.dp),
+                                    border = BorderStroke(1.5.dp, KuemmeroGreenLight)
+                                ) {
                                     Column(Modifier.padding(16.dp)) {
                                         Text(a.terminUhrzeit.ifBlank { "Ohne Uhrzeit" }, color = KuemmeroGreen, fontWeight = FontWeight.Bold)
                                         Text(a.kunde, color = KuemmeroText, style = MaterialTheme.typography.titleMedium)
@@ -3032,7 +3072,6 @@ fun KuemmeroApp() {
                                     Text("Sicherung & Daten", style = MaterialTheme.typography.titleMedium, color = KuemmeroGreen, fontWeight = FontWeight.Bold)
                                     OutlinedButton(onClick = { sicherungBestaetigung = true }, modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp), shape = RoundedCornerShape(26.dp), border = BorderStroke(2.dp, KuemmeroGreen), colors = ButtonDefaults.outlinedButtonColors(contentColor = KuemmeroGreen)) { Text("Sicherung speichern / aktualisieren") }
                                     Button(onClick = { restoreBackup.launch(arrayOf("application/json", "text/plain", "application/octet-stream")) }, modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp), shape = RoundedCornerShape(26.dp), colors = ButtonDefaults.buttonColors(containerColor = KuemmeroGreenLight)) { Text("Daten wiederherstellen", fontWeight = FontWeight.Bold) }
-                                    OutlinedButton(onClick = { sicherungBestaetigung = true }, modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp), shape = RoundedCornerShape(26.dp), border = BorderStroke(2.dp, KuemmeroGreen), colors = ButtonDefaults.outlinedButtonColors(contentColor = KuemmeroGreen)) { Text("Sicherung jetzt aktualisieren") }
                                 }
                             }
                         }
