@@ -11,6 +11,8 @@ import android.print.PrintAttributes
 import android.print.PrintDocumentAdapter
 import android.print.PrintDocumentInfo
 import android.print.PrintManager
+import android.media.ToneGenerator
+import android.media.AudioManager
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.ComponentActivity
@@ -1331,7 +1333,10 @@ fun KuemmeroApp() {
                             }
 
                             OutlinedButton(
-                                onClick = { loeschIndex = index },
+                                onClick = {
+                                    ToneGenerator(AudioManager.STREAM_NOTIFICATION, 80).startTone(ToneGenerator.TONE_PROP_BEEP, 150)
+                                    loeschIndex = index
+                                },
                                 modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp),
                                 shape = RoundedCornerShape(26.dp),
                                 border = BorderStroke(2.dp, KuemmeroError),
