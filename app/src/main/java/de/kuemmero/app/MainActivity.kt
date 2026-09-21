@@ -19,6 +19,8 @@ import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
@@ -451,6 +453,8 @@ fun KuemmeroApp() {
     var loeschIndex by remember { mutableStateOf<Int?>(null) }
     var bearbeiteIndex by remember { mutableStateOf<Int?>(null) }
     var status by remember { mutableStateOf("Offen") }
+    var auftragsSuche by remember { mutableStateOf("") }
+    var statusFilter by remember { mutableStateOf("Alle") }
     val listeState = rememberLazyListState()
 
     val feldFarben = OutlinedTextFieldDefaults.colors(
@@ -772,7 +776,17 @@ fun KuemmeroApp() {
             },
             containerColor = KuemmeroBackground
         ) { padding ->
-            LazyColumn(
+            val gefilterteAuftraege = auftraege.mapIndexed { index, auftrag -> index to auftrag }
+            .filter { (_, a) ->
+                val suche = auftragsSuche.trim().lowercase(Locale.GERMANY)
+                val passtSuche = suche.isBlank() || listOf(
+                    a.kunde, a.nummer, a.datum, a.kundenStrasse, a.kundenOrt, a.leistung, a.status
+                ).any { it.lowercase(Locale.GERMANY).contains(suche) }
+                val passtStatus = statusFilter == "Alle" || a.status == statusFilter
+                passtSuche && passtStatus
+            }
+
+        LazyColumn(
                 state = listeState,
                 modifier = Modifier.padding(padding).padding(16.dp),
                 verticalArrangement = Arrangement.spacedBy(10.dp)
@@ -1153,8 +1167,56 @@ fun KuemmeroApp() {
                         color = KuemmeroGreen,
                         fontWeight = FontWeight.Bold
                     )
+                    Spacer(Modifier.height(10.dp))
+                    OutlinedTextField(
+                        value = auftragsSuche,
+                        onValueChange = { auftragsSuche = it },
+                        label = { Text("Aufträge suchen") },
+                        placeholder = { Text("Kunde, Angebot, Adresse ...") },
+                        singleLine = true,
+                        colors = feldFarben,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    Spacer(Modifier.height(10.dp))
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .horizontalScroll(rememberScrollState()),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        listOf("Alle", "Offen", "In Bearbeitung", "Erledigt", "Abgerechnet").forEach { option ->
+                            val aktiv = statusFilter == option
+                            Surface(
+                                modifier = Modifier
+                                    .height(42.dp)
+                                    .clickable { statusFilter = option },
+                                shape = RoundedCornerShape(21.dp),
+                                color = if (aktiv) KuemmeroGreen else KuemmeroMint,
+                                border = BorderStroke(1.5.dp, if (aktiv) KuemmeroGreen else Color(0xFF7A8A82))
+                            ) {
+                                Box(
+                                    modifier = Modifier.padding(horizontal = 16.dp),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Text(
+                                        option,
+                                        color = if (aktiv) Color.White else KuemmeroGreen,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                }
+                            }
+                        }
+                    }
+                    Spacer(Modifier.height(8.dp))
+                    Text(
+                        "${gefilterteAuftraege.size} Auftrag/Aufträge angezeigt",
+                        color = KuemmeroText,
+                        style = MaterialTheme.typography.bodyMedium
+                    )
                 }
-                itemsIndexed(auftraege) { index, a ->
+                itemsIndexed(gefilterteAuftraege) { _, pair ->
+                    val index = pair.first
+                    val a = pair.second
                     Card(
                         modifier = Modifier.fillMaxWidth(),
                         colors = CardDefaults.cardColors(containerColor = KuemmeroSurface),
