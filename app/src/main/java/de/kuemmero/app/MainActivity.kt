@@ -837,6 +837,7 @@ fun KuemmeroApp() {
     var sicherungBereichOffen by remember { mutableStateOf(false) }
     var hauptseite by remember { mutableStateOf("Heute") }
     var auftragDetailIndex by remember { mutableStateOf<Int?>(null) }
+    var auftragFormOffen by remember { mutableStateOf(false) }
     val listeState = rememberLazyListState()
 
     // Laufende Arbeitszeit
@@ -1473,7 +1474,17 @@ fun KuemmeroApp() {
                 modifier = Modifier.padding(padding).padding(16.dp),
                 verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
-                if (auftragDetailIndex == null) {
+                if (auftragFormOffen) {
+                    item {
+                        Text(
+                            if (bearbeiteIndex != null) "Auftrag bearbeiten" else "Neuer Auftrag",
+                            style = MaterialTheme.typography.headlineSmall,
+                            color = KuemmeroGreen,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                }
+                if (auftragFormOffen) {
                     item {
                         Card(
                             modifier = Modifier.fillMaxWidth(),
@@ -1821,6 +1832,7 @@ fun KuemmeroApp() {
                                     speichereAuftraege(context, auftraege)
                                     android.widget.Toast.makeText(context, "Auftrag gespeichert.", 0).show()
                                 }
+                                auftragFormOffen = false
                                 kunde = ""
                                 strasse = ""
                                 ort = ""
@@ -1856,6 +1868,7 @@ fun KuemmeroApp() {
                         OutlinedButton(
                             onClick = {
                                 bearbeiteIndex = null
+                                auftragFormOffen = false
                                 kunde = ""
                                 strasse = ""
                                 ort = ""
@@ -2001,8 +2014,40 @@ fun KuemmeroApp() {
                         }
                     }
                 }
-                }
-                if (auftragDetailIndex == null) {
+                } // Ende Auftragsformular
+                if (!auftragFormOffen && auftragDetailIndex == null) {
+                    item {
+                        Button(
+                            onClick = {
+                                bearbeiteIndex = null
+                                auftragDetailIndex = null
+                                auftragFormOffen = true
+                                nummer = ""
+                                datum = datumJetzt
+                                gueltigBis = ""
+                                kunde = ""
+                                strasse = ""
+                                ort = ""
+                                leistung = ""
+                                stunden = ""
+                                material = ""
+                                materialBonUri = ""
+                                fahrt = ""
+                                status = "Offen"
+                                zahlungsstatus = "Offen"
+                                bezahltAm = ""
+                                terminDatum = ""
+                                terminUhrzeit = ""
+                                notiz = ""
+                                fotosVorher = emptyList()
+                                fotosNachher = emptyList()
+                                unterschriftPfad = ""
+                            },
+                            modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp),
+                            shape = RoundedCornerShape(26.dp),
+                            colors = ButtonDefaults.buttonColors(containerColor = KuemmeroGreen)
+                        ) { Text("+ Neuer Auftrag", fontWeight = FontWeight.Bold) }
+                    }
                     item {
                         Text(
                             "Gespeicherte Aufträge",
@@ -2058,6 +2103,7 @@ fun KuemmeroApp() {
                     )
                     }
                 }
+                if (!auftragFormOffen) {
                 itemsIndexed(if (auftragDetailIndex == null) gefilterteAuftraege else gefilterteAuftraege.filter { it.first == auftragDetailIndex }) { _, pair ->
                     val index = pair.first
                     val a = pair.second
@@ -2118,7 +2164,7 @@ fun KuemmeroApp() {
 
                             if (auftragDetailIndex == index) {
                                 OutlinedButton(
-                                    onClick = { auftragDetailIndex = null },
+                                    onClick = { auftragDetailIndex = null; auftragFormOffen = false },
                                     modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp),
                                     shape = RoundedCornerShape(24.dp),
                                     border = BorderStroke(2.dp, KuemmeroGreen),
@@ -2260,6 +2306,8 @@ fun KuemmeroApp() {
                             Button(
                                 onClick = {
                                     bearbeiteIndex = index
+                                    auftragDetailIndex = index
+                                    auftragFormOffen = true
                                     nummer = a.nummer.ifBlank { nummer }
                                     datum = a.datum.ifBlank { datum }
                                     gueltigBis = a.gueltigBis.ifBlank { gueltigBis }
@@ -2399,6 +2447,7 @@ fun KuemmeroApp() {
                         }
                     }
                 }
+                } // Ende Auftragsliste
             }
         } else {
             LazyColumn(
