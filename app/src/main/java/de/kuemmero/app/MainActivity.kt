@@ -257,8 +257,8 @@ private fun druckePdf(
 private val KuemmeroGreen = Color(0xFF087F3E)
 private val KuemmeroGreenLight = Color(0xFF4CAF50)
 private val KuemmeroMint = Color(0xFFE8F5E9)
-private val KuemmeroBackground = Color(0xFFF1F8F3)
-private val KuemmeroSurface = Color(0xFFFFFFFF)
+private val KuemmeroBackground = Color(0xFFE8F5E9)
+private val KuemmeroSurface = Color(0xFFE8F5E9)
 private val KuemmeroText = Color(0xFF18352A)
 private val KuemmeroError = Color(0xFFC62828)
 
