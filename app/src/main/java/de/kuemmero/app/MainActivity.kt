@@ -314,15 +314,15 @@ private fun erstellePdf(
     c.drawText("Gesamtsumme: ${euro(gesamt)}", 40f, 548f, p)
     p.textSize = 11f
     c.drawText("Gemäß § 19 UStG wird keine Umsatzsteuer berechnet.", 40f, 578f, p)
-    c.drawText("Auftragserteilung / Unterschrift Kunde:", 40f, 643f, p)
+    c.drawText("Auftragserteilung / Unterschrift Kunde:", 40f, 628f, p)
     val signBitmap = ladeUnterschriftBitmap(unterschriftPfad)
     if (signBitmap != null) {
         val maxW = 225f
-        val maxH = 48f
+        val maxH = 34f
         val scale = minOf(maxW / signBitmap.width.toFloat(), maxH / signBitmap.height.toFloat())
         val drawW = signBitmap.width * scale
         val drawH = signBitmap.height * scale
-        val dst = android.graphics.RectF(40f, 645f, 40f + drawW, 645f + drawH)
+        val dst = android.graphics.RectF(40f, 648f, 40f + drawW, 648f + drawH)
         c.drawBitmap(signBitmap, null, dst, null)
         signBitmap.recycle()
     }
@@ -393,7 +393,7 @@ private fun erstelleRechnungPdf(
     val signBitmap = ladeUnterschriftBitmap(unterschriftPfad)
     if (signBitmap != null) {
         val maxW = 225f
-        val maxH = 48f
+        val maxH = 34f
         val scale = minOf(maxW / signBitmap.width.toFloat(), maxH / signBitmap.height.toFloat())
         val drawW = signBitmap.width * scale
         val drawH = signBitmap.height * scale
