@@ -1,7 +1,6 @@
 package de.kuemmero.app
 
 import android.content.Context
-import android.content.Intent
 import android.graphics.Paint
 import android.graphics.pdf.PdfDocument
 import android.net.Uri
@@ -12,9 +11,9 @@ import android.print.PrintAttributes
 import android.print.PrintDocumentAdapter
 import android.print.PrintDocumentInfo
 import android.print.PrintManager
-import androidx.activity.ComponentActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
+import androidx.activity.ComponentActivity
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.*
@@ -26,8 +25,8 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.unit.dp
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.dp
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.ui.text.input.KeyboardType
@@ -154,7 +153,6 @@ private fun erstellePdf(
     c.drawText("Straße: $strasse", 40f, 330f, p)
     c.drawText("PLZ und Ort: $ort", 40f, 350f, p)
     c.drawText("Leistung: $leistung", 40f, 380f, p)
-
     c.drawLine(40f, 405f, 550f, 405f, p)
     c.drawText("Arbeitszeit", 40f, 430f, p)
     c.drawText("%.2f Std.".format(Locale.GERMANY, stunden), 250f, 430f, p)
@@ -164,7 +162,6 @@ private fun erstellePdf(
     c.drawText("Fahrtkosten", 40f, 480f, p)
     c.drawText(euro(fahrt), 450f, 480f, p)
     c.drawLine(40f, 495f, 550f, 495f, p)
-
     val gesamt = stunden * stundensatz + material + fahrt
     p.textSize = 18f
     c.drawText("Gesamtsumme: ${euro(gesamt)}", 40f, 530f, p)
@@ -189,7 +186,6 @@ private fun druckePdf(
     auftrag: Auftrag
 ) {
     val printManager = context.getSystemService(Context.PRINT_SERVICE) as PrintManager
-
     val adapter = object : PrintDocumentAdapter() {
         private var pdf: PdfDocument? = null
 
@@ -204,19 +200,16 @@ private fun druckePdf(
                 callback.onLayoutCancelled()
                 return
             }
-
             pdf?.close()
             pdf = erstellePdf(
                 context, nummer, datum, gueltigBis,
                 auftrag.kunde, auftrag.kundenStrasse, auftrag.kundenOrt, auftrag.leistung,
                 auftrag.stunden, auftrag.material, auftrag.fahrt, auftrag.stundensatz
             )
-
             val info = PrintDocumentInfo.Builder(dateiname)
                 .setContentType(PrintDocumentInfo.CONTENT_TYPE_DOCUMENT)
                 .setPageCount(1)
                 .build()
-
             callback.onLayoutFinished(info, true)
         }
 
@@ -231,7 +224,6 @@ private fun druckePdf(
                     callback.onWriteCancelled()
                     return
                 }
-
                 val document = pdf ?: throw IllegalStateException("PDF konnte nicht erstellt werden")
                 ParcelFileDescriptor.AutoCloseOutputStream(destination).use { output ->
                     document.writeTo(output)
@@ -324,13 +316,23 @@ fun KuemmeroApp() {
     var bearbeiteIndex by remember { mutableStateOf<Int?>(null) }
     val listeState = rememberLazyListState()
 
+    val feldFarben = OutlinedTextFieldDefaults.colors(
+        focusedContainerColor = KuemmeroMint,
+        unfocusedContainerColor = KuemmeroMint,
+        disabledContainerColor = KuemmeroMint,
+        errorContainerColor = KuemmeroMint,
+        focusedBorderColor = KuemmeroGreen,
+        unfocusedBorderColor = Color(0xFF7A8A82),
+        focusedLabelColor = KuemmeroGreen,
+        unfocusedLabelColor = KuemmeroText
+    )
+
     LaunchedEffect(bearbeiteIndex) {
         if (bearbeiteIndex != null) {
             listeState.animateScrollToItem(0)
         }
     }
 
-    // Speichert den Auftrag, dessen PDF für einen gespeicherten Auftrag erstellt werden soll.
     var auftragFuerPdf by remember { mutableStateOf<Auftrag?>(null) }
 
     val createBackup = rememberLauncherForActivityResult(
@@ -424,11 +426,7 @@ fun KuemmeroApp() {
                 TopAppBar(
                     title = {
                         Column {
-                            Text(
-                                "KÜMMERO",
-                                fontWeight = FontWeight.Bold,
-                                color = Color.White
-                            )
+                            Text("KÜMMERO", fontWeight = FontWeight.Bold, color = Color.White)
                             Text(
                                 "Haus & Alltag – wir kümmern uns.",
                                 style = MaterialTheme.typography.labelMedium,
@@ -462,155 +460,236 @@ fun KuemmeroApp() {
                                 color = KuemmeroGreen,
                                 fontWeight = FontWeight.SemiBold
                             )
-                            Text(
-                                "Hausmeisterservice & Seniorenbetreuung",
-                                color = KuemmeroText
-                            )
+                            Text("Hausmeisterservice & Seniorenbetreuung", color = KuemmeroText)
                             Text("Markus Becker · 58675 Hemer", color = KuemmeroText)
                         }
                     }
                 }
 
-                item { OutlinedTextField(nummer, { nummer = it }, label = { Text("Angebotsnummer") }, modifier = Modifier.fillMaxWidth()) }
-                item { OutlinedTextField(datum, { datum = it }, label = { Text("Datum") }, modifier = Modifier.fillMaxWidth()) }
-                item { OutlinedTextField(gueltigBis, { gueltigBis = it }, label = { Text("Gültig bis") }, modifier = Modifier.fillMaxWidth()) }
-                item { OutlinedTextField(kunde, { kunde = it }, label = { Text("Kunde") }, modifier = Modifier.fillMaxWidth()) }
-                item { OutlinedTextField(strasse, { strasse = it }, label = { Text("Straße und Hausnummer") }, modifier = Modifier.fillMaxWidth()) }
-                item { OutlinedTextField(ort, { ort = it }, label = { Text("PLZ und Ort") }, modifier = Modifier.fillMaxWidth()) }
-                item { OutlinedTextField(leistung, { leistung = it }, label = { Text("Leistung") }, modifier = Modifier.fillMaxWidth()) }
                 item {
                     OutlinedTextField(
-                        stunden, { stunden = it }, label = { Text("Arbeitsstunden") },
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                        nummer, { nummer = it },
+                        label = { Text("Angebotsnummer") },
+                        colors = feldFarben,
                         modifier = Modifier.fillMaxWidth()
                     )
                 }
                 item {
                     OutlinedTextField(
-                        material, { material = it }, label = { Text("Material (€)") },
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                        strasse, { strasse = it },
+                        label = { Text("Adresse") },
+                        colors = feldFarben,
                         modifier = Modifier.fillMaxWidth()
                     )
                 }
                 item {
                     OutlinedTextField(
-                        fahrt, { fahrt = it }, label = { Text("Fahrtkosten (€)") },
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                        datum, { datum = it },
+                        label = { Text("Datum") },
+                        colors = feldFarben,
                         modifier = Modifier.fillMaxWidth()
                     )
                 }
                 item {
                     OutlinedTextField(
-                        stundensatz, {
+                        gueltigBis, { gueltigBis = it },
+                        label = { Text("Gültig bis") },
+                        colors = feldFarben,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+                item {
+                    OutlinedTextField(
+                        kunde, { kunde = it },
+                        label = { Text("Kunde") },
+                        colors = feldFarben,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+                item {
+                    OutlinedTextField(
+                        ort, { ort = it },
+                        label = { Text("PLZ und Ort") },
+                        colors = feldFarben,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+                item {
+                    OutlinedTextField(
+                        leistung, { leistung = it },
+                        label = { Text("Leistung") },
+                        colors = feldFarben,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+                item {
+                    OutlinedTextField(
+                        stunden, { stunden = it },
+                        label = { Text("Arbeitsstunden") },
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                        colors = feldFarben,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+                item {
+                    OutlinedTextField(
+                        material, { material = it },
+                        label = { Text("Material (€)") },
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                        colors = feldFarben,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+                item {
+                    OutlinedTextField(
+                        fahrt, { fahrt = it },
+                        label = { Text("Fahrtkosten (€)") },
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                        colors = feldFarben,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+                item {
+                    OutlinedTextField(
+                        stundensatz,
+                        {
                             stundensatz = it
                             context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE).edit()
                                 .putString(STUNDENSATZ_KEY, it).apply()
                         },
                         label = { Text("Stundensatz (€ / Stunde)") },
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                        colors = feldFarben,
                         modifier = Modifier.fillMaxWidth()
                     )
                 }
 
-                item { Text("Aktueller Gesamtbetrag: ${euro(gesamt)}", style = MaterialTheme.typography.headlineSmall) }
+                item {
+                    Text("Aktueller Gesamtbetrag: ${euro(gesamt)}", style = MaterialTheme.typography.headlineSmall)
+                }
 
                 item {
                     Button(
-                    onClick = {
-                        if (kunde.isBlank()) {
-                            android.widget.Toast.makeText(context, "Bitte Kundennamen eingeben.", 0).show()
-                        } else {
-                            val a = Auftrag(kunde.trim(), strasse.trim(), ort.trim(), leistung.trim(),
-                                arbeitsstunden, materialKosten, fahrtKosten, rate)
-                            val index = bearbeiteIndex
-                            if (index != null) {
-                                auftraege = auftraege.toMutableList().apply { set(index, a) }
-                                speichereAuftraege(context, auftraege)
-                                bearbeiteIndex = null
-                                android.widget.Toast.makeText(context, "Auftrag geändert.", 0).show()
+                        onClick = {
+                            if (kunde.isBlank()) {
+                                android.widget.Toast.makeText(context, "Bitte Kundennamen eingeben.", 0).show()
                             } else {
-                                auftraege = auftraege + a
-                                speichereAuftraege(context, auftraege)
-                                android.widget.Toast.makeText(context, "Auftrag gespeichert.", 0).show()
+                                val a = Auftrag(
+                                    kunde.trim(), strasse.trim(), ort.trim(), leistung.trim(),
+                                    arbeitsstunden, materialKosten, fahrtKosten, rate
+                                )
+                                val index = bearbeiteIndex
+                                if (index != null) {
+                                    auftraege = auftraege.toMutableList().apply { set(index, a) }
+                                    speichereAuftraege(context, auftraege)
+                                    bearbeiteIndex = null
+                                    android.widget.Toast.makeText(context, "Auftrag geändert.", 0).show()
+                                } else {
+                                    auftraege = auftraege + a
+                                    speichereAuftraege(context, auftraege)
+                                    android.widget.Toast.makeText(context, "Auftrag gespeichert.", 0).show()
+                                }
+                                kunde = ""
+                                strasse = ""
+                                ort = ""
+                                leistung = ""
+                                stunden = ""
+                                material = ""
+                                fahrt = ""
                             }
-                            kunde = ""; strasse = ""; ort = ""; leistung = ""
-                            stunden = ""; material = ""; fahrt = ""
-                        }
-                    },
-                    modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp),
-                    shape = RoundedCornerShape(28.dp),
-                    colors = ButtonDefaults.buttonColors(containerColor = KuemmeroGreen)
-                ) {
-                    Text(if (bearbeiteIndex != null) "Änderungen speichern" else "Auftrag speichern", fontWeight = FontWeight.Bold)
-                }
+                        },
+                        modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp),
+                        shape = RoundedCornerShape(28.dp),
+                        colors = ButtonDefaults.buttonColors(containerColor = KuemmeroGreen)
+                    ) {
+                        Text(
+                            if (bearbeiteIndex != null) "Änderungen speichern" else "Auftrag speichern",
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
                 }
 
                 if (bearbeiteIndex != null) {
                     item {
                         OutlinedButton(
+                            onClick = {
+                                bearbeiteIndex = null
+                                kunde = ""
+                                strasse = ""
+                                ort = ""
+                                leistung = ""
+                                stunden = ""
+                                material = ""
+                                fahrt = ""
+                            },
+                            modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp),
+                            shape = RoundedCornerShape(26.dp),
+                            colors = ButtonDefaults.outlinedButtonColors(contentColor = KuemmeroGreen)
+                        ) {
+                            Text("Bearbeiten abbrechen", fontWeight = FontWeight.SemiBold)
+                        }
+                    }
+                }
+
+                item {
+                    Button(
                         onClick = {
-                            bearbeiteIndex = null
-                            kunde = ""; strasse = ""; ort = ""; leistung = ""
-                            stunden = ""; material = ""; fahrt = ""
+                            if (kunde.isBlank()) {
+                                android.widget.Toast.makeText(context, "Bitte Kundennamen eingeben.", 0).show()
+                            } else {
+                                pdfLauncher.launch("KÜMMERO-Angebot-$nummer.pdf")
+                            }
                         },
-                        modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp),
-                        shape = RoundedCornerShape(26.dp),
+                        modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp),
+                        shape = RoundedCornerShape(28.dp),
+                        colors = ButtonDefaults.buttonColors(containerColor = KuemmeroGreenLight)
+                    ) {
+                        Text("PDF-Angebot erstellen", fontWeight = FontWeight.Bold)
+                    }
+                }
+
+                item {
+                    OutlinedButton(
+                        onClick = { createBackup.launch("kuemmero-backup.json") },
+                        modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp),
+                        shape = RoundedCornerShape(28.dp),
+                        border = BorderStroke(2.dp, KuemmeroGreen),
                         colors = ButtonDefaults.outlinedButtonColors(contentColor = KuemmeroGreen)
                     ) {
-                        Text("Bearbeiten abbrechen", fontWeight = FontWeight.SemiBold)
-                    }
+                        Text("Sicherung speichern", fontWeight = FontWeight.SemiBold)
                     }
                 }
 
                 item {
                     Button(
-                    onClick = {
-                        if (kunde.isBlank()) {
-                            android.widget.Toast.makeText(context, "Bitte Kundennamen eingeben.", 0).show()
-                        } else {
-                            pdfLauncher.launch("KÜMMERO-Angebot-$nummer.pdf")
-                        }
-                    },
-                    modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp),
-                    shape = RoundedCornerShape(28.dp),
-                    colors = ButtonDefaults.buttonColors(containerColor = KuemmeroGreenLight)
-                ) { Text("PDF-Angebot erstellen", fontWeight = FontWeight.Bold) }
+                        onClick = {
+                            restoreBackup.launch(arrayOf("application/json", "text/plain", "application/octet-stream"))
+                        },
+                        modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp),
+                        shape = RoundedCornerShape(28.dp),
+                        colors = ButtonDefaults.buttonColors(containerColor = KuemmeroGreenLight)
+                    ) {
+                        Text("Daten wiederherstellen", fontWeight = FontWeight.Bold)
+                    }
                 }
 
                 item {
                     OutlinedButton(
-                    onClick = { createBackup.launch("kuemmero-backup.json") },
-                    modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp),
-                    shape = RoundedCornerShape(28.dp),
-                    border = BorderStroke(2.dp, KuemmeroGreen),
-                    colors = ButtonDefaults.outlinedButtonColors(contentColor = KuemmeroGreen)
-                ) { Text("Sicherung speichern", fontWeight = FontWeight.SemiBold) }
-                }
-                item {
-                    Button(
-                    onClick = {
-                        restoreBackup.launch(arrayOf("application/json", "text/plain", "application/octet-stream"))
-                    },
-                    modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp),
-                    shape = RoundedCornerShape(28.dp),
-                    colors = ButtonDefaults.buttonColors(containerColor = KuemmeroGreenLight)
-                ) { Text("Daten wiederherstellen", fontWeight = FontWeight.Bold) }
-                }
-                item {
-                    OutlinedButton(
-                    onClick = {
-                        val ok = sichereBackupAutomatisch(context)
-                        android.widget.Toast.makeText(
-                            context,
-                            if (ok) "Sicherung aktualisiert." else "Bitte zuerst eine Backup-Datei speichern.",
-                            1
-                        ).show()
-                    },
-                    modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp),
-                    shape = RoundedCornerShape(28.dp),
-                    border = BorderStroke(2.dp, KuemmeroGreen),
-                    colors = ButtonDefaults.outlinedButtonColors(contentColor = KuemmeroGreen)
-                ) { Text("Sicherung jetzt aktualisieren", fontWeight = FontWeight.SemiBold) }
+                        onClick = {
+                            val ok = sichereBackupAutomatisch(context)
+                            android.widget.Toast.makeText(
+                                context,
+                                if (ok) "Sicherung aktualisiert." else "Bitte zuerst eine Backup-Datei speichern.",
+                                1
+                            ).show()
+                        },
+                        modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp),
+                        shape = RoundedCornerShape(26.dp),
+                        border = BorderStroke(2.dp, KuemmeroGreen),
+                        colors = ButtonDefaults.outlinedButtonColors(contentColor = KuemmeroGreen)
+                    ) {
+                        Text("Sicherung jetzt aktualisieren", fontWeight = FontWeight.SemiBold)
+                    }
                 }
 
                 item { HorizontalDivider() }
@@ -674,58 +753,68 @@ fun KuemmeroApp() {
                         shape = RoundedCornerShape(22.dp)
                     ) {
                         Column(Modifier.padding(16.dp)) {
-                            Text(a.kunde, style = MaterialTheme.typography.titleLarge, color = KuemmeroText, fontWeight = FontWeight.Bold)
-                            if (a.kundenStrasse.isNotBlank() || a.kundenOrt.isNotBlank())
-                                Text(listOf(a.kundenStrasse, a.kundenOrt).filter { it.isNotBlank() }.joinToString(", "))
+                            Text(
+                                a.kunde,
+                                style = MaterialTheme.typography.titleLarge,
+                                color = KuemmeroText,
+                                fontWeight = FontWeight.Bold
+                            )
+                            if (a.kundenStrasse.isNotBlank() || a.kundenOrt.isNotBlank()) {
+                                Text(
+                                    listOf(a.kundenStrasse, a.kundenOrt)
+                                        .filter { it.isNotBlank() }
+                                        .joinToString(", ")
+                                )
+                            }
                             Text(a.leistung)
                             Text(euro(a.stunden * a.stundensatz + a.material + a.fahrt))
 
                             Button(
-                            onClick = {
-                                bearbeiteIndex = index
-                                kunde = a.kunde
-                                strasse = a.kundenStrasse
-                                ort = a.kundenOrt
-                                leistung = a.leistung
-                                stunden = a.stunden.toString().replace(".", ",")
-                                material = a.material.toString().replace(".", ",")
-                                fahrt = a.fahrt.toString().replace(".", ",")
-                                stundensatz = a.stundensatz.toString().replace(".", ",")
-                            },
-                            modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp),
-                            shape = RoundedCornerShape(26.dp),
-                            colors = ButtonDefaults.buttonColors(containerColor = KuemmeroGreen)
-                        ) {
-                            Text("Auftrag bearbeiten", fontWeight = FontWeight.Bold)
-                        }
+                                onClick = {
+                                    bearbeiteIndex = index
+                                    kunde = a.kunde
+                                    strasse = a.kundenStrasse
+                                    ort = a.kundenOrt
+                                    leistung = a.leistung
+                                    stunden = a.stunden.toString().replace(".", ",")
+                                    material = a.material.toString().replace(".", ",")
+                                    fahrt = a.fahrt.toString().replace(".", ",")
+                                    stundensatz = a.stundensatz.toString().replace(".", ",")
+                                },
+                                modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp),
+                                shape = RoundedCornerShape(26.dp),
+                                colors = ButtonDefaults.buttonColors(containerColor = KuemmeroGreen)
+                            ) {
+                                Text("Auftrag bearbeiten", fontWeight = FontWeight.Bold)
+                            }
 
                             Button(
-                            onClick = {
-                                druckePdf(
-                                    context,
-                                    "KÜMMERO-Angebot-${a.kunde}.pdf",
-                                    nummer,
-                                    datum,
-                                    gueltigBis,
-                                    a
-                                )
-                            },
-                            modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp),
-                            shape = RoundedCornerShape(26.dp),
-                            colors = ButtonDefaults.buttonColors(containerColor = KuemmeroGreenLight)
-                        ) {
-                            Text("PDF drucken", fontWeight = FontWeight.Bold)
-                        }
+                                onClick = {
+                                    druckePdf(
+                                        context,
+                                        "KÜMMERO-Angebot-${a.kunde}.pdf",
+                                        nummer,
+                                        datum,
+                                        gueltigBis,
+                                        a
+                                    )
+                                },
+                                modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp),
+                                shape = RoundedCornerShape(26.dp),
+                                colors = ButtonDefaults.buttonColors(containerColor = KuemmeroGreenLight)
+                            ) {
+                                Text("PDF drucken", fontWeight = FontWeight.Bold)
+                            }
 
                             OutlinedButton(
-                            onClick = { loeschIndex = index },
-                            modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp),
-                            shape = RoundedCornerShape(26.dp),
-                            border = BorderStroke(2.dp, KuemmeroError),
-                            colors = ButtonDefaults.outlinedButtonColors(contentColor = KuemmeroError)
-                        ) {
-                            Text("Auftrag löschen", fontWeight = FontWeight.Bold)
-                        }
+                                onClick = { loeschIndex = index },
+                                modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp),
+                                shape = RoundedCornerShape(26.dp),
+                                border = BorderStroke(2.dp, KuemmeroError),
+                                colors = ButtonDefaults.outlinedButtonColors(contentColor = KuemmeroError)
+                            ) {
+                                Text("Auftrag löschen", fontWeight = FontWeight.Bold)
+                            }
                         }
                     }
                 }
