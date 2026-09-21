@@ -29,9 +29,11 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.ui.text.input.KeyboardType
@@ -928,21 +930,36 @@ fun KuemmeroApp() {
 
                 item {
                     Text("Auftragsstatus", fontWeight = FontWeight.Bold, color = KuemmeroText)
+                    Spacer(Modifier.height(8.dp))
                     Row(
                         modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
                     ) {
                         listOf("Offen", "In Bearbeitung", "Erledigt", "Abgerechnet").forEach { option ->
-                            FilterChip(
-                                selected = status == option,
-                                onClick = { status = option },
-                                label = { Text(option) },
-                                colors = FilterChipDefaults.filterChipColors(
-                                    selectedContainerColor = KuemmeroGreen,
-                                    selectedLabelColor = Color.White,
-                                    containerColor = KuemmeroMint
-                                )
-                            )
+                            val aktiv = status == option
+                            Surface(
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .height(52.dp)
+                                    .clickable { status = option },
+                                shape = RoundedCornerShape(14.dp),
+                                color = if (aktiv) KuemmeroGreen else KuemmeroMint,
+                                border = BorderStroke(1.5.dp, if (aktiv) KuemmeroGreen else Color(0xFF7A8A82))
+                            ) {
+                                Box(
+                                    modifier = Modifier.fillMaxSize(),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Text(
+                                        option,
+                                        color = if (aktiv) Color.White else KuemmeroText,
+                                        fontWeight = if (aktiv) FontWeight.Bold else FontWeight.Normal,
+                                        fontSize = 12.sp,
+                                        maxLines = 1,
+                                        softWrap = false
+                                    )
+                                }
+                            }
                         }
                     }
                 }
