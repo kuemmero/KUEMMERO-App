@@ -1234,7 +1234,7 @@ fun KuemmeroApp() {
                                 .edit().remove(BACKUP_URI_KEY).apply()
                             android.widget.Toast.makeText(
                                 context,
-                                "Die bisherige Sicherungsdatei ist nicht erreichbar. Bitte die vorhandene Sicherungsdatei auswählen.",
+                                "Sicherungsdatei nicht erreichbar. Bitte die vorhandene kuemmero-backup.json auswählen.",
                                 android.widget.Toast.LENGTH_LONG
                             ).show()
                             backupDateiAuswaehlen.launch(arrayOf("application/json", "text/plain", "application/octet-stream"))
