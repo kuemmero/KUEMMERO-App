@@ -103,8 +103,17 @@ private fun zahl(text: String, standard: Double = 0.0): Double =
     text.replace("€", "").replace(" ", "").replace(",", ".").trim()
         .toDoubleOrNull() ?: standard
 
+private fun runde2(value: Double): Double =
+    kotlin.math.round(value * 100.0) / 100.0
+
+private fun arbeitsbetrag(stunden: Double, stundensatz: Double): Double =
+    runde2(runde2(stunden) * runde2(stundensatz))
+
+private fun gesamtbetrag(stunden: Double, material: Double, fahrt: Double, stundensatz: Double): Double =
+    runde2(arbeitsbetrag(stunden, stundensatz) + runde2(material) + runde2(fahrt))
+
 private fun euro(value: Double): String =
-    String.format(Locale.GERMANY, "%.2f €", value)
+    String.format(Locale.GERMANY, "%.2f €", runde2(value))
 
 private fun ladeAuftraege(context: Context): List<Auftrag> {
     val raw = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
@@ -325,13 +334,13 @@ private fun erstellePdf(
     c.drawLine(40f, 423f, 550f, 423f, p)
     c.drawText("Arbeitszeit", 40f, 448f, p)
     c.drawText("%.2f Std.".format(Locale.GERMANY, stunden), 250f, 448f, p)
-    c.drawText(euro(stunden * stundensatz), 450f, 448f, p)
+    c.drawText(euro(arbeitsbetrag(stunden, stundensatz)), 450f, 448f, p)
     c.drawText("Material", 40f, 473f, p)
     c.drawText(euro(material), 450f, 473f, p)
     c.drawText("Fahrtkosten", 40f, 498f, p)
     c.drawText(euro(fahrt), 450f, 498f, p)
     c.drawLine(40f, 513f, 550f, 513f, p)
-    val gesamt = stunden * stundensatz + material + fahrt
+    val gesamt = gesamtbetrag(stunden, material, fahrt, stundensatz)
     p.textSize = 18f
     c.drawText("Gesamtsumme: ${euro(gesamt)}", 40f, 548f, p)
     p.textSize = 11f
@@ -400,14 +409,14 @@ private fun erstelleRechnungPdf(
     c.drawLine(40f, 420f, 550f, 420f, p)
     c.drawText("Arbeitszeit", 40f, 445f, p)
     c.drawText("%.2f Std.".format(Locale.GERMANY, stunden), 250f, 445f, p)
-    c.drawText(euro(stunden * stundensatz), 450f, 445f, p)
+    c.drawText(euro(arbeitsbetrag(stunden, stundensatz)), 450f, 445f, p)
     c.drawText("Material", 40f, 470f, p)
     c.drawText(euro(material), 450f, 470f, p)
     c.drawText("Fahrtkosten", 40f, 495f, p)
     c.drawText(euro(fahrt), 450f, 495f, p)
     c.drawLine(40f, 510f, 550f, 510f, p)
 
-    val gesamt = stunden * stundensatz + material + fahrt
+    val gesamt = gesamtbetrag(stunden, material, fahrt, stundensatz)
     p.textSize = 18f
     c.drawText("Gesamtsumme: ${euro(gesamt)}", 40f, 550f, p)
     p.textSize = 11f
@@ -417,11 +426,11 @@ private fun erstelleRechnungPdf(
     val signBitmap = ladeUnterschriftBitmap(unterschriftPfad)
     if (signBitmap != null) {
         val maxW = 225f
-        val maxH = 34f
+        val maxH = 30f
         val scale = minOf(maxW / signBitmap.width.toFloat(), maxH / signBitmap.height.toFloat())
         val drawW = signBitmap.width * scale
         val drawH = signBitmap.height * scale
-        c.drawBitmap(signBitmap, null, android.graphics.RectF(40f, 622f, 40f + drawW, 622f + drawH), null)
+        c.drawBitmap(signBitmap, null, android.graphics.RectF(40f, 635f, 40f + drawW, 635f + drawH), null)
         signBitmap.recycle()
     }
     c.drawLine(40f, 675f, 280f, 675f, p)
@@ -781,15 +790,15 @@ fun KuemmeroApp() {
     val materialKosten = zahl(material)
     val fahrtKosten = zahl(fahrt)
     val rate = zahl(stundensatz, 42.0)
-    val gesamt = arbeitsstunden * rate + materialKosten + fahrtKosten
-    val umsatz = auftraege.sumOf { it.stunden * it.stundensatz + it.material + it.fahrt }
+    val gesamt = gesamtbetrag(arbeitsstunden, materialKosten, fahrtKosten, rate)
+    val umsatz = auftraege.sumOf { gesamtbetrag(it.stunden, it.material, it.fahrt, it.stundensatz) }
 
     val heuteText = datumFormat.format(Date())
     val termineHeute = auftraege.filter { it.terminDatum == heuteText }
         .sortedBy { it.terminUhrzeit }
     val offeneAuftraege = auftraege.count { it.status != "Abgerechnet" }
     val offeneZahlungen = auftraege.filter { it.zahlungsstatus != "Bezahlt" }
-    val offeneZahlungSumme = offeneZahlungen.sumOf { it.stunden * it.stundensatz + it.material + it.fahrt }
+    val offeneZahlungSumme = offeneZahlungen.sumOf { gesamtbetrag(it.stunden, it.material, it.fahrt, it.stundensatz) }
     val naechsteTermine = auftraege.filter { it.terminDatum.isNotBlank() }
         .sortedWith(compareBy<Auftrag> {
             try { datumFormat.parse(it.terminDatum)?.time ?: Long.MAX_VALUE } catch (_: Exception) { Long.MAX_VALUE }
@@ -1020,14 +1029,14 @@ fun KuemmeroApp() {
                     if (kundeAkte?.email?.isNotBlank() == true) Text("E-Mail: ${kundeAkte.email}")
                     HorizontalDivider()
                     Text("Aufträge: ${kundenAuftraege.size}", fontWeight = FontWeight.Bold)
-                    Text("Umsatz: ${euro(kundenAuftraege.sumOf { it.stunden * it.stundensatz + it.material + it.fahrt })}")
+                    Text("Umsatz: ${euro(kundenAuftraege.sumOf { gesamtbetrag(it.stunden, it.material, it.fahrt, it.stundensatz) })}")
                     val offen = kundenAuftraege.filter { it.zahlungsstatus != "Bezahlt" }
-                    Text("Offene Zahlungen: ${euro(offen.sumOf { it.stunden * it.stundensatz + it.material + it.fahrt })}", color = if (offen.isEmpty()) KuemmeroGreen else KuemmeroError, fontWeight = FontWeight.Bold)
+                    Text("Offene Zahlungen: ${euro(offen.sumOf { gesamtbetrag(it.stunden, it.material, it.fahrt, it.stundensatz) })}", color = if (offen.isEmpty()) KuemmeroGreen else KuemmeroError, fontWeight = FontWeight.Bold)
                     val rechnungen = kundenAuftraege.filter { it.rechnungsnummer.isNotBlank() }
                     Text("Rechnungen: ${rechnungen.size}", fontWeight = FontWeight.Bold)
                     rechnungen.takeLast(5).reversed().forEach { r ->
                         Text(
-                            "${r.rechnungsnummer} · ${euro(r.stunden * r.stundensatz + r.material + r.fahrt)} · ${if (r.zahlungsstatus == "Bezahlt") "Bezahlt" else "Offen"}",
+                            "${r.rechnungsnummer} · ${euro(gesamtbetrag(r.stunden, r.material, r.fahrt, r.stundensatz))} · ${if (r.zahlungsstatus == "Bezahlt") "Bezahlt" else "Offen"}",
                             color = if (r.zahlungsstatus == "Bezahlt") KuemmeroGreen else KuemmeroError,
                             style = MaterialTheme.typography.bodySmall
                         )
@@ -1632,7 +1641,7 @@ fun KuemmeroApp() {
 
                 item {
                     val offeneAuftraege = auftraege.filter { it.zahlungsstatus != "Bezahlt" }
-                    val offeneSumme = offeneAuftraege.sumOf { it.stunden * it.stundensatz + it.material + it.fahrt }
+                    val offeneSumme = offeneAuftraege.sumOf { gesamtbetrag(it.stunden, it.material, it.fahrt, it.stundensatz) }
                     Card(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -1770,7 +1779,7 @@ fun KuemmeroApp() {
                                 Text(a.leistung)
                             }
                             Text(
-                                euro(a.stunden * a.stundensatz + a.material + a.fahrt),
+                                euro(gesamtbetrag(a.stunden, a.material, a.fahrt, a.stundensatz)),
                                 style = MaterialTheme.typography.titleMedium,
                                 color = KuemmeroGreen,
                                 fontWeight = FontWeight.Bold
@@ -1892,7 +1901,7 @@ fun KuemmeroApp() {
                                 } else {
                                     OutlinedButton(
                                         onClick = {
-                                            val neueStunden = gespeicherteZeit / 3600.0
+                                            val neueStunden = runde2(gespeicherteZeit / 3600.0)
                                             val aktualisiert = a.copy(
                                                 stunden = neueStunden,
                                                 arbeitszeitUebernommen = true
