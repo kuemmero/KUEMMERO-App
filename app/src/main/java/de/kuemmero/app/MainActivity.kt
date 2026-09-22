@@ -34,7 +34,6 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
@@ -66,6 +65,16 @@ import java.util.Locale
 import kotlinx.coroutines.delay
 
 private const val RECHNUNG_SCAN_PREFIX = "rechnung_scan_"
+private const val RECHNUNGSNUMMER_COUNTER_KEY = "rechnungsnummer_counter"
+
+private fun naechsteRechnungsnummer(context: Context): String {
+    val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+    val jahr = SimpleDateFormat("yyyy", Locale.GERMANY).format(Date())
+    val key = RECHNUNGSNUMMER_COUNTER_KEY + "_" + jahr
+    val naechste = prefs.getInt(key, 0) + 1
+    prefs.edit().putInt(key, naechste).commit()
+    return "RE-$jahr-" + naechste.toString().padStart(4, '0')
+}
 
 private fun rechnungScanKey(auftrag: Auftrag): String =
     RECHNUNG_SCAN_PREFIX + auftrag.nummer
@@ -496,7 +505,7 @@ private fun erstellePdf(
     c.drawText("E-Mail: ${firmenEmail.ifBlank { "bitte eintragen" }}", 40f, 204f, p)
     c.drawText(dokumentTitel, 40f, 233f, p)
     p.textSize = 12f
-    c.drawText("Dokumentnummer: $nummer", 40f, 258f, p)
+    c.drawText("Angebotsnummer: $nummer", 40f, 258f, p)
     c.drawText("Datum: $datum", 40f, 278f, p)
     c.drawText("Gültig bis: $gueltigBis", 40f, 298f, p)
     c.drawText("Kunde: $kunde", 40f, 328f, p)
@@ -525,7 +534,7 @@ private fun erstellePdf(
     val unterschriftTitelY = if (dokumentTitel.contains("KOSTENVORANSCHLAG", ignoreCase = true) && erstellungskosten > 0.0) 650f else 628f
     if (dokumentTitel.contains("KOSTENVORANSCHLAG", ignoreCase = true) && erstellungskosten > 0.0) {
         p.textSize = 11f
-        c.drawText("Hinweis: Die Erstellungskosten sind nur geschuldet, wenn dies vorab vereinbart wurde.", 40f, 628f, p)
+        c.drawText("Hinweis: Dieser Kostenvoranschlag ist kostenpflichtig.", 40f, 628f, p)
     }
     c.drawText("Auftragserteilung / Unterschrift Kunde:", 40f, unterschriftTitelY, p)
     val signBitmap = ladeUnterschriftBitmap(unterschriftPfad)
@@ -627,7 +636,7 @@ private fun erstelleRechnungPdf(
     p.textSize = 18f
     c.drawText("Gesamtsumme: ${euro(gesamt)}", 40f, rechnungY + 40f, p)
     p.textSize = 11f
-    c.drawText("Gemäß § 19 UStG wird keine Umsatzsteuer berechnet.", 40f, rechnungY + 68f, p)
+    c.drawText("Steuerbefreiung für Kleinunternehmer gemäß § 19 UStG.\nEs wird keine Umsatzsteuer berechnet.", 40f, rechnungY + 68f, p)
     c.drawText("Bitte überweisen Sie den Rechnungsbetrag bis zum $faelligAm.", 40f, rechnungY + 90f, p)
     c.drawText("Vielen Dank für Ihr Vertrauen.", 40f, rechnungY + 115f, p)
     pdf.finishPage(page)
@@ -1012,11 +1021,9 @@ fun KuemmeroApp() {
     var fotoVorschauUri by remember { mutableStateOf<String?>(null) }
     var auftragsSuche by remember { mutableStateOf("") }
     var statusFilter by remember { mutableStateOf("Alle") }
-    var dashboardAuftragsFilter by remember { mutableStateOf<String?>(null) }
     var zahlungsFilterOffen by remember { mutableStateOf(false) }
     var kundenAkteName by remember { mutableStateOf<String?>(null) }
     var kalenderOffen by remember { mutableStateOf(false) }
-    var dashboardErgebnis by remember { mutableStateOf<String?>(null) }
     var terminBereichOffen by remember { mutableStateOf(false) }
     var notizBereichOffen by remember { mutableStateOf(false) }
     var fotosBereichOffen by remember { mutableStateOf(false) }
@@ -1347,7 +1354,7 @@ fun KuemmeroApp() {
                     return@rememberLauncherForActivityResult
                 }
                 try {
-                    val rechnungsnummer = "RE-" + SimpleDateFormat("yyyyMMdd-HHmmss", Locale.GERMANY).format(Date())
+                    val rechnungsnummer = naechsteRechnungsnummer(context)
                     val rechnungsdatum = datumFormat.format(Date())
                     val faelligCal = Calendar.getInstance().apply { add(Calendar.DAY_OF_YEAR, 14) }
                     val faelligAm = datumFormat.format(faelligCal.time)
@@ -1402,7 +1409,7 @@ fun KuemmeroApp() {
     val heuteText = datumFormat.format(Date())
     val termineHeute = auftraege.filter { it.terminDatum == heuteText }
         .sortedBy { it.terminUhrzeit }
-    val offeneAuftraege = auftraege.count { it.status == "Offen" || it.status == "In Bearbeitung" }
+    val offeneAuftraege = auftraege.count { it.status != "Abgerechnet" }
     val offeneZahlungen = auftraege.filter { it.zahlungsstatus != "Bezahlt" }
     val offeneZahlungSumme = offeneZahlungen.sumOf { gesamtbetrag(it.stunden, it.material, it.fahrt, it.stundensatz, it.erstellungskosten) }
     val naechsteTermine = auftraege.filter { it.terminDatum.isNotBlank() }
@@ -1779,124 +1786,6 @@ fun KuemmeroApp() {
         )
     }
 
-    if (dashboardErgebnis != null) {
-        val titel = when (dashboardErgebnis) {
-            "Termine" -> "Heutige Termine"
-            "OffeneAuftraege" -> "Offene Aufträge"
-            "Abgearbeitet" -> "Abgearbeitete Aufträge"
-            "OffeneZahlungen" -> "Offene Zahlungen"
-            else -> "Ergebnis"
-        }
-
-        val ergebnisAuftraege = when (dashboardErgebnis) {
-            "Termine" -> termineHeute
-            "OffeneAuftraege" -> auftraege.filter {
-                it.status == "Offen" || it.status == "In Bearbeitung"
-            }
-            "Abgearbeitet" -> auftraege.filter {
-                it.status == "Erledigt" || it.status == "Abgerechnet"
-            }
-            "OffeneZahlungen" -> auftraege.filter {
-                it.zahlungsstatus != "Bezahlt"
-            }
-            else -> emptyList()
-        }
-
-        AlertDialog(
-            onDismissRequest = { dashboardErgebnis = null },
-            title = {
-                Text("$titel · ${ergebnisAuftraege.size}")
-            },
-            text = {
-                if (ergebnisAuftraege.isEmpty()) {
-                    Text(
-                        when (dashboardErgebnis) {
-                            "Termine" -> "Heute keine Termine."
-                            "OffeneAuftraege" -> "Keine offenen Aufträge."
-                            "Abgearbeitet" -> "Keine abgearbeiteten Aufträge."
-                            "OffeneZahlungen" -> "Keine offenen Zahlungen."
-                            else -> "Keine Ergebnisse."
-                        }
-                    )
-                } else {
-                    Column(
-                        Modifier
-                            .fillMaxWidth()
-                            .heightIn(max = 430.dp)
-                            .verticalScroll(rememberScrollState()),
-                        verticalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        ergebnisAuftraege.forEach { a ->
-                            val index = auftraege.indexOfFirst {
-                                it.nummer == a.nummer &&
-                                    it.kunde == a.kunde &&
-                                    it.datum == a.datum
-                            }
-
-                            Card(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .clickable {
-                                        dashboardErgebnis = null
-                                        dashboardAuftragsFilter = null
-                                        statusFilter = "Alle"
-                                        zahlungsFilterOffen = false
-                                        auftragsSuche = ""
-                                        if (index >= 0) {
-                                            hauptseite = "Aufträge"
-                                            auftragFormOffen = false
-                                            bearbeiteIndex = null
-                                            auftragDetailIndex = index
-                                        }
-                                    },
-                                colors = CardDefaults.cardColors(containerColor = KuemmeroMint),
-                                shape = RoundedCornerShape(14.dp)
-                            ) {
-                                Column(Modifier.padding(12.dp)) {
-                                    Text(
-                                        buildString {
-                                            if (a.terminDatum.isNotBlank()) {
-                                                append(a.terminDatum)
-                                                if (a.terminUhrzeit.isNotBlank()) append(" · ${a.terminUhrzeit}")
-                                                append(" · ")
-                                            }
-                                            append(a.kunde.ifBlank { "Ohne Kundenname" })
-                                        },
-                                        fontWeight = FontWeight.Bold,
-                                        color = KuemmeroGreen
-                                    )
-                                    if (a.leistung.isNotBlank()) {
-                                        Text(a.leistung, color = KuemmeroText)
-                                    }
-                                    Text(
-                                        when (dashboardErgebnis) {
-                                            "OffeneZahlungen" ->
-                                                "${euro(gesamtbetrag(a.stunden, a.material, a.fahrt, a.stundensatz, a.erstellungskosten))} · ${a.zahlungsstatus}"
-                                            else -> a.status
-                                        },
-                                        color = KuemmeroText,
-                                        style = MaterialTheme.typography.bodySmall
-                                    )
-                                    Text(
-                                        "Auftrag öffnen →",
-                                        color = KuemmeroGreen,
-                                        fontWeight = FontWeight.Bold,
-                                        style = MaterialTheme.typography.bodySmall
-                                    )
-                                }
-                            }
-                        }
-                    }
-                }
-            },
-            confirmButton = {
-                TextButton(onClick = { dashboardErgebnis = null }) {
-                    Text("Schließen")
-                }
-            }
-        )
-    }
-
     if (kalenderOffen) {
         AlertDialog(
             onDismissRequest = { kalenderOffen = false },
@@ -2046,15 +1935,7 @@ fun KuemmeroApp() {
                     ).forEach { (label, iconText, page) ->
                         NavigationBarItem(
                             selected = hauptseite == page,
-                            onClick = {
-                                hauptseite = page
-                                dashboardAuftragsFilter = null
-                                if (page == "Aufträge") {
-                                    statusFilter = "Alle"
-                                    zahlungsFilterOffen = false
-                                    auftragsSuche = ""
-                                }
-                            },
+                            onClick = { hauptseite = page },
                             icon = { Text(iconText, fontSize = 20.sp) },
                             label = { Text(label) },
                             colors = NavigationBarItemDefaults.colors(
@@ -2076,21 +1957,9 @@ fun KuemmeroApp() {
                 val passtSuche = suche.isBlank() || listOf(
                     a.kunde, a.nummer, a.datum, a.kundenStrasse, a.kundenOrt, a.leistung, a.status
                 ).any { it.lowercase(Locale.GERMANY).contains(suche) }
-                val passtDashboard = when (dashboardAuftragsFilter) {
-                    "OffeneAuftraege" -> a.status == "Offen" || a.status == "In Bearbeitung"
-                    "Abgearbeitet" -> a.status == "Erledigt" || a.status == "Abgerechnet"
-                    else -> true
-                }
-                val passtStatus = when (statusFilter) {
-                    "Alle" -> true
-                    "Offen" -> a.status == "Offen"
-                    "Erledigt" -> a.status == "Erledigt"
-                    "In Bearbeitung" -> a.status == "In Bearbeitung"
-                    "Abgerechnet" -> a.status == "Abgerechnet"
-                    else -> a.status == statusFilter
-                }
+                val passtStatus = statusFilter == "Alle" || a.status == statusFilter
                 val passtZahlung = !zahlungsFilterOffen || a.zahlungsstatus != "Bezahlt"
-                passtSuche && passtDashboard && passtStatus && passtZahlung
+                passtSuche && passtStatus && passtZahlung
             }
 
         if (hauptseite == "Aufträge") {
@@ -2725,7 +2594,7 @@ fun KuemmeroApp() {
                             Surface(
                                 modifier = Modifier
                                     .height(42.dp)
-                                    .clickable { dashboardAuftragsFilter = null; statusFilter = option },
+                                    .clickable { statusFilter = option },
                                 shape = RoundedCornerShape(21.dp),
                                 color = if (aktiv) KuemmeroGreen else KuemmeroMint,
                                 border = BorderStroke(1.5.dp, if (aktiv) KuemmeroGreen else Color(0xFF7A8A82))
@@ -3113,7 +2982,6 @@ fun KuemmeroApp() {
                                             a.kundenStrasse.isBlank() -> "Für die Rechnung fehlt die Kundenstraße / Hausnummer."
                                             a.kundenOrt.isBlank() -> "Für die Rechnung fehlt PLZ / Ort des Kunden."
                                             a.leistung.isBlank() -> "Für die Rechnung fehlt die Leistungsbeschreibung."
-                                            a.leistungsdatum.isBlank() && a.terminDatum.isBlank() && a.datum.isBlank() -> "Für die Rechnung fehlt das Leistungsdatum."
                                             else -> ""
                                         }
                                         if (fehlend.isNotBlank()) {
@@ -3201,93 +3069,67 @@ fun KuemmeroApp() {
                                 colors = CardDefaults.cardColors(containerColor = KuemmeroGreen),
                                 shape = RoundedCornerShape(22.dp)
                             ) {
-                                Column(
-                                    Modifier.padding(16.dp),
-                                    verticalArrangement = Arrangement.spacedBy(10.dp)
-                                ) {
-                                    Text(
-                                        "Heute · $heuteText",
-                                        color = Color.White,
-                                        style = MaterialTheme.typography.headlineSmall,
-                                        fontWeight = FontWeight.Bold
-                                    )
-
-                                    Row(
-                                        Modifier.fillMaxWidth(),
-                                        horizontalArrangement = Arrangement.spacedBy(10.dp)
-                                    ) {
-                                        Card(
-                                            modifier = Modifier
-                                                .weight(1f)
-                                                .height(92.dp)
-                                                .clickable { dashboardErgebnis = "Termine" },
-                                            colors = CardDefaults.cardColors(containerColor = KuemmeroMint),
-                                            shape = RoundedCornerShape(16.dp)
-                                        ) {
-                                            Column(
-                                                Modifier.fillMaxSize().padding(12.dp),
-                                                verticalArrangement = Arrangement.SpaceBetween
-                                            ) {
-                                                Text("Termine", color = KuemmeroText, fontWeight = FontWeight.SemiBold)
-                                                Text("${termineHeute.size}", color = KuemmeroGreen, fontSize = 25.sp, fontWeight = FontWeight.Bold)
+                                Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                                    Text("Heute · $heuteText", color = Color.White, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
+                                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                        Column(
+                                            Modifier.weight(1f).clickable {
+                                                hauptseite = "Kalender"
+                                                auftragFormOffen = false
+                                                auftragDetailIndex = null
+                                                statusFilter = "Alle"
+                                                zahlungsFilterOffen = false
+                                                auftragsSuche = ""
                                             }
+                                        ) {
+                                            Text("Termine", color = Color.White)
+                                            Text("${termineHeute.size}", color = Color.White, fontSize = 26.sp, fontWeight = FontWeight.Bold)
                                         }
-
-                                        Card(
-                                            modifier = Modifier
-                                                .weight(1f)
-                                                .height(92.dp)
-                                                .clickable { dashboardErgebnis = "OffeneAuftraege" },
-                                            colors = CardDefaults.cardColors(containerColor = KuemmeroMint),
-                                            shape = RoundedCornerShape(16.dp)
-                                        ) {
-                                            Column(
-                                                Modifier.fillMaxSize().padding(12.dp),
-                                                verticalArrangement = Arrangement.SpaceBetween
-                                            ) {
-                                                Text("Offene Aufträge", color = KuemmeroText, fontWeight = FontWeight.SemiBold)
-                                                Text("$offeneAuftraege", color = KuemmeroGreen, fontSize = 25.sp, fontWeight = FontWeight.Bold)
+                                        Column(
+                                            Modifier.weight(1f).clickable {
+                                                hauptseite = "Aufträge"
+                                                auftragFormOffen = false
+                                                auftragDetailIndex = null
+                                                bearbeiteIndex = null
+                                                statusFilter = "Offen"
+                                                zahlungsFilterOffen = false
+                                                auftragsSuche = ""
                                             }
+                                        ) {
+                                            Text("Offene Aufträge", color = Color.White)
+                                            Text("$offeneAuftraege", color = Color.White, fontSize = 26.sp, fontWeight = FontWeight.Bold)
+                                        }
+                                        Column(
+                                            Modifier.weight(1f).clickable {
+                                                hauptseite = "Aufträge"
+                                                auftragFormOffen = false
+                                                auftragDetailIndex = null
+                                                bearbeiteIndex = null
+                                                statusFilter = "Erledigt"
+                                                zahlungsFilterOffen = false
+                                                auftragsSuche = ""
+                                            }
+                                        ) {
+                                            Text("Abgearbeitet", color = Color.White)
+                                            Text("$abgearbeiteteAuftraege", color = Color.White, fontSize = 22.sp, fontWeight = FontWeight.Bold)
                                         }
                                     }
-
-                                    Row(
-                                        Modifier.fillMaxWidth(),
-                                        horizontalArrangement = Arrangement.spacedBy(10.dp)
-                                    ) {
-                                        Card(
-                                            modifier = Modifier
-                                                .weight(1f)
-                                                .height(92.dp)
-                                                .clickable { dashboardErgebnis = "Abgearbeitet" },
-                                            colors = CardDefaults.cardColors(containerColor = KuemmeroMint),
-                                            shape = RoundedCornerShape(16.dp)
-                                        ) {
-                                            Column(
-                                                Modifier.fillMaxSize().padding(12.dp),
-                                                verticalArrangement = Arrangement.SpaceBetween
-                                            ) {
-                                                Text("Abgearbeitet", color = KuemmeroText, fontWeight = FontWeight.SemiBold)
-                                                Text("$abgearbeiteteAuftraege", color = KuemmeroGreen, fontSize = 25.sp, fontWeight = FontWeight.Bold)
+                                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                        Column(
+                                            Modifier.weight(1f).clickable {
+                                                hauptseite = "Aufträge"
+                                                auftragFormOffen = false
+                                                auftragDetailIndex = null
+                                                bearbeiteIndex = null
+                                                statusFilter = "Alle"
+                                                zahlungsFilterOffen = true
+                                                auftragsSuche = ""
                                             }
-                                        }
-
-                                        Card(
-                                            modifier = Modifier
-                                                .weight(1f)
-                                                .height(92.dp)
-                                                .clickable { dashboardErgebnis = "OffeneZahlungen" },
-                                            colors = CardDefaults.cardColors(containerColor = KuemmeroMint),
-                                            shape = RoundedCornerShape(16.dp)
                                         ) {
-                                            Column(
-                                                Modifier.fillMaxSize().padding(12.dp),
-                                                verticalArrangement = Arrangement.SpaceBetween
-                                            ) {
-                                                Text("Offen €", color = KuemmeroText, fontWeight = FontWeight.SemiBold)
-                                                Text(euro(offeneZahlungSumme), color = KuemmeroGreen, fontSize = 19.sp, fontWeight = FontWeight.Bold)
-                                            }
+                                            Text("Offen €", color = Color.White)
+                                            Text(euro(offeneZahlungSumme), color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.Bold)
                                         }
+                                        Spacer(Modifier.weight(2f))
                                     }
                                 }
                             }
@@ -3667,7 +3509,7 @@ fun KuemmeroApp() {
                                         OutlinedTextField(kvErstellungskosten, { kvErstellungskosten = it }, label = { Text("Erstellungskosten (€)") }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal), colors = feldFarben, modifier = Modifier.fillMaxWidth())
                                         if (zahl(kvErstellungskosten) > 0.0) {
                                             Text(
-                                                "Hinweis: Erstellungskosten werden nur berechnet, wenn dies vorab vereinbart wurde.",
+                                                "Hinweis: Der Kostenvoranschlag ist kostenpflichtig. Die Erstellungskosten werden mit dem angegebenen Betrag ausgewiesen.",
                                                 color = KuemmeroError,
                                                 fontWeight = FontWeight.SemiBold,
                                                 fontSize = 12.sp
@@ -3681,17 +3523,8 @@ fun KuemmeroApp() {
                                         )
                                         Button(
                                             onClick = {
-                                                val fehlendKv = when {
-                                                    kvKunde.isBlank() -> "Für den Kostenvoranschlag fehlt der Kundenname."
-                                                    kvStrasse.isBlank() -> "Für den Kostenvoranschlag fehlt die Kundenstraße / Hausnummer."
-                                                    kvOrt.isBlank() -> "Für den Kostenvoranschlag fehlt PLZ / Ort des Kunden."
-                                                    kvLeistung.isBlank() -> "Für den Kostenvoranschlag fehlt die Leistungsbeschreibung."
-                                                    kvDatum.isBlank() -> "Für den Kostenvoranschlag fehlt das Datum."
-                                                    kvGueltigBis.isBlank() -> "Für den Kostenvoranschlag fehlt die Gültigkeitsdauer."
-                                                    else -> ""
-                                                }
-                                                if (fehlendKv.isNotBlank()) {
-                                                    android.widget.Toast.makeText(context, fehlendKv, android.widget.Toast.LENGTH_LONG).show()
+                                                if (kvKunde.isBlank()) {
+                                                    android.widget.Toast.makeText(context, "Bitte Kundennamen eingeben.", 0).show()
                                                 } else {
                                                     val k = Kostenvoranschlag(
                                                         kvNummer.trim(), kvDatum.trim(), kvGueltigBis.trim(),
