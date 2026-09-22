@@ -1891,7 +1891,7 @@ fun KuemmeroApp() {
                 NavigationBar(containerColor = KuemmeroSurface) {
                     listOf(
                         Triple("Heute", "⌂", "Heute"),
-                        Triple("Aufträge", "▣", "Aufträge"),
+                        Triple("Aufträge", "▤", "Aufträge"),
                         Triple("Kostenvoranschläge", "€", "Kostenvoranschläge"),
                         Triple("Kunden", "♙", "Kunden"),
                         Triple("Mehr", "⋯", "Mehr")
@@ -1904,7 +1904,7 @@ fun KuemmeroApp() {
                             colors = NavigationBarItemDefaults.colors(
                                 selectedIconColor = KuemmeroGreen,
                                 selectedTextColor = KuemmeroGreen,
-                                indicatorColor = KuemmeroMint,
+                                indicatorColor = Color.Transparent,
                                 unselectedIconColor = KuemmeroText,
                                 unselectedTextColor = KuemmeroText
                             )
@@ -3062,19 +3062,15 @@ fun KuemmeroApp() {
                                         Text("${naechsterTermin.terminDatum} · ${naechsterTermin.terminUhrzeit.ifBlank { "ohne Uhrzeit" }}", color = KuemmeroGreen, fontWeight = FontWeight.Bold)
                                         Text(naechsterTermin.kunde, color = KuemmeroText, style = MaterialTheme.typography.titleMedium)
                                         if (naechsterTermin.leistung.isNotBlank()) Text(naechsterTermin.leistung, color = KuemmeroText)
-                                        OutlinedButton(
+                                        Button(
                                             onClick = {
                                                 val index = auftraege.indexOfFirst { it.nummer == naechsterTermin.nummer && it.kunde == naechsterTermin.kunde && it.terminDatum == naechsterTermin.terminDatum }
                                                 if (index >= 0) { hauptseite = "Aufträge"; auftragFormOffen = false; auftragDetailIndex = index }
                                             },
                                             modifier = Modifier.fillMaxWidth().heightIn(min = 50.dp),
                                             shape = RoundedCornerShape(25.dp),
-                                            border = BorderStroke(1.5.dp, KuemmeroGreen),
-                                            colors = ButtonDefaults.outlinedButtonColors(
-                                                containerColor = KuemmeroSurface,
-                                                contentColor = KuemmeroGreen
-                                            )
-                                        ) { Text("Auftrag öffnen  →", fontWeight = FontWeight.Bold) }
+                                            colors = ButtonDefaults.buttonColors(containerColor = KuemmeroGreen)
+                                        ) { Text("Auftrag öffnen →", fontWeight = FontWeight.Bold) }
                                     }
                                 }
                             }
