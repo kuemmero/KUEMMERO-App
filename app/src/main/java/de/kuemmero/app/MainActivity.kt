@@ -1850,7 +1850,7 @@ fun KuemmeroApp() {
                 NavigationBar(containerColor = KuemmeroSurface) {
                     listOf(
                         Triple("Heute", "⌂", "Heute"),
-                        Triple("Aufträge", "▣", "Aufträge"),
+                        Triple("Aufträge", "▤", "Aufträge"),
                         Triple("Kostenvoranschläge", "€", "Kostenvoranschläge"),
                         Triple("Kunden", "♙", "Kunden"),
                         Triple("Mehr", "⋯", "Mehr")
