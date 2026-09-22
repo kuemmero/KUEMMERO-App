@@ -125,8 +125,11 @@ private const val KUNDEN_KEY = "kunden"
 private const val STUNDENSATZ_KEY = "stundensatz"
 private const val BACKUP_URI_KEY = "backup_uri"
 private const val KOSTENVORANSCHLAEGE_KEY = "kostenvoranschlaege"
+private const val FIRMENNAME_KEY = "firmen_name"
 private const val FIRMENSTRASSE_KEY = "firmen_strasse"
 private const val FIRMENPLZORT_KEY = "firmen_plz_ort"
+private const val FIRMENTELEFON_KEY = "firmen_telefon"
+private const val FIRMENEMAIL_KEY = "firmen_email"
 private const val STEUERNUMMER_KEY = "steuernummer"
 
 data class Kostenvoranschlag(
@@ -329,8 +332,11 @@ private fun backupText(context: Context): String {
     val p = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
     return JSONObject().apply {
         put("stundensatz", p.getString(STUNDENSATZ_KEY, "42.00") ?: "42.00")
+        put("firmenName", p.getString(FIRMENNAME_KEY, "Markus Becker") ?: "Markus Becker")
         put("firmenStrasse", p.getString(FIRMENSTRASSE_KEY, "") ?: "")
         put("firmenPlzOrt", p.getString(FIRMENPLZORT_KEY, "") ?: "")
+        put("firmenTelefon", p.getString(FIRMENTELEFON_KEY, "+49 176 16712509") ?: "+49 176 16712509")
+        put("firmenEmail", p.getString(FIRMENEMAIL_KEY, "kuemmero@web.de") ?: "kuemmero@web.de")
         put("steuernummer", p.getString(STEUERNUMMER_KEY, "") ?: "")
         put("auftraege", JSONArray(p.getString(AUFTRAEGE_KEY, "[]") ?: "[]"))
         put("kunden", JSONArray(p.getString(KUNDEN_KEY, "[]") ?: "[]"))
@@ -473,15 +479,18 @@ private fun erstellePdf(
     p.textSize = 13f
     c.drawText("Haus & Alltag – wir kümmern uns.", 40f, 88f, p)
     c.drawText("Hausmeisterservice & Seniorenbetreuung", 40f, 108f, p)
-    c.drawText("Markus Becker", 40f, 132f, p)
     val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+    val firmenName = prefs.getString(FIRMENNAME_KEY, "Markus Becker") ?: "Markus Becker"
     val firmenStrasse = prefs.getString(FIRMENSTRASSE_KEY, "") ?: ""
     val firmenPlzOrt = prefs.getString(FIRMENPLZORT_KEY, "") ?: ""
+    val firmenTelefon = prefs.getString(FIRMENTELEFON_KEY, "+49 176 16712509") ?: "+49 176 16712509"
+    val firmenEmail = prefs.getString(FIRMENEMAIL_KEY, "kuemmero@web.de") ?: "kuemmero@web.de"
     val steuernummer = prefs.getString(STEUERNUMMER_KEY, "") ?: ""
+    c.drawText(firmenName.ifBlank { "Name / Inhaber: bitte eintragen" }, 40f, 132f, p)
     c.drawText(firmenStrasse.ifBlank { "Firmenstraße / Hausnummer: bitte eintragen" }, 40f, 150f, p)
     c.drawText(firmenPlzOrt.ifBlank { "PLZ / Ort: bitte eintragen" }, 40f, 168f, p)
-    c.drawText("Telefon: +49 176 16712509", 40f, 186f, p)
-    c.drawText("E-Mail: kuemmero@web.de", 40f, 204f, p)
+    c.drawText("Telefon: ${firmenTelefon.ifBlank { "bitte eintragen" }}", 40f, 186f, p)
+    c.drawText("E-Mail: ${firmenEmail.ifBlank { "bitte eintragen" }}", 40f, 204f, p)
     c.drawText(dokumentTitel, 40f, 233f, p)
     p.textSize = 12f
     c.drawText("Angebotsnummer: $nummer", 40f, 258f, p)
@@ -561,15 +570,18 @@ private fun erstelleRechnungPdf(
     p.textSize = 13f
     c.drawText("Haus & Alltag – wir kümmern uns.", 40f, 88f, p)
     c.drawText("Hausmeisterservice & Seniorenbetreuung", 40f, 108f, p)
-    c.drawText("Markus Becker", 40f, 132f, p)
     val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+    val firmenName = prefs.getString(FIRMENNAME_KEY, "Markus Becker") ?: "Markus Becker"
     val firmenStrasse = prefs.getString(FIRMENSTRASSE_KEY, "") ?: ""
     val firmenPlzOrt = prefs.getString(FIRMENPLZORT_KEY, "") ?: ""
+    val firmenTelefon = prefs.getString(FIRMENTELEFON_KEY, "+49 176 16712509") ?: "+49 176 16712509"
+    val firmenEmail = prefs.getString(FIRMENEMAIL_KEY, "kuemmero@web.de") ?: "kuemmero@web.de"
     val steuernummer = prefs.getString(STEUERNUMMER_KEY, "") ?: ""
+    c.drawText(firmenName.ifBlank { "Name / Inhaber: bitte eintragen" }, 40f, 132f, p)
     c.drawText(firmenStrasse.ifBlank { "Firmenstraße / Hausnummer: bitte eintragen" }, 40f, 150f, p)
     c.drawText(firmenPlzOrt.ifBlank { "PLZ / Ort: bitte eintragen" }, 40f, 168f, p)
-    c.drawText("Telefon: +49 176 16712509", 40f, 186f, p)
-    c.drawText("E-Mail: kuemmero@web.de", 40f, 186f, p)
+    c.drawText("Telefon: ${firmenTelefon.ifBlank { "bitte eintragen" }}", 40f, 186f, p)
+    c.drawText("E-Mail: ${firmenEmail.ifBlank { "bitte eintragen" }}", 40f, 204f, p)
 
     p.textSize = 18f
     c.drawText("RECHNUNG", 40f, 230f, p)
@@ -1000,8 +1012,11 @@ fun KuemmeroApp() {
     var arbeitszeitAendernIndex by remember { mutableStateOf<Int?>(null) }
     var arbeitszeitNeu by remember { mutableStateOf("") }
     var kvKundenDialog by remember { mutableStateOf(false) }
+    var unternehmerName by remember { mutableStateOf(context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE).getString(FIRMENNAME_KEY, "Markus Becker") ?: "Markus Becker") }
     var unternehmerStrasse by remember { mutableStateOf(context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE).getString(FIRMENSTRASSE_KEY, "") ?: "") }
     var unternehmerPlzOrt by remember { mutableStateOf(context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE).getString(FIRMENPLZORT_KEY, "") ?: "") }
+    var unternehmerTelefon by remember { mutableStateOf(context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE).getString(FIRMENTELEFON_KEY, "+49 176 16712509") ?: "+49 176 16712509") }
+    var unternehmerEmail by remember { mutableStateOf(context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE).getString(FIRMENEMAIL_KEY, "kuemmero@web.de") ?: "kuemmero@web.de") }
     var steuernummer by remember { mutableStateOf(context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE).getString(STEUERNUMMER_KEY, "") ?: "") }
     var auftragDetailIndex by remember { mutableStateOf<Int?>(null) }
     var auftragFormOffen by remember { mutableStateOf(false) }
@@ -1174,23 +1189,32 @@ fun KuemmeroApp() {
                     ?: throw Exception("Datei konnte nicht gelesen werden")
                 val obj = JSONObject(text)
                 val rate = obj.optString("stundensatz", "42.00")
+                val firmenNameBackup = obj.optString("firmenName", "Markus Becker")
                 val firmenStrasseBackup = obj.optString("firmenStrasse", "")
                 val firmenPlzOrtBackup = obj.optString("firmenPlzOrt", "")
+                val firmenTelefonBackup = obj.optString("firmenTelefon", "+49 176 16712509")
+                val firmenEmailBackup = obj.optString("firmenEmail", "kuemmero@web.de")
                 val steuernummerBackup = obj.optString("steuernummer", "")
                 val arr = obj.optJSONArray("auftraege") ?: JSONArray()
                 val kundenArr = obj.optJSONArray("kunden") ?: JSONArray()
                 val kvArr = obj.optJSONArray("kostenvoranschlaege") ?: JSONArray()
                 context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE).edit()
                     .putString(STUNDENSATZ_KEY, rate)
+                    .putString(FIRMENNAME_KEY, firmenNameBackup)
                     .putString(FIRMENSTRASSE_KEY, firmenStrasseBackup)
                     .putString(FIRMENPLZORT_KEY, firmenPlzOrtBackup)
+                    .putString(FIRMENTELEFON_KEY, firmenTelefonBackup)
+                    .putString(FIRMENEMAIL_KEY, firmenEmailBackup)
                     .putString(STEUERNUMMER_KEY, steuernummerBackup)
                     .putString(AUFTRAEGE_KEY, arr.toString())
                     .putString(KUNDEN_KEY, kundenArr.toString())
                     .putString(KOSTENVORANSCHLAEGE_KEY, kvArr.toString()).commit()
                 stundensatz = rate
+                unternehmerName = firmenNameBackup
                 unternehmerStrasse = firmenStrasseBackup
                 unternehmerPlzOrt = firmenPlzOrtBackup
+                unternehmerTelefon = firmenTelefonBackup
+                unternehmerEmail = firmenEmailBackup
                 steuernummer = steuernummerBackup
                 auftraege = ladeAuftraege(context)
                 kunden = ladeKunden(context)
@@ -3437,13 +3461,19 @@ fun KuemmeroApp() {
                             Card(Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = KuemmeroSurface), shape = RoundedCornerShape(18.dp)) {
                                 Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                                     Text("Unternehmensdaten für Rechnungen", style = MaterialTheme.typography.titleMedium, color = KuemmeroGreen, fontWeight = FontWeight.Bold)
+                                    OutlinedTextField(unternehmerName, { unternehmerName = it }, label = { Text("Name / Inhaber") }, colors = feldFarben, modifier = Modifier.fillMaxWidth())
                                     OutlinedTextField(unternehmerStrasse, { unternehmerStrasse = it }, label = { Text("Straße / Hausnummer") }, colors = feldFarben, modifier = Modifier.fillMaxWidth())
                                     OutlinedTextField(unternehmerPlzOrt, { unternehmerPlzOrt = it }, label = { Text("PLZ / Ort") }, colors = feldFarben, modifier = Modifier.fillMaxWidth())
+                                    OutlinedTextField(unternehmerTelefon, { unternehmerTelefon = it }, label = { Text("Telefon") }, colors = feldFarben, modifier = Modifier.fillMaxWidth(), keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone))
+                                    OutlinedTextField(unternehmerEmail, { unternehmerEmail = it }, label = { Text("E-Mail") }, colors = feldFarben, modifier = Modifier.fillMaxWidth(), keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email))
                                     OutlinedTextField(steuernummer, { steuernummer = it }, label = { Text("Steuernummer / USt-ID / KU-IdNr.") }, colors = feldFarben, modifier = Modifier.fillMaxWidth())
                                     Button(onClick = {
                                         context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE).edit()
+                                            .putString(FIRMENNAME_KEY, unternehmerName.trim())
                                             .putString(FIRMENSTRASSE_KEY, unternehmerStrasse.trim())
                                             .putString(FIRMENPLZORT_KEY, unternehmerPlzOrt.trim())
+                                            .putString(FIRMENTELEFON_KEY, unternehmerTelefon.trim())
+                                            .putString(FIRMENEMAIL_KEY, unternehmerEmail.trim())
                                             .putString(STEUERNUMMER_KEY, steuernummer.trim())
                                             .apply()
                                         android.widget.Toast.makeText(context, "Unternehmensdaten gespeichert.", 0).show()
