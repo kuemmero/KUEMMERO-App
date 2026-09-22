@@ -2113,18 +2113,37 @@ fun KuemmeroApp() {
                         Text(if (arbeitszeitOk) "✓ Arbeitszeit erfasst" else "⚠ Keine Arbeitszeit erfasst", color = if (arbeitszeitOk) KuemmeroGreen else KuemmeroError)
                         Text(if (betragOk) "✓ Rechnungsbetrag vorhanden" else "⚠ Rechnungsbetrag ist 0,00 €", color = if (betragOk) KuemmeroGreen else KuemmeroError)
                         Text(if (leistungsdatumOk) "✓ Leistungsdatum vorhanden" else "⚠ Leistungsdatum fehlt", color = if (leistungsdatumOk) KuemmeroGreen else KuemmeroError)
+                        Text("Fotos vorher: ${a.fotosVorher.size} · Fotos nachher: ${a.fotosNachher.size}", style = MaterialTheme.typography.bodySmall, color = KuemmeroText)
+                        Text("Unterschrift: ${if (a.unterschriftPfad.isNotBlank()) "vorhanden" else "nicht vorhanden"}", style = MaterialTheme.typography.bodySmall, color = KuemmeroText)
                         Text("Fotos und Unterschrift sind optional und können je nach Auftrag ergänzt werden.", style = MaterialTheme.typography.bodySmall, color = KuemmeroText)
                     }
                 },
                 confirmButton = {
-                    TextButton(onClick = {
-                        auftraege = auftraege.toMutableList().apply {
-                            set(idx, a.copy(status = "Erledigt"))
-                        }
-                        speichereAuftraege(context, auftraege)
-                        abschlusspruefungIndex = null
-                        android.widget.Toast.makeText(context, "Auftrag als erledigt markiert.", android.widget.Toast.LENGTH_SHORT).show()
-                    }) { Text("Trotzdem abschließen") }
+                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        TextButton(onClick = {
+                            auftraege = auftraege.toMutableList().apply {
+                                set(idx, a.copy(status = "Erledigt"))
+                            }
+                            speichereAuftraege(context, auftraege)
+                            abschlusspruefungIndex = null
+                            android.widget.Toast.makeText(context, "Auftrag als erledigt markiert.", android.widget.Toast.LENGTH_SHORT).show()
+                        }) { Text("Nur erledigt") }
+
+                        TextButton(onClick = {
+                            val erledigt = a.copy(status = "Erledigt")
+                            auftraege = auftraege.toMutableList().apply { set(idx, erledigt) }
+                            speichereAuftraege(context, auftraege)
+                            abschlusspruefungIndex = null
+                            val pruefung = rechnungPruefung(context, erledigt)
+                            if (pruefung != null) {
+                                android.widget.Toast.makeText(context, "Auftrag erledigt. Rechnung noch nicht möglich: $pruefung", android.widget.Toast.LENGTH_LONG).show()
+                            } else {
+                                rechnungFuerIndex = idx
+                                val name = erledigt.kunde.ifBlank { "Kunde" }.replace("/", "-")
+                                rechnungLauncher.launch("KÜMMERO-Rechnung-$name.pdf")
+                            }
+                        }) { Text("✓ Erledigt + Rechnung") }
+                    }
                 },
                 dismissButton = {
                     TextButton(onClick = { abschlusspruefungIndex = null }) { Text("Zurück") }
