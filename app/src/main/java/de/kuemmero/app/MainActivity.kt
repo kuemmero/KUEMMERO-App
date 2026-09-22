@@ -163,9 +163,6 @@ data class Auftrag(
     val rechnungsnummer: String = "",
     val rechnungsdatum: String = "",
     val faelligAm: String = "",
-    val berichtigungsnummer: String = "",
-    val berichtigungsdatum: String = "",
-    val berichtigungsgrund: String = "",
     val mahnung1Datum: String = "",
     val mahnung1Frist: String = "",
     val mahnung1Gebuehr: Double = 0.0,
@@ -198,7 +195,6 @@ private const val FIRMENPLZORT_KEY = "firmen_plz_ort"
 private const val FIRMENTELEFON_KEY = "firmen_telefon"
 private const val FIRMENEMAIL_KEY = "firmen_email"
 private const val STEUERNUMMER_KEY = "steuernummer"
-private const val KLEINUNTERNEHMER_KEY = "kleinunternehmer"
 private const val MAHNUNG1_FRIST_TAGE_KEY = "mahnung1_frist_tage"
 private const val MAHNUNG1_GEBUEHR_KEY = "mahnung1_gebuehr"
 private const val MAHNUNG1_TEXT_KEY = "mahnung1_text"
@@ -330,9 +326,6 @@ private fun ladeAuftraege(context: Context): List<Auftrag> {
             o.optString("rechnungsnummer", ""),
             o.optString("rechnungsdatum", ""),
             o.optString("faelligAm", ""),
-            o.optString("berichtigungsnummer", ""),
-            o.optString("berichtigungsdatum", ""),
-            o.optString("berichtigungsgrund", ""),
             o.optString("mahnung1Datum", ""),
             o.optString("mahnung1Frist", ""),
             o.optDouble("mahnung1Gebuehr", 0.0),
@@ -347,8 +340,7 @@ private fun ladeAuftraege(context: Context): List<Auftrag> {
             o.optLong("arbeitsEnde", 0L),
             o.optLong("arbeitsSekunden", 0L),
             o.optBoolean("arbeitszeitUebernommen", false),
-            o.optDouble("erstellungskosten", 0.0),
-            o.optString("leistungsdatum", "")
+            o.optDouble("erstellungskosten", 0.0)
         )
     }
 }
@@ -421,9 +413,6 @@ private fun speichereAuftraege(context: Context, liste: List<Auftrag>) {
             put("rechnungsnummer", a.rechnungsnummer)
             put("rechnungsdatum", a.rechnungsdatum)
             put("faelligAm", a.faelligAm)
-            put("berichtigungsnummer", a.berichtigungsnummer)
-            put("berichtigungsdatum", a.berichtigungsdatum)
-            put("berichtigungsgrund", a.berichtigungsgrund)
             put("mahnung1Datum", a.mahnung1Datum)
             put("mahnung1Frist", a.mahnung1Frist)
             put("mahnung1Gebuehr", a.mahnung1Gebuehr)
@@ -456,7 +445,6 @@ private fun backupText(context: Context): String {
         put("firmenTelefon", p.getString(FIRMENTELEFON_KEY, "+49 176 16712509") ?: "+49 176 16712509")
         put("firmenEmail", p.getString(FIRMENEMAIL_KEY, "kuemmero@web.de") ?: "kuemmero@web.de")
         put("steuernummer", p.getString(STEUERNUMMER_KEY, "") ?: "")
-        put("kleinunternehmer", p.getBoolean(KLEINUNTERNEHMER_KEY, true))
         put("auftraege", JSONArray(p.getString(AUFTRAEGE_KEY, "[]") ?: "[]"))
         put("kunden", JSONArray(p.getString(KUNDEN_KEY, "[]") ?: "[]"))
         put("kostenvoranschlaege", JSONArray(p.getString(KOSTENVORANSCHLAEGE_KEY, "[]") ?: "[]"))
@@ -639,10 +627,7 @@ private fun erstellePdf(
     c.drawText("Gesamtsumme: ${euro(gesamt)}", 40f, if (erstellungskosten > 0.0) 573f else 548f, p)
     p.textSize = 11f
     val kvHinweisY = if (erstellungskosten > 0.0) 603f else 578f
-    val kleinunternehmer = prefs.getBoolean(KLEINUNTERNEHMER_KEY, true)
-    if (kleinunternehmer) {
-        c.drawText("Gemäß § 19 UStG wird keine Umsatzsteuer berechnet.", 40f, kvHinweisY, p)
-    }
+    c.drawText("Gemäß § 19 UStG wird keine Umsatzsteuer berechnet.", 40f, kvHinweisY, p)
     val unterschriftTitelY = if (dokumentTitel.contains("KOSTENVORANSCHLAG", ignoreCase = true) && erstellungskosten > 0.0) 650f else 628f
     if (dokumentTitel.contains("KOSTENVORANSCHLAG", ignoreCase = true) && erstellungskosten > 0.0) {
         p.textSize = 11f
@@ -691,10 +676,7 @@ private fun erstelleRechnungPdf(
     unterschriftDatum: String = "",
     fotosVorher: List<String> = emptyList(),
     fotosNachher: List<String> = emptyList(),
-    erstellungskosten: Double = 0.0,
-    dokumentTitel: String = "RECHNUNG",
-    originalRechnungsnummer: String = "",
-    berichtigungsgrund: String = ""
+    erstellungskosten: Double = 0.0
 ): PdfDocument {
     val pdf = PdfDocument()
     val page = pdf.startPage(PdfDocument.PageInfo.Builder(595, 842, 1).create())
@@ -719,37 +701,31 @@ private fun erstelleRechnungPdf(
     c.drawText("E-Mail: ${firmenEmail.ifBlank { "bitte eintragen" }}", 40f, 204f, p)
 
     p.textSize = 18f
-    c.drawText(dokumentTitel, 40f, 230f, p)
+    c.drawText("RECHNUNG", 40f, 230f, p)
     p.textSize = 12f
-    if (originalRechnungsnummer.isNotBlank()) {
-        c.drawText("Bezug auf Originalrechnung: $originalRechnungsnummer", 40f, 250f, p)
-    }
-    c.drawText("Rechnungsnummer: $nummer", 40f, 270f, p)
-    c.drawText("Rechnungsdatum: $rechnungsdatum", 40f, 290f, p)
-    c.drawText("Fällig am: $faelligAm", 40f, 310f, p)
-    c.drawText("Steuer-/USt-ID/KU-IdNr.: ${steuernummer.ifBlank { "BITTE EINTRAGEN" }}", 40f, 330f, p)
-    c.drawText("Leistungsdatum: ${leistungsdatum.ifBlank { rechnungsdatum }}", 40f, 350f, p)
-    c.drawText("Kunde: $kunde", 40f, 380f, p)
-    c.drawText("Adresse: $strasse", 40f, 400f, p)
-    c.drawText("PLZ und Ort: $ort", 40f, 420f, p)
-    c.drawText("Leistung: $leistung", 40f, 450f, p)
-    if (berichtigungsgrund.isNotBlank()) {
-        c.drawText("Berichtigungsgrund: $berichtigungsgrund", 40f, 468f, p)
-    }
+    c.drawText("Rechnungsnummer: $nummer", 40f, 255f, p)
+    c.drawText("Rechnungsdatum: $rechnungsdatum", 40f, 275f, p)
+    c.drawText("Fällig am: $faelligAm", 40f, 295f, p)
+    c.drawText("Steuer-/USt-ID/KU-IdNr.: ${steuernummer.ifBlank { "BITTE IN MEHR EINTRAGEN" }}", 40f, 315f, p)
+    c.drawText("Leistungsdatum: ${leistungsdatum.ifBlank { rechnungsdatum }}", 40f, 335f, p)
+    c.drawText("Kunde: $kunde", 40f, 365f, p)
+    c.drawText("Adresse: $strasse", 40f, 385f, p)
+    c.drawText("PLZ und Ort: $ort", 40f, 405f, p)
+    c.drawText("Leistung: $leistung", 40f, 435f, p)
 
-    c.drawLine(40f, 475f, 550f, 475f, p)
-    c.drawText("Arbeitszeit", 40f, 500f, p)
-    c.drawText("%.2f Std.".format(Locale.GERMANY, stunden), 250f, 500f, p)
-    c.drawText(euro(arbeitsbetrag(stunden, stundensatz)), 450f, 500f, p)
-    c.drawText("Material", 40f, 525f, p)
-    c.drawText(euro(material), 450f, 525f, p)
-    c.drawText("Fahrtkosten", 40f, 550f, p)
-    c.drawText(euro(fahrt), 450f, 550f, p)
-    var rechnungY = 575f
+    c.drawLine(40f, 460f, 550f, 460f, p)
+    c.drawText("Arbeitszeit", 40f, 485f, p)
+    c.drawText("%.2f Std.".format(Locale.GERMANY, stunden), 250f, 485f, p)
+    c.drawText(euro(arbeitsbetrag(stunden, stundensatz)), 450f, 485f, p)
+    c.drawText("Material", 40f, 510f, p)
+    c.drawText(euro(material), 450f, 510f, p)
+    c.drawText("Fahrtkosten", 40f, 535f, p)
+    c.drawText(euro(fahrt), 450f, 535f, p)
+    var rechnungY = 560f
     if (erstellungskosten > 0.0) {
-        c.drawText("Erstellungskosten", 40f, 575f, p)
-        c.drawText(euro(erstellungskosten), 450f, 575f, p)
-        rechnungY = 600f
+        c.drawText("Erstellungskosten", 40f, 560f, p)
+        c.drawText(euro(erstellungskosten), 450f, 560f, p)
+        rechnungY = 585f
     }
     c.drawLine(40f, rechnungY, 550f, rechnungY, p)
 
@@ -757,11 +733,8 @@ private fun erstelleRechnungPdf(
     p.textSize = 18f
     c.drawText("Gesamtsumme: ${euro(gesamt)}", 40f, rechnungY + 40f, p)
     p.textSize = 11f
-    val kleinunternehmer = prefs.getBoolean(KLEINUNTERNEHMER_KEY, true)
-    if (kleinunternehmer) {
-        c.drawText("Steuerbefreiung für Kleinunternehmer gemäß § 19 UStG.", 40f, rechnungY + 68f, p)
-        c.drawText("Es wird keine Umsatzsteuer berechnet.", 40f, rechnungY + 83f, p)
-    }
+    c.drawText("Steuerbefreiung für Kleinunternehmer gemäß § 19 UStG.", 40f, rechnungY + 68f, p)
+    c.drawText("Es wird keine Umsatzsteuer berechnet.", 40f, rechnungY + 83f, p)
     c.drawText("Bitte überweisen Sie den Rechnungsbetrag bis zum $faelligAm.", 40f, rechnungY + 105f, p)
     c.drawText("Vielen Dank für Ihr Vertrauen.", 40f, rechnungY + 130f, p)
     pdf.finishPage(page)
@@ -973,43 +946,7 @@ private fun erstelleMahnung2Pdf(
     return pdf
 }
 
-private fun erstelleBerichtigungsRechnungPdf(
-    context: Context,
-    neueNummer: String,
-    datum: String,
-    auftrag: Auftrag,
-    grund: String
-): PdfDocument {
-    return erstelleRechnungPdf(
-        context,
-        neueNummer,
-        datum,
-        auftrag.faelligAm.ifBlank { datum },
-        auftrag.leistungsdatum.ifBlank { auftrag.terminDatum.ifBlank { auftrag.datum } },
-        auftrag.kunde,
-        auftrag.kundenStrasse,
-        auftrag.kundenOrt,
-        auftrag.leistung,
-        auftrag.stunden,
-        auftrag.material,
-        auftrag.fahrt,
-        auftrag.stundensatz,
-        auftrag.unterschriftPfad,
-        auftrag.unterschriftDatum,
-        auftrag.fotosVorher,
-        auftrag.fotosNachher,
-        auftrag.erstellungskosten,
-        dokumentTitel = "BERICHTIGUNGSRECHNUNG",
-        originalRechnungsnummer = auftrag.rechnungsnummer,
-        berichtigungsgrund = grund
-    )
-}
-
 private fun druckeRechnungPdf(context: Context, auftrag: Auftrag) {
-    rechnungPruefung(context, auftrag)?.let {
-        android.widget.Toast.makeText(context, it, android.widget.Toast.LENGTH_LONG).show()
-        return
-    }
     val printManager = context.getSystemService(Context.PRINT_SERVICE) as PrintManager
     val nummer = auftrag.rechnungsnummer.ifBlank { naechsteRechnungsnummer(context) }
     val rechnungsdatum = auftrag.rechnungsdatum.ifBlank { SimpleDateFormat("dd.MM.yyyy", Locale.GERMANY).format(Date()) }
@@ -1035,7 +972,7 @@ private fun druckeRechnungPdf(context: Context, auftrag: Auftrag) {
             pdf = erstelleRechnungPdf(
                 context,
                 nummer, rechnungsdatum, faelligAm,
-                auftrag.leistungsdatum.ifBlank { auftrag.terminDatum.ifBlank { auftrag.datum } },
+                auftrag.terminDatum.ifBlank { auftrag.datum },
                 auftrag.kunde, auftrag.kundenStrasse, auftrag.kundenOrt, auftrag.leistung,
                 auftrag.stunden, auftrag.material, auftrag.fahrt, auftrag.stundensatz,
                 auftrag.unterschriftPfad, auftrag.unterschriftDatum, auftrag.fotosVorher, auftrag.fotosNachher, auftrag.erstellungskosten
@@ -1174,34 +1111,6 @@ private fun zeitText(sekunden: Long): String {
     return "%02d:%02d:%02d".format(Locale.GERMANY, h, m, s)
 }
 
-private fun rechnungPruefung(context: Context, auftrag: Auftrag): String? {
-    val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-    val firmenName = prefs.getString(FIRMENNAME_KEY, "")?.trim().orEmpty()
-    val firmenStrasse = prefs.getString(FIRMENSTRASSE_KEY, "")?.trim().orEmpty()
-    val firmenPlzOrt = prefs.getString(FIRMENPLZORT_KEY, "")?.trim().orEmpty()
-    val steuernummer = prefs.getString(STEUERNUMMER_KEY, "")?.trim().orEmpty()
-    val kleinunternehmer = prefs.getBoolean(KLEINUNTERNEHMER_KEY, true)
-
-    val fehlend = mutableListOf<String>()
-    if (firmenName.isBlank()) fehlend += "Name / Inhaber"
-    if (firmenStrasse.isBlank()) fehlend += "Straße / Hausnummer"
-    if (firmenPlzOrt.isBlank()) fehlend += "PLZ / Ort"
-    if (steuernummer.isBlank()) fehlend += "Steuernummer / USt-ID / KU-IdNr."
-    if (auftrag.kunde.isBlank()) fehlend += "Kundenname"
-    if (auftrag.kundenStrasse.isBlank()) fehlend += "Kundenstraße / Hausnummer"
-    if (auftrag.kundenOrt.isBlank()) fehlend += "Kunden-PLZ / Ort"
-    if (auftrag.leistung.isBlank()) fehlend += "Leistungsbeschreibung"
-    if (auftrag.leistungsdatum.isBlank() && auftrag.datum.isBlank() && auftrag.terminDatum.isBlank()) fehlend += "Leistungsdatum"
-
-    return when {
-        fehlend.isNotEmpty() ->
-            "Rechnung kann noch nicht erstellt werden. Bitte ergänzen: ${fehlend.joinToString(", ")}."
-        !kleinunternehmer ->
-            "Die Kleinunternehmerregelung ist deaktiviert. Die aktuelle KÜMMERO-Rechnung ist dafür noch nicht als vollständige Umsatzsteuerrechnung eingerichtet. Bitte zuerst die Umsatzsteuerberechnung ergänzen."
-        else -> null
-    }
-}
-
 private fun rechnungIstUeberfaellig(auftrag: Auftrag, heute: String): Boolean {
     if (auftrag.rechnungsnummer.isBlank() || auftrag.zahlungsstatus == "Bezahlt" || auftrag.faelligAm.isBlank()) return false
     return try {
@@ -1221,33 +1130,6 @@ private fun mahnung1IstUeberfaellig(auftrag: Auftrag, heute: String): Boolean {
         frist < heuteZeit
     } catch (_: Exception) { false }
 }
-
-
-private fun kuemmeroCsv(auftraege: List<Auftrag>, kunden: List<Kunde>): String = buildString {
-    appendLine("KÜMMERO DATENEXPORT")
-    appendLine("Aufträge")
-    appendLine("Nummer;Datum;Kunde;Leistung;Status;Zahlungsstatus;Leistungsdatum;Stunden;Material;Fahrt;Stundensatz;Gesamt")
-    auftraege.forEach { a ->
-        appendLine(listOf(
-            a.nummer, a.datum, a.kunde, a.leistung, a.status, a.zahlungsstatus,
-            a.leistungsdatum, a.stunden.toString().replace('.', ','),
-            a.material.toString().replace('.', ','), a.fahrt.toString().replace('.', ','),
-            a.stundensatz.toString().replace('.', ','),
-            gesamtbetrag(a.stunden, a.material, a.fahrt, a.stundensatz, a.erstellungskosten).toString().replace('.', ',')
-        ).joinToString(";") { it.replace(";", ",") })
-    }
-    appendLine()
-    appendLine("Kunden")
-    appendLine("Name;Adresse;Ort;Telefon;E-Mail")
-    kunden.forEach { k ->
-        appendLine(listOf(k.name, k.adresse, k.ort, k.telefon, k.email).joinToString(";") { it.replace(";", ",") })
-    }
-}
-
-private fun rechnungsJahr(auftrag: Auftrag): String =
-    Regex("(?:RE-|ANG-)(\\d{4})").find(auftrag.rechnungsnummer)?.groupValues?.getOrNull(1)
-        ?: Regex("(\\d{4})").find(auftrag.rechnungsdatum)?.groupValues?.getOrNull(1)
-        ?: "Unbekannt"
 
 private val KuemmeroGreen = Color(0xFF087F3E)
 private val KuemmeroGreenLight = Color(0xFF4CAF50)
@@ -1408,12 +1290,6 @@ fun KuemmeroApp() {
     var bearbeiteIndex by remember { mutableStateOf<Int?>(null) }
     var status by remember { mutableStateOf("Offen") }
     var zahlungsstatus by remember { mutableStateOf("Offen") }
-    var kleinunternehmer by remember {
-        mutableStateOf(
-            context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-                .getBoolean(KLEINUNTERNEHMER_KEY, true)
-        )
-    }
     var bezahltAm by remember { mutableStateOf("") }
     var terminDatum by remember { mutableStateOf("") }
     var terminUhrzeit by remember { mutableStateOf("") }
@@ -1426,14 +1302,9 @@ fun KuemmeroApp() {
     var unterschriftDialog by remember { mutableStateOf(false) }
     var fotoVorschauUri by remember { mutableStateOf<String?>(null) }
     var auftragsSuche by remember { mutableStateOf("") }
-    var globaleSuche by remember { mutableStateOf("") }
-    var archivSuche by remember { mutableStateOf("") }
-    var archivJahr by remember { mutableStateOf("Alle") }
     var statusFilter by remember { mutableStateOf("Alle") }
     var zahlungsFilterOffen by remember { mutableStateOf(false) }
     var kundenAkteName by remember { mutableStateOf<String?>(null) }
-    var kundenLoeschName by remember { mutableStateOf<String?>(null) }
-    var auftragsakteIndex by remember { mutableStateOf<Int?>(null) }
     var kalenderOffen by remember { mutableStateOf(false) }
     var terminBereichOffen by remember { mutableStateOf(false) }
     var notizBereichOffen by remember { mutableStateOf(false) }
@@ -1518,8 +1389,6 @@ fun KuemmeroApp() {
 
     var auftragFuerPdf by remember { mutableStateOf<Auftrag?>(null) }
     var rechnungFuerIndex by remember { mutableStateOf<Int?>(null) }
-    var berichtigungFuerIndex by remember { mutableStateOf<Int?>(null) }
-    var berichtigungsgrundText by remember { mutableStateOf("Korrektur der Rechnung") }
     var rechnungNummerEditIndex by remember { mutableStateOf<Int?>(null) }
     var rechnungNummerEditText by remember { mutableStateOf("") }
     var rechnungScanIndex by remember { mutableStateOf<Int?>(null) }
@@ -1575,24 +1444,6 @@ fun KuemmeroApp() {
         rechnungsdatum = testHeuteText,
         faelligAm = testHeuteText
     )
-
-    var exportCsvText by remember { mutableStateOf<String?>(null) }
-    val exportCsvLauncher = rememberLauncherForActivityResult(
-        ActivityResultContracts.CreateDocument("text/csv")
-    ) { uri ->
-        val csv = exportCsvText
-        if (uri != null && csv != null) {
-            try {
-                context.contentResolver.openOutputStream(uri)?.use { out ->
-                    out.write(csv.toByteArray(Charsets.UTF_8))
-                } ?: throw Exception("Datei konnte nicht geöffnet werden")
-                android.widget.Toast.makeText(context, "Datenexport gespeichert.", android.widget.Toast.LENGTH_LONG).show()
-            } catch (_: Exception) {
-                android.widget.Toast.makeText(context, "Datenexport konnte nicht gespeichert werden.", android.widget.Toast.LENGTH_LONG).show()
-            }
-        }
-        exportCsvText = null
-    }
 
     val testMahnungLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.CreateDocument("application/pdf")
@@ -1720,20 +1571,6 @@ fun KuemmeroApp() {
     var abschlusspruefungIndex by remember { mutableStateOf<Int?>(null) }
     val backupScope = rememberCoroutineScope()
 
-    // Wenn eine feste Backup-Datei eingerichtet wurde, werden Änderungen nach kurzer Ruhezeit
-    // automatisch in diese Datei gesichert. Dadurch bleibt das Backup aktuell, ohne dass
-    // der Benutzer nach jeder Änderung manuell sichern muss.
-    LaunchedEffect(
-        auftraege, kunden, kostenvoranschlaege, kleinunternehmer, stundensatz,
-        unternehmerName, unternehmerStrasse, unternehmerPlzOrt,
-        unternehmerTelefon, unternehmerEmail, steuernummer
-    ) {
-        delay(500)
-        withContext(Dispatchers.IO) {
-            sichereBackupAutomatisch(context)
-        }
-    }
-
     val createBackup = rememberLauncherForActivityResult(
         ActivityResultContracts.CreateDocument("application/json")
     ) { uri ->
@@ -1844,7 +1681,6 @@ fun KuemmeroApp() {
                 val firmenTelefonBackup = obj.optString("firmenTelefon", "+49 176 16712509")
                 val firmenEmailBackup = obj.optString("firmenEmail", "kuemmero@web.de")
                 val steuernummerBackup = obj.optString("steuernummer", "")
-                val kleinunternehmerBackup = obj.optBoolean("kleinunternehmer", true)
                 val arr = obj.optJSONArray("auftraege") ?: JSONArray()
                 val kundenArr = obj.optJSONArray("kunden") ?: JSONArray()
                 val kvArr = obj.optJSONArray("kostenvoranschlaege") ?: JSONArray()
@@ -1856,7 +1692,6 @@ fun KuemmeroApp() {
                     .putString(FIRMENTELEFON_KEY, firmenTelefonBackup)
                     .putString(FIRMENEMAIL_KEY, firmenEmailBackup)
                     .putString(STEUERNUMMER_KEY, steuernummerBackup)
-                    .putBoolean(KLEINUNTERNEHMER_KEY, kleinunternehmerBackup)
                     .putString(AUFTRAEGE_KEY, arr.toString())
                     .putString(KUNDEN_KEY, kundenArr.toString())
                     .putString(KOSTENVORANSCHLAEGE_KEY, kvArr.toString()).commit()
@@ -1867,7 +1702,6 @@ fun KuemmeroApp() {
                 unternehmerTelefon = firmenTelefonBackup
                 unternehmerEmail = firmenEmailBackup
                 steuernummer = steuernummerBackup
-                kleinunternehmer = kleinunternehmerBackup
                 auftraege = ladeAuftraege(context)
                 kunden = ladeKunden(context)
                 kostenvoranschlaege = ladeKostenvoranschlaege(context)
@@ -2013,34 +1847,6 @@ fun KuemmeroApp() {
         }
     }
 
-    val berichtigungsLauncher = rememberLauncherForActivityResult(
-        ActivityResultContracts.CreateDocument("application/pdf")
-    ) { uri ->
-        uri?.let { ziel ->
-            val index = berichtigungFuerIndex
-            val a = index?.let { i -> auftraege.getOrNull(i) }
-            if (a != null && a.rechnungsnummer.isNotBlank()) {
-                try {
-                    val neueNummer = naechsteRechnungsnummer(context)
-                    val datum = datumFormat.format(Date())
-                    val grund = berichtigungsgrundText.trim().ifBlank { "Korrektur der Rechnung" }
-                    val pdf = erstelleBerichtigungsRechnungPdf(context, neueNummer, datum, a, grund)
-                    context.contentResolver.openOutputStream(ziel)?.use { out -> pdf.writeTo(out) }
-                    pdf.close()
-                    speichereRechnungsnummer(context, neueNummer)
-                    auftraege = auftraege.toMutableList().apply {
-                        set(index!!, a.copy(berichtigungsnummer = neueNummer, berichtigungsdatum = datum, berichtigungsgrund = grund))
-                    }
-                    speichereAuftraege(context, auftraege)
-                    android.widget.Toast.makeText(context, "Berichtigungsrechnung gespeichert: $neueNummer. Originalrechnung ${a.rechnungsnummer} bleibt erhalten.", android.widget.Toast.LENGTH_LONG).show()
-                } catch (e: Exception) {
-                    android.widget.Toast.makeText(context, "Berichtigungsrechnung konnte nicht erstellt werden.", android.widget.Toast.LENGTH_LONG).show()
-                }
-            }
-        }
-        berichtigungFuerIndex = null
-    }
-
     val arbeitsstunden = zahl(stunden)
     val materialKosten = zahl(material)
     val fahrtKosten = zahl(fahrt)
@@ -2113,37 +1919,18 @@ fun KuemmeroApp() {
                         Text(if (arbeitszeitOk) "✓ Arbeitszeit erfasst" else "⚠ Keine Arbeitszeit erfasst", color = if (arbeitszeitOk) KuemmeroGreen else KuemmeroError)
                         Text(if (betragOk) "✓ Rechnungsbetrag vorhanden" else "⚠ Rechnungsbetrag ist 0,00 €", color = if (betragOk) KuemmeroGreen else KuemmeroError)
                         Text(if (leistungsdatumOk) "✓ Leistungsdatum vorhanden" else "⚠ Leistungsdatum fehlt", color = if (leistungsdatumOk) KuemmeroGreen else KuemmeroError)
-                        Text("Fotos vorher: ${a.fotosVorher.size} · Fotos nachher: ${a.fotosNachher.size}", style = MaterialTheme.typography.bodySmall, color = KuemmeroText)
-                        Text("Unterschrift: ${if (a.unterschriftPfad.isNotBlank()) "vorhanden" else "nicht vorhanden"}", style = MaterialTheme.typography.bodySmall, color = KuemmeroText)
                         Text("Fotos und Unterschrift sind optional und können je nach Auftrag ergänzt werden.", style = MaterialTheme.typography.bodySmall, color = KuemmeroText)
                     }
                 },
                 confirmButton = {
-                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                        TextButton(onClick = {
-                            auftraege = auftraege.toMutableList().apply {
-                                set(idx, a.copy(status = "Erledigt"))
-                            }
-                            speichereAuftraege(context, auftraege)
-                            abschlusspruefungIndex = null
-                            android.widget.Toast.makeText(context, "Auftrag als erledigt markiert.", android.widget.Toast.LENGTH_SHORT).show()
-                        }) { Text("Nur erledigt") }
-
-                        TextButton(onClick = {
-                            val erledigt = a.copy(status = "Erledigt")
-                            auftraege = auftraege.toMutableList().apply { set(idx, erledigt) }
-                            speichereAuftraege(context, auftraege)
-                            abschlusspruefungIndex = null
-                            val pruefung = rechnungPruefung(context, erledigt)
-                            if (pruefung != null) {
-                                android.widget.Toast.makeText(context, "Auftrag erledigt. Rechnung noch nicht möglich: $pruefung", android.widget.Toast.LENGTH_LONG).show()
-                            } else {
-                                rechnungFuerIndex = idx
-                                val name = erledigt.kunde.ifBlank { "Kunde" }.replace("/", "-")
-                                rechnungLauncher.launch("KÜMMERO-Rechnung-$name.pdf")
-                            }
-                        }) { Text("✓ Erledigt + Rechnung") }
-                    }
+                    TextButton(onClick = {
+                        auftraege = auftraege.toMutableList().apply {
+                            set(idx, a.copy(status = "Erledigt"))
+                        }
+                        speichereAuftraege(context, auftraege)
+                        abschlusspruefungIndex = null
+                        android.widget.Toast.makeText(context, "Auftrag als erledigt markiert.", android.widget.Toast.LENGTH_SHORT).show()
+                    }) { Text("Trotzdem abschließen") }
                 },
                 dismissButton = {
                     TextButton(onClick = { abschlusspruefungIndex = null }) { Text("Zurück") }
@@ -2452,53 +2239,6 @@ fun KuemmeroApp() {
         )
     }
 
-    if (berichtigungFuerIndex != null) {
-        val a = berichtigungFuerIndex?.let { auftraege.getOrNull(it) }
-        AlertDialog(
-            onDismissRequest = { berichtigungFuerIndex = null },
-            title = { Text("Berichtigungsrechnung erstellen") },
-            text = {
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    if (a != null) {
-                        Text("Originalrechnung: ${a.rechnungsnummer}", fontWeight = FontWeight.Bold, color = KuemmeroGreen)
-                        Text("Die Originalrechnung bleibt unverändert erhalten.")
-                        OutlinedTextField(
-                            value = berichtigungsgrundText,
-                            onValueChange = { berichtigungsgrundText = it },
-                            label = { Text("Grund der Berichtigung") },
-                            minLines = 2,
-                            maxLines = 4,
-                            colors = feldFarben,
-                            modifier = Modifier.fillMaxWidth()
-                        )
-                    }
-                }
-            },
-            confirmButton = {
-                TextButton(onClick = {
-                    if (a == null) {
-                        berichtigungFuerIndex = null
-                    } else if (a.berichtigungsnummer.isNotBlank()) {
-                        android.widget.Toast.makeText(
-                            context,
-                            "Für diese Rechnung existiert bereits die Berichtigungsrechnung ${a.berichtigungsnummer}.",
-                            android.widget.Toast.LENGTH_LONG
-                        ).show()
-                    } else {
-                        val pruefung = rechnungPruefung(context, a)
-                        if (pruefung != null) {
-                            android.widget.Toast.makeText(context, pruefung, android.widget.Toast.LENGTH_LONG).show()
-                        } else {
-                            val name = a.kunde.ifBlank { "Kunde" }.replace("/", "-")
-                            berichtigungsLauncher.launch("KÜMMERO-Berichtigung-${a.rechnungsnummer}-$name.pdf")
-                        }
-                    }
-                }) { Text("PDF erstellen") }
-            },
-            dismissButton = { TextButton(onClick = { berichtigungFuerIndex = null }) { Text("Abbrechen") } }
-        )
-    }
-
     if (rechnungNummerEditIndex != null) {
         AlertDialog(
             onDismissRequest = { rechnungNummerEditIndex = null },
@@ -2796,33 +2536,6 @@ fun KuemmeroApp() {
         )
     }
 
-    kundenLoeschName?.let { name ->
-        val hatAuftraege = auftraege.any { it.kunde.equals(name, ignoreCase = true) }
-        val hatKVs = kostenvoranschlaege.any { it.kunde.equals(name, ignoreCase = true) }
-        AlertDialog(
-            onDismissRequest = { kundenLoeschName = null },
-            title = { Text("Kunden wirklich löschen?") },
-            text = {
-                if (hatAuftraege || hatKVs) {
-                    Text("Der Kunde kann nicht gelöscht werden, weil noch ${auftraege.count { it.kunde.equals(name, ignoreCase = true) }} Auftrag/Aufträge oder Kostenvoranschläge zugeordnet sind. Erst die Zuordnungen entfernen.")
-                } else {
-                    Text("Der Kunde \"$name\" wird aus dem Kundenstamm gelöscht. Diese Aktion kann nicht rückgängig gemacht werden.")
-                }
-            },
-            confirmButton = {
-                if (!hatAuftraege && !hatKVs) {
-                    TextButton(onClick = {
-                        kunden = kunden.filterNot { it.name.equals(name, ignoreCase = true) }
-                        speichereKunden(context, kunden)
-                        kundenLoeschName = null
-                        android.widget.Toast.makeText(context, "Kunde gelöscht.", 0).show()
-                    }) { Text("Löschen", color = KuemmeroError, fontWeight = FontWeight.Bold) }
-                }
-            },
-            dismissButton = { TextButton(onClick = { kundenLoeschName = null }) { Text("Abbrechen") } }
-        )
-    }
-
     kundenAkteName?.let { name ->
         val kundeAkte = kunden.firstOrNull { it.name.equals(name, ignoreCase = true) }
         val kundenAuftraege = auftraege.filter { it.kunde.equals(name, ignoreCase = true) }
@@ -3065,23 +2778,6 @@ fun KuemmeroApp() {
                 modifier = Modifier.padding(padding).padding(16.dp),
                 verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
-                item {
-                    Card(Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = KuemmeroSurface), shape = RoundedCornerShape(18.dp)) {
-                        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                            OutlinedTextField(
-                                value = globaleSuche,
-                                onValueChange = { globaleSuche = it },
-                                label = { Text("🔎 KÜMMERO-Suche") },
-                                placeholder = { Text("Kunde, Auftrag, Rechnung, Telefon …") },
-                                singleLine = true,
-                                colors = feldFarben,
-                                modifier = Modifier.weight(1f)
-                            )
-                            Spacer(Modifier.width(8.dp))
-                            Button(onClick = { hauptseite = "Suche" }, enabled = globaleSuche.isNotBlank(), modifier = Modifier.heightIn(min = 52.dp), colors = ButtonDefaults.buttonColors(containerColor = KuemmeroGreen)) { Text("Suchen") }
-                        }
-                    }
-                }
                 if (auftragFormOffen) {
                     item {
                         Text(
@@ -3442,9 +3138,6 @@ fun KuemmeroApp() {
                                     bearbeiteIndex?.let { auftraege.getOrNull(it)?.rechnungsnummer } ?: "",
                                     bearbeiteIndex?.let { auftraege.getOrNull(it)?.rechnungsdatum } ?: "",
                                     bearbeiteIndex?.let { auftraege.getOrNull(it)?.faelligAm } ?: "",
-                                    bearbeiteIndex?.let { auftraege.getOrNull(it)?.berichtigungsnummer } ?: "",
-                                    bearbeiteIndex?.let { auftraege.getOrNull(it)?.berichtigungsdatum } ?: "",
-                                    bearbeiteIndex?.let { auftraege.getOrNull(it)?.berichtigungsgrund } ?: "",
                                     bearbeiteIndex?.let { auftraege.getOrNull(it)?.mahnung1Datum } ?: "",
                                     bearbeiteIndex?.let { auftraege.getOrNull(it)?.mahnung1Frist } ?: "",
                                     bearbeiteIndex?.let { auftraege.getOrNull(it)?.mahnung1Gebuehr } ?: 0.0,
@@ -3458,7 +3151,6 @@ fun KuemmeroApp() {
                                     bearbeiteIndex?.let { auftraege.getOrNull(it)?.arbeitsStart } ?: 0L,
                                     bearbeiteIndex?.let { auftraege.getOrNull(it)?.arbeitsEnde } ?: 0L,
                                     bearbeiteIndex?.let { auftraege.getOrNull(it)?.arbeitsSekunden } ?: 0L,
-                                    bearbeiteIndex?.let { auftraege.getOrNull(it)?.arbeitszeitUebernommen } ?: false,
                                     erstellungskosten = bearbeiteIndex?.let { auftraege.getOrNull(it)?.erstellungskosten } ?: 0.0,
                                     leistungsdatum = leistungsdatum.trim().ifBlank { datum.trim() }
                                 )
@@ -4077,14 +3769,6 @@ fun KuemmeroApp() {
                                 Text("PDF drucken", fontWeight = FontWeight.Bold)
                             }
 
-                            OutlinedButton(
-                                onClick = { auftragsakteIndex = index; hauptseite = "Auftragsakte" },
-                                modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp),
-                                shape = RoundedCornerShape(26.dp),
-                                border = BorderStroke(2.dp, KuemmeroGreen),
-                                colors = ButtonDefaults.outlinedButtonColors(contentColor = KuemmeroGreen)
-                            ) { Text("📁 Auftragsakte öffnen", fontWeight = FontWeight.Bold) }
-
                             Text(
                                 when (a.status) {
                                     "Offen" -> "Ablauf: Angebot → Auftrag annehmen"
@@ -4138,9 +3822,22 @@ fun KuemmeroApp() {
                                 )
                                 Button(
                                     onClick = {
-                                        val pruefung = rechnungPruefung(context, a)
-                                        if (pruefung != null) {
-                                            android.widget.Toast.makeText(context, pruefung, android.widget.Toast.LENGTH_LONG).show()
+                                        val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+                                        val firmenStrasse = prefs.getString(FIRMENSTRASSE_KEY, "")?.trim().orEmpty()
+                                        val firmenPlzOrt = prefs.getString(FIRMENPLZORT_KEY, "")?.trim().orEmpty()
+                                        val steuer = prefs.getString(STEUERNUMMER_KEY, "")?.trim().orEmpty()
+                                        val fehlend = when {
+                                            firmenStrasse.isBlank() -> "Bitte unter Mehr die Firmenstraße / Hausnummer eintragen."
+                                            firmenPlzOrt.isBlank() -> "Bitte unter Mehr PLZ / Ort eintragen."
+                                            steuer.isBlank() -> "Bitte unter Mehr Steuernummer / USt-ID / KU-IdNr. eintragen."
+                                            a.kunde.isBlank() -> "Für die Rechnung fehlt der Kundenname."
+                                            a.kundenStrasse.isBlank() -> "Für die Rechnung fehlt die Kundenstraße / Hausnummer."
+                                            a.kundenOrt.isBlank() -> "Für die Rechnung fehlt PLZ / Ort des Kunden."
+                                            a.leistung.isBlank() -> "Für die Rechnung fehlt die Leistungsbeschreibung."
+                                            else -> ""
+                                        }
+                                        if (fehlend.isNotBlank()) {
+                                            android.widget.Toast.makeText(context, fehlend, android.widget.Toast.LENGTH_LONG).show()
                                         } else {
                                             rechnungFuerIndex = index
                                             val name = a.kunde.ifBlank { "Kunde" }.replace("/", "-")
@@ -4175,16 +3872,6 @@ fun KuemmeroApp() {
                                 ) {
                                     Text("🧾 Rechnung PDF drucken", fontWeight = FontWeight.Bold)
                                 }
-                                OutlinedButton(
-                                    onClick = {
-                                        berichtigungFuerIndex = index
-                                        berichtigungsgrundText = "Korrektur der Rechnung"
-                                    },
-                                    modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp),
-                                    shape = RoundedCornerShape(26.dp),
-                                    border = BorderStroke(2.dp, KuemmeroGreen),
-                                    colors = ButtonDefaults.outlinedButtonColors(contentColor = KuemmeroGreen)
-                                ) { Text("↻ Berichtigungsrechnung erstellen", fontWeight = FontWeight.Bold) }
                                 OutlinedButton(
                                     onClick = { starteRechnungScan(index) },
                                     modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp),
@@ -4237,23 +3924,6 @@ fun KuemmeroApp() {
                 modifier = Modifier.padding(padding).padding(16.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
-                item {
-                    Card(Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = KuemmeroSurface), shape = RoundedCornerShape(18.dp)) {
-                        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                            OutlinedTextField(
-                                value = globaleSuche,
-                                onValueChange = { globaleSuche = it },
-                                label = { Text("🔎 KÜMMERO-Suche") },
-                                placeholder = { Text("Kunde, Auftrag, Rechnung, Telefon …") },
-                                singleLine = true,
-                                colors = feldFarben,
-                                modifier = Modifier.weight(1f)
-                            )
-                            Spacer(Modifier.width(8.dp))
-                            Button(onClick = { hauptseite = "Suche" }, enabled = globaleSuche.isNotBlank(), modifier = Modifier.heightIn(min = 52.dp), colors = ButtonDefaults.buttonColors(containerColor = KuemmeroGreen)) { Text("Suchen") }
-                        }
-                    }
-                }
                 when (hauptseite) {
                     "Heute" -> {
                         item {
@@ -4322,126 +3992,8 @@ fun KuemmeroApp() {
                                             Text("Offen €", color = Color.White)
                                             Text(euro(offeneZahlungSumme), color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.Bold)
                                         }
-                                        Column(
-                                            Modifier.weight(1f).clickable {
-                                                hauptseite = "Mahnungen"
-                                                zahlungsFilterOffen = false
-                                            }
-                                        ) {
-                                            Text("Rechnung fällig", color = Color.White)
-                                            Text("$ueberfaelligeRechnungen", color = Color.White, fontSize = 22.sp, fontWeight = FontWeight.Bold)
-                                        }
+                                        Spacer(Modifier.weight(2f))
                                     }
-                                }
-                            }
-                        }
-                        item {
-                            Card(
-                                modifier = Modifier.fillMaxWidth(),
-                                colors = CardDefaults.cardColors(containerColor = KuemmeroSurface),
-                                shape = RoundedCornerShape(20.dp),
-                                border = BorderStroke(1.5.dp, KuemmeroGreenLight)
-                            ) {
-                                Column(
-                                    Modifier.padding(14.dp),
-                                    verticalArrangement = Arrangement.spacedBy(10.dp)
-                                ) {
-                                    Text(
-                                        "Schnellaktionen",
-                                        style = MaterialTheme.typography.titleLarge,
-                                        color = KuemmeroGreen,
-                                        fontWeight = FontWeight.Bold
-                                    )
-
-                                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                        Button(
-                                            onClick = {
-                                                hauptseite = "Aufträge"
-                                                bearbeiteIndex = null
-                                                auftragDetailIndex = null
-                                                auftragFormOffen = true
-                                                nummer = ""
-                                                datum = datumJetzt
-                                                leistungsdatum = datumJetzt
-                                                gueltigBis = ""
-                                                kunde = ""
-                                                strasse = ""
-                                                ort = ""
-                                                leistung = ""
-                                                stunden = ""
-                                                material = ""
-                                                materialBonUri = ""
-                                                fahrt = ""
-                                                status = "Offen"
-                                                zahlungsstatus = "Offen"
-                                                bezahltAm = ""
-                                                terminDatum = ""
-                                                terminUhrzeit = ""
-                                                notiz = ""
-                                                fotosVorher = emptyList()
-                                                fotosNachher = emptyList()
-                                                unterschriftPfad = ""
-                                                unterschriftDatum = ""
-                                            },
-                                            modifier = Modifier.weight(1f).heightIn(min = 52.dp),
-                                            shape = RoundedCornerShape(18.dp),
-                                            colors = ButtonDefaults.buttonColors(containerColor = KuemmeroGreen)
-                                        ) { Text("+ Auftrag", fontWeight = FontWeight.Bold) }
-
-                                        Button(
-                                            onClick = { neuerKundeDialog = true },
-                                            modifier = Modifier.weight(1f).heightIn(min = 52.dp),
-                                            shape = RoundedCornerShape(18.dp),
-                                            colors = ButtonDefaults.buttonColors(containerColor = KuemmeroGreen, contentColor = Color.White)
-                                        ) { Text("+ Kunde", fontWeight = FontWeight.Bold) }
-                                    }
-
-                                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                        Button(
-                                            onClick = {
-                                                hauptseite = "Aufträge"
-                                                auftragFormOffen = false
-                                                auftragDetailIndex = null
-                                                bearbeiteIndex = null
-                                                statusFilter = "Erledigt"
-                                                zahlungsFilterOffen = false
-                                                auftragsSuche = ""
-                                            },
-                                            modifier = Modifier.weight(1f).heightIn(min = 52.dp),
-                                            shape = RoundedCornerShape(18.dp),
-                                            colors = ButtonDefaults.buttonColors(containerColor = KuemmeroGreen, contentColor = Color.White)
-                                        ) { Text("🧾 Rechnung", fontWeight = FontWeight.Bold) }
-
-                                        Button(
-                                            onClick = {
-                                                hauptseite = "Aufträge"
-                                                auftragFormOffen = false
-                                                auftragDetailIndex = null
-                                                bearbeiteIndex = null
-                                                statusFilter = "In Bearbeitung"
-                                                zahlungsFilterOffen = false
-                                                auftragsSuche = ""
-                                            },
-                                            modifier = Modifier.weight(1f).heightIn(min = 52.dp),
-                                            shape = RoundedCornerShape(18.dp),
-                                            colors = ButtonDefaults.buttonColors(containerColor = KuemmeroGreen, contentColor = Color.White)
-                                        ) { Text("📷 Auftrag", fontWeight = FontWeight.Bold) }
-                                    }
-
-                                    Button(
-                                        onClick = {
-                                            hauptseite = "Aufträge"
-                                            auftragFormOffen = false
-                                            auftragDetailIndex = null
-                                            bearbeiteIndex = null
-                                            statusFilter = "In Bearbeitung"
-                                            zahlungsFilterOffen = false
-                                            auftragsSuche = ""
-                                        },
-                                        modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp),
-                                        shape = RoundedCornerShape(18.dp),
-                                        colors = ButtonDefaults.buttonColors(containerColor = KuemmeroGreen, contentColor = Color.White)
-                                    ) { Text("⏱ Arbeitszeit starten / Auftrag auswählen", fontWeight = FontWeight.Bold) }
                                 }
                             }
                         }
@@ -4540,12 +4092,6 @@ fun KuemmeroApp() {
                                         if (k.email.isNotBlank()) Text("✉ ${k.email}", color = KuemmeroText)
                                         Text("Aufträge: ${auftraege.count { it.kunde == k.name }}", color = KuemmeroText)
                                         Text("Kundenakte öffnen →", color = KuemmeroGreen, fontWeight = FontWeight.Bold)
-                                        OutlinedButton(
-                                            onClick = { kundenLoeschName = k.name },
-                                            modifier = Modifier.fillMaxWidth().heightIn(min = 44.dp),
-                                            border = BorderStroke(1.5.dp, KuemmeroError),
-                                            colors = ButtonDefaults.outlinedButtonColors(contentColor = KuemmeroError)
-                                        ) { Text("Kunden löschen") }
                                     }
                                 }
                             }
@@ -5103,132 +4649,8 @@ fun KuemmeroApp() {
                             }
                         }
                     }
-
-                    "Suche" -> {
-                        val q = globaleSuche.trim().lowercase(Locale.GERMANY)
-                        val auftragTreffer = auftraege.mapIndexed { i, a -> i to a }.filter { (_, a) ->
-                            listOf(a.nummer, a.datum, a.kunde, a.kundenStrasse, a.kundenOrt, a.leistung, a.status, a.rechnungsnummer, a.zahlungsstatus).any { it.lowercase(Locale.GERMANY).contains(q) }
-                        }
-                        val kundenTreffer = kunden.filter { k -> listOf(k.name, k.adresse, k.ort, k.telefon, k.email).any { it.lowercase(Locale.GERMANY).contains(q) } }
-                        item { Text("Suchergebnisse", style = MaterialTheme.typography.headlineSmall, color = KuemmeroGreen, fontWeight = FontWeight.Bold) }
-                        item { Text("Suchbegriff: $globaleSuche", color = KuemmeroText) }
-                        item {
-                            Card(Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = KuemmeroSurface), shape = RoundedCornerShape(18.dp)) {
-                                Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                                    Text("Kunden (${kundenTreffer.size})", fontWeight = FontWeight.Bold, color = KuemmeroGreen)
-                                    kundenTreffer.take(20).forEach { k -> Text("${k.name} · ${k.ort} · ${k.telefon}", color = KuemmeroText) }
-                                    if (kundenTreffer.isEmpty()) Text("Keine Kundentreffer.")
-                                }
-                            }
-                        }
-                        item {
-                            Card(Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = KuemmeroSurface), shape = RoundedCornerShape(18.dp)) {
-                                Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                                    Text("Aufträge / Rechnungen (${auftragTreffer.size})", fontWeight = FontWeight.Bold, color = KuemmeroGreen)
-                                    auftragTreffer.take(30).forEach { (i, a) ->
-                                        TextButton(onClick = { hauptseite = "Aufträge"; auftragDetailIndex = i; auftragFormOffen = false }) {
-                                            Text("${a.nummer} · ${a.kunde} · ${a.rechnungsnummer.ifBlank { "keine Rechnung" }} · ${a.status}")
-                                        }
-                                    }
-                                    if (auftragTreffer.isEmpty()) Text("Keine Auftrags-/Rechnungstreffer.")
-                                }
-                            }
-                        }
-                    }
-                    "Auftragsakte" -> {
-                        val akteIndex = auftragsakteIndex
-                        val a = akteIndex?.let { auftraege.getOrNull(it) }
-                        item { Text("📁 Auftragsakte", style = MaterialTheme.typography.headlineSmall, color = KuemmeroGreen, fontWeight = FontWeight.Bold) }
-                        if (a == null) {
-                            item { Text("Kein Auftrag ausgewählt.", color = KuemmeroText) }
-                        } else {
-                            item {
-                                Card(Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = KuemmeroSurface), shape = RoundedCornerShape(18.dp), border = BorderStroke(1.5.dp, KuemmeroGreenLight)) {
-                                    Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(7.dp)) {
-                                        Text("Auftrag ${a.nummer}", fontWeight = FontWeight.Bold, color = KuemmeroGreen)
-                                        Text("Kunde: ${a.kunde}")
-                                        Text("Adresse: ${listOf(a.kundenStrasse, a.kundenOrt).filter { it.isNotBlank() }.joinToString(", ")}")
-                                        Text("Leistung: ${a.leistung.ifBlank { "—" }}")
-                                        Text("Status: ${a.status}")
-                                        Text("Leistungsdatum: ${a.leistungsdatum.ifBlank { a.datum.ifBlank { "—" } }}")
-                                        Text("Termin: ${a.terminDatum.ifBlank { "—" }}${if (a.terminUhrzeit.isNotBlank()) " · ${a.terminUhrzeit}" else ""}")
-                                        Text("Arbeitszeit: ${String.format(Locale.GERMANY, "%.2f", a.stunden)} Std.")
-                                        Text("Gesamt: ${euro(gesamtbetrag(a.stunden, a.material, a.fahrt, a.stundensatz, a.erstellungskosten))}", fontWeight = FontWeight.Bold, color = KuemmeroGreen)
-                                        Text("Zahlung: ${if (a.zahlungsstatus == "Bezahlt") "Bezahlt" else "Offen"}")
-                                        if (a.rechnungsnummer.isNotBlank()) Text("Rechnung: ${a.rechnungsnummer} · ${a.rechnungsdatum.ifBlank { "ohne Datum" }}")
-                                        Text("Fotos vorher: ${a.fotosVorher.size} · Fotos nachher: ${a.fotosNachher.size}")
-                                        Text("Unterschrift: ${if (a.unterschriftPfad.isNotBlank()) "vorhanden" else "nicht vorhanden"}")
-                                        if (a.notiz.isNotBlank()) Text("Notiz: ${a.notiz}")
-                                    }
-                                }
-                            }
-                            item { Button(onClick = { hauptseite = "Aufträge"; auftragDetailIndex = akteIndex; auftragFormOffen = false }, modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp), shape = RoundedCornerShape(26.dp), colors = ButtonDefaults.buttonColors(containerColor = KuemmeroGreen)) { Text("Auftrag öffnen") } }
-                            item { OutlinedButton(onClick = { auftragsakteIndex = null; hauptseite = "Aufträge" }, modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp), shape = RoundedCornerShape(26.dp)) { Text("← Zurück") } }
-                        }
-                    }
-                    "Rechnungsarchiv" -> {
-                        val jahre = listOf("Alle") + auftraege.filter { it.rechnungsnummer.isNotBlank() }.map { rechnungsJahr(it) }.distinct().sortedDescending()
-                        val archiv = auftraege.mapIndexed { i, a -> i to a }.filter { (_, a) ->
-                            a.rechnungsnummer.isNotBlank() &&
-                            (archivJahr == "Alle" || rechnungsJahr(a) == archivJahr) &&
-                            (archivSuche.isBlank() || listOf(a.rechnungsnummer, a.kunde, a.leistung, a.zahlungsstatus).any { it.contains(archivSuche, ignoreCase = true) })
-                        }.sortedByDescending { it.second.rechnungsdatum }
-                        item { Text("🧾 Rechnungsarchiv", style = MaterialTheme.typography.headlineSmall, color = KuemmeroGreen, fontWeight = FontWeight.Bold) }
-                        item { OutlinedTextField(archivSuche, { archivSuche = it }, label = { Text("Rechnung / Kunde suchen") }, singleLine = true, colors = feldFarben, modifier = Modifier.fillMaxWidth()) }
-                        item {
-                            Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                                jahre.forEach { jahr ->
-                                    FilterChip(selected = archivJahr == jahr, onClick = { archivJahr = jahr }, label = { Text(jahr) })
-                                }
-                            }
-                        }
-                        if (archiv.isEmpty()) item { Text("Keine Rechnungen im Archiv gefunden.", color = KuemmeroText) }
-                        archiv.forEach { (i, a) ->
-                            item {
-                                Card(Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = KuemmeroSurface), shape = RoundedCornerShape(18.dp)) {
-                                    Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(7.dp)) {
-                                        Text(a.rechnungsnummer, fontWeight = FontWeight.Bold, color = KuemmeroGreen)
-                                        Text("${a.kunde} · ${a.rechnungsdatum.ifBlank { a.datum }}", color = KuemmeroText)
-                                        Text("${euro(gesamtbetrag(a.stunden, a.material, a.fahrt, a.stundensatz, a.erstellungskosten))} · ${if (a.zahlungsstatus == "Bezahlt") "Bezahlt" else "Offen"}", color = KuemmeroText)
-                                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                            Button(onClick = { druckeRechnungPdf(context, a) }, modifier = Modifier.weight(1f), colors = ButtonDefaults.buttonColors(containerColor = KuemmeroGreen)) { Text("PDF") }
-                                            OutlinedButton(onClick = { hauptseite = "Aufträge"; auftragDetailIndex = i; auftragFormOffen = false }, modifier = Modifier.weight(1f)) { Text("Auftrag") }
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
-                    "Auswertung" -> {
-                        val heuteMonat = SimpleDateFormat("MM.yyyy", Locale.GERMANY).format(Date())
-                        val monatsAuftraege = auftraege.filter { (it.rechnungsdatum.ifBlank { it.datum }).endsWith(heuteMonat) }
-                        val rechnungsumsatz = monatsAuftraege.filter { it.rechnungsnummer.isNotBlank() }.sumOf { gesamtbetrag(it.stunden, it.material, it.fahrt, it.stundensatz, it.erstellungskosten) }
-                        val bezahltSumme = monatsAuftraege.filter { it.zahlungsstatus == "Bezahlt" }.sumOf { gesamtbetrag(it.stunden, it.material, it.fahrt, it.stundensatz, it.erstellungskosten) }
-                        val offenSumme = monatsAuftraege.filter { it.rechnungsnummer.isNotBlank() && it.zahlungsstatus != "Bezahlt" }.sumOf { gesamtbetrag(it.stunden, it.material, it.fahrt, it.stundensatz, it.erstellungskosten) }
-                        val materialSumme = monatsAuftraege.sumOf { it.material }
-                        val fahrtSumme = monatsAuftraege.sumOf { it.fahrt }
-                        val stundenSumme = monatsAuftraege.sumOf { it.stunden }
-                        val offen = auftraege.filter { it.rechnungsnummer.isNotBlank() && it.zahlungsstatus != "Bezahlt" }.sumOf { gesamtbetrag(it.stunden, it.material, it.fahrt, it.stundensatz, it.erstellungskosten) }
-                        item { Text("📊 Monatsübersicht", style = MaterialTheme.typography.headlineSmall, color = KuemmeroGreen, fontWeight = FontWeight.Bold) }
-                        item { Card(Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = KuemmeroSurface), shape = RoundedCornerShape(18.dp)) {
-                            Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                                Text("Monat: $heuteMonat", fontWeight = FontWeight.Bold)
-                                Text("Rechnungsumsatz: ${euro(rechnungsumsatz)}", color = KuemmeroGreen, fontWeight = FontWeight.Bold)
-                                Text("Davon bezahlt: ${euro(bezahltSumme)}")
-                                Text("Noch offen: ${euro(offenSumme)}", color = if (offenSumme > 0) KuemmeroError else KuemmeroGreen)
-                                Text("Arbeitszeit: ${String.format(Locale.GERMANY, "%.2f", stundenSumme)} Std.")
-                                Text("Material: ${euro(materialSumme)}")
-                                Text("Fahrt: ${euro(fahrtSumme)}")
-                                                                Text("Aufträge im Monat: ${monatsAuftraege.size}")
-                            }
-                        } }
-                        item { Text("Hinweis: Die Auswertung ist eine operative Übersicht und ersetzt keine steuerliche Buchführung.", fontSize = 12.sp, color = KuemmeroText) }
-                    }
                     "Mehr" -> {
                         item { Text("Mehr", style = MaterialTheme.typography.headlineSmall, color = KuemmeroGreen, fontWeight = FontWeight.Bold) }
-                        item { OutlinedButton(onClick = { hauptseite = "Rechnungsarchiv" }, modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp), shape = RoundedCornerShape(26.dp), border = BorderStroke(2.dp, KuemmeroGreen), colors = ButtonDefaults.outlinedButtonColors(contentColor = KuemmeroGreen)) { Text("🧾 Rechnungsarchiv", fontWeight = FontWeight.Bold) } }
-                        item { OutlinedButton(onClick = { hauptseite = "Auswertung" }, modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp), shape = RoundedCornerShape(26.dp), border = BorderStroke(2.dp, KuemmeroGreen), colors = ButtonDefaults.outlinedButtonColors(contentColor = KuemmeroGreen)) { Text("📊 Monatsauswertung", fontWeight = FontWeight.Bold) } }
-                        item { OutlinedButton(onClick = { exportCsvText = kuemmeroCsv(auftraege, kunden); exportCsvLauncher.launch("KUEMMERO-Datenexport-${SimpleDateFormat("yyyyMMdd-HHmm", Locale.GERMANY).format(Date())}.csv") }, modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp), shape = RoundedCornerShape(26.dp), border = BorderStroke(2.dp, KuemmeroGreen), colors = ButtonDefaults.outlinedButtonColors(contentColor = KuemmeroGreen)) { Text("📤 Daten exportieren", fontWeight = FontWeight.Bold) } }
                         item {
                             OutlinedButton(
                                 onClick = { hauptseite = "Kalender" },
@@ -5278,32 +4700,7 @@ fun KuemmeroApp() {
                                     OutlinedTextField(unternehmerTelefon, { unternehmerTelefon = it }, label = { Text("Telefon") }, colors = feldFarben, modifier = Modifier.fillMaxWidth(), keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone))
                                     OutlinedTextField(unternehmerEmail, { unternehmerEmail = it }, label = { Text("E-Mail") }, colors = feldFarben, modifier = Modifier.fillMaxWidth(), keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email))
                                     OutlinedTextField(steuernummer, { steuernummer = it }, label = { Text("Steuernummer / USt-ID / KU-IdNr.") }, colors = feldFarben, modifier = Modifier.fillMaxWidth())
-                                    Row(
-                modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.SpaceBetween
-            ) {
-                Column(modifier = Modifier.weight(1f)) {
-                    Text("Kleinunternehmerregelung (§ 19 UStG)", fontWeight = FontWeight.Bold)
-                    Text(
-                        if (kleinunternehmer)
-                            "Aktiv – Umsatzsteuer wird nicht ausgewiesen."
-                        else
-                            "Deaktiviert – vollständige Umsatzsteuerrechnung erforderlich.",
-                        fontSize = 12.sp
-                    )
-                }
-                Switch(
-                    checked = kleinunternehmer,
-                    onCheckedChange = {
-                        kleinunternehmer = it
-                        context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-                            .edit().putBoolean(KLEINUNTERNEHMER_KEY, it).apply()
-                    }
-                )
-            }
-
-            Button(onClick = {
+                                    Button(onClick = {
                                         context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE).edit()
                                             .putString(FIRMENNAME_KEY, unternehmerName.trim())
                                             .putString(FIRMENSTRASSE_KEY, unternehmerStrasse.trim())
