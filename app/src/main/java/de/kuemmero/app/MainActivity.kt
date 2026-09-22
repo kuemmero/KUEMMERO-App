@@ -329,6 +329,9 @@ private fun backupText(context: Context): String {
     val p = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
     return JSONObject().apply {
         put("stundensatz", p.getString(STUNDENSATZ_KEY, "42.00") ?: "42.00")
+        put("firmenStrasse", p.getString(FIRMENSTRASSE_KEY, "") ?: "")
+        put("firmenPlzOrt", p.getString(FIRMENPLZORT_KEY, "") ?: "")
+        put("steuernummer", p.getString(STEUERNUMMER_KEY, "") ?: "")
         put("auftraege", JSONArray(p.getString(AUFTRAEGE_KEY, "[]") ?: "[]"))
         put("kunden", JSONArray(p.getString(KUNDEN_KEY, "[]") ?: "[]"))
         put("kostenvoranschlaege", JSONArray(p.getString(KOSTENVORANSCHLAEGE_KEY, "[]") ?: "[]"))
@@ -574,7 +577,7 @@ private fun erstelleRechnungPdf(
     c.drawText("Rechnungsnummer: $nummer", 40f, 255f, p)
     c.drawText("Rechnungsdatum: $rechnungsdatum", 40f, 275f, p)
     c.drawText("Fällig am: $faelligAm", 40f, 295f, p)
-    c.drawText("Steuernummer: ${steuernummer.ifBlank { "BITTE IN MEHR EINTRAGEN" }}", 40f, 315f, p)
+    c.drawText("Steuer-/USt-ID/KU-IdNr.: ${steuernummer.ifBlank { "BITTE IN MEHR EINTRAGEN" }}", 40f, 315f, p)
     c.drawText("Leistungsdatum: ${leistungsdatum.ifBlank { rechnungsdatum }}", 40f, 335f, p)
     c.drawText("Kunde: $kunde", 40f, 365f, p)
     c.drawText("Adresse: $strasse", 40f, 385f, p)
@@ -1171,15 +1174,24 @@ fun KuemmeroApp() {
                     ?: throw Exception("Datei konnte nicht gelesen werden")
                 val obj = JSONObject(text)
                 val rate = obj.optString("stundensatz", "42.00")
+                val firmenStrasseBackup = obj.optString("firmenStrasse", "")
+                val firmenPlzOrtBackup = obj.optString("firmenPlzOrt", "")
+                val steuernummerBackup = obj.optString("steuernummer", "")
                 val arr = obj.optJSONArray("auftraege") ?: JSONArray()
                 val kundenArr = obj.optJSONArray("kunden") ?: JSONArray()
                 val kvArr = obj.optJSONArray("kostenvoranschlaege") ?: JSONArray()
                 context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE).edit()
                     .putString(STUNDENSATZ_KEY, rate)
+                    .putString(FIRMENSTRASSE_KEY, firmenStrasseBackup)
+                    .putString(FIRMENPLZORT_KEY, firmenPlzOrtBackup)
+                    .putString(STEUERNUMMER_KEY, steuernummerBackup)
                     .putString(AUFTRAEGE_KEY, arr.toString())
                     .putString(KUNDEN_KEY, kundenArr.toString())
                     .putString(KOSTENVORANSCHLAEGE_KEY, kvArr.toString()).commit()
                 stundensatz = rate
+                unternehmerStrasse = firmenStrasseBackup
+                unternehmerPlzOrt = firmenPlzOrtBackup
+                steuernummer = steuernummerBackup
                 auftraege = ladeAuftraege(context)
                 kunden = ladeKunden(context)
                 kostenvoranschlaege = ladeKostenvoranschlaege(context)
