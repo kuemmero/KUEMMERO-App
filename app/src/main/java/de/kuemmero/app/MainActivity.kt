@@ -1015,6 +1015,7 @@ fun KuemmeroApp() {
     var zahlungsFilterOffen by remember { mutableStateOf(false) }
     var kundenAkteName by remember { mutableStateOf<String?>(null) }
     var kalenderOffen by remember { mutableStateOf(false) }
+    var dashboardErgebnis by remember { mutableStateOf<String?>(null) }
     var terminBereichOffen by remember { mutableStateOf(false) }
     var notizBereichOffen by remember { mutableStateOf(false) }
     var fotosBereichOffen by remember { mutableStateOf(false) }
@@ -1774,6 +1775,124 @@ fun KuemmeroApp() {
                 }
             },
             confirmButton = { TextButton(onClick = { kundenAkteName = null }) { Text("Schließen") } }
+        )
+    }
+
+    if (dashboardErgebnis != null) {
+        val titel = when (dashboardErgebnis) {
+            "Termine" -> "Heutige Termine"
+            "OffeneAuftraege" -> "Offene Aufträge"
+            "Abgearbeitet" -> "Abgearbeitete Aufträge"
+            "OffeneZahlungen" -> "Offene Zahlungen"
+            else -> "Ergebnis"
+        }
+
+        val ergebnisAuftraege = when (dashboardErgebnis) {
+            "Termine" -> termineHeute
+            "OffeneAuftraege" -> auftraege.filter {
+                it.status == "Offen" || it.status == "In Bearbeitung"
+            }
+            "Abgearbeitet" -> auftraege.filter {
+                it.status == "Erledigt" || it.status == "Abgerechnet"
+            }
+            "OffeneZahlungen" -> auftraege.filter {
+                it.zahlungsstatus != "Bezahlt"
+            }
+            else -> emptyList()
+        }
+
+        AlertDialog(
+            onDismissRequest = { dashboardErgebnis = null },
+            title = {
+                Text("$titel · ${ergebnisAuftraege.size}")
+            },
+            text = {
+                if (ergebnisAuftraege.isEmpty()) {
+                    Text(
+                        when (dashboardErgebnis) {
+                            "Termine" -> "Heute keine Termine."
+                            "OffeneAuftraege" -> "Keine offenen Aufträge."
+                            "Abgearbeitet" -> "Keine abgearbeiteten Aufträge."
+                            "OffeneZahlungen" -> "Keine offenen Zahlungen."
+                            else -> "Keine Ergebnisse."
+                        }
+                    )
+                } else {
+                    Column(
+                        Modifier
+                            .fillMaxWidth()
+                            .heightIn(max = 430.dp)
+                            .verticalScroll(rememberScrollState()),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        ergebnisAuftraege.forEach { a ->
+                            val index = auftraege.indexOfFirst {
+                                it.nummer == a.nummer &&
+                                    it.kunde == a.kunde &&
+                                    it.datum == a.datum
+                            }
+
+                            Card(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clickable {
+                                        dashboardErgebnis = null
+                                        dashboardAuftragsFilter = null
+                                        statusFilter = "Alle"
+                                        zahlungsFilterOffen = false
+                                        auftragsSuche = ""
+                                        if (index >= 0) {
+                                            hauptseite = "Aufträge"
+                                            auftragFormOffen = false
+                                            bearbeiteIndex = null
+                                            auftragDetailIndex = index
+                                        }
+                                    },
+                                colors = CardDefaults.cardColors(containerColor = KuemmeroMint),
+                                shape = RoundedCornerShape(14.dp)
+                            ) {
+                                Column(Modifier.padding(12.dp)) {
+                                    Text(
+                                        buildString {
+                                            if (a.terminDatum.isNotBlank()) {
+                                                append(a.terminDatum)
+                                                if (a.terminUhrzeit.isNotBlank()) append(" · ${a.terminUhrzeit}")
+                                                append(" · ")
+                                            }
+                                            append(a.kunde.ifBlank { "Ohne Kundenname" })
+                                        },
+                                        fontWeight = FontWeight.Bold,
+                                        color = KuemmeroGreen
+                                    )
+                                    if (a.leistung.isNotBlank()) {
+                                        Text(a.leistung, color = KuemmeroText)
+                                    }
+                                    Text(
+                                        when (dashboardErgebnis) {
+                                            "OffeneZahlungen" ->
+                                                "${euro(gesamtbetrag(a.stunden, a.material, a.fahrt, a.stundensatz, a.erstellungskosten))} · ${a.zahlungsstatus}"
+                                            else -> a.status
+                                        },
+                                        color = KuemmeroText,
+                                        style = MaterialTheme.typography.bodySmall
+                                    )
+                                    Text(
+                                        "Auftrag öffnen →",
+                                        color = KuemmeroGreen,
+                                        fontWeight = FontWeight.Bold,
+                                        style = MaterialTheme.typography.bodySmall
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { dashboardErgebnis = null }) {
+                    Text("Schließen")
+                }
+            }
         )
     }
 
@@ -3081,67 +3200,93 @@ fun KuemmeroApp() {
                                 colors = CardDefaults.cardColors(containerColor = KuemmeroGreen),
                                 shape = RoundedCornerShape(22.dp)
                             ) {
-                                Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                                    Text("Heute · $heuteText", color = Color.White, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
-                                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                        Column(
-                                            Modifier.weight(1f).clickable {
-                                                kalenderOffen = true
-                                                auftragFormOffen = false
-                                                auftragDetailIndex = null
-                                            }
+                                Column(
+                                    Modifier.padding(16.dp),
+                                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                                ) {
+                                    Text(
+                                        "Heute · $heuteText",
+                                        color = Color.White,
+                                        style = MaterialTheme.typography.headlineSmall,
+                                        fontWeight = FontWeight.Bold
+                                    )
+
+                                    Row(
+                                        Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                                    ) {
+                                        Card(
+                                            modifier = Modifier
+                                                .weight(1f)
+                                                .height(92.dp)
+                                                .clickable { dashboardErgebnis = "Termine" },
+                                            colors = CardDefaults.cardColors(containerColor = KuemmeroMint),
+                                            shape = RoundedCornerShape(16.dp)
                                         ) {
-                                            Text("Termine", color = Color.White)
-                                            Text("${termineHeute.size}", color = Color.White, fontSize = 26.sp, fontWeight = FontWeight.Bold)
+                                            Column(
+                                                Modifier.fillMaxSize().padding(12.dp),
+                                                verticalArrangement = Arrangement.SpaceBetween
+                                            ) {
+                                                Text("Termine", color = KuemmeroText, fontWeight = FontWeight.SemiBold)
+                                                Text("${termineHeute.size}", color = KuemmeroGreen, fontSize = 25.sp, fontWeight = FontWeight.Bold)
+                                            }
                                         }
-                                        Column(
-                                            Modifier.weight(1f).clickable {
-                                                hauptseite = "Aufträge"
-                                                auftragFormOffen = false
-                                                auftragDetailIndex = null
-                                                bearbeiteIndex = null
-                                                dashboardAuftragsFilter = "OffeneAuftraege"
-                                                statusFilter = "Alle"
-                                                zahlungsFilterOffen = false
-                                                auftragsSuche = ""
-                                            }
+
+                                        Card(
+                                            modifier = Modifier
+                                                .weight(1f)
+                                                .height(92.dp)
+                                                .clickable { dashboardErgebnis = "OffeneAuftraege" },
+                                            colors = CardDefaults.cardColors(containerColor = KuemmeroMint),
+                                            shape = RoundedCornerShape(16.dp)
                                         ) {
-                                            Text("Offene Aufträge", color = Color.White)
-                                            Text("$offeneAuftraege", color = Color.White, fontSize = 26.sp, fontWeight = FontWeight.Bold)
-                                        }
-                                        Column(
-                                            Modifier.weight(1f).clickable {
-                                                hauptseite = "Aufträge"
-                                                auftragFormOffen = false
-                                                auftragDetailIndex = null
-                                                bearbeiteIndex = null
-                                                dashboardAuftragsFilter = "Abgearbeitet"
-                                                statusFilter = "Alle"
-                                                zahlungsFilterOffen = false
-                                                auftragsSuche = ""
+                                            Column(
+                                                Modifier.fillMaxSize().padding(12.dp),
+                                                verticalArrangement = Arrangement.SpaceBetween
+                                            ) {
+                                                Text("Offene Aufträge", color = KuemmeroText, fontWeight = FontWeight.SemiBold)
+                                                Text("$offeneAuftraege", color = KuemmeroGreen, fontSize = 25.sp, fontWeight = FontWeight.Bold)
                                             }
-                                        ) {
-                                            Text("Abgearbeitet", color = Color.White)
-                                            Text("$abgearbeiteteAuftraege", color = Color.White, fontSize = 22.sp, fontWeight = FontWeight.Bold)
                                         }
                                     }
-                                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                        Column(
-                                            Modifier.weight(1f).clickable {
-                                                hauptseite = "Aufträge"
-                                                auftragFormOffen = false
-                                                auftragDetailIndex = null
-                                                bearbeiteIndex = null
-                                                dashboardAuftragsFilter = null
-                                                statusFilter = "Alle"
-                                                zahlungsFilterOffen = true
-                                                auftragsSuche = ""
-                                            }
+
+                                    Row(
+                                        Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                                    ) {
+                                        Card(
+                                            modifier = Modifier
+                                                .weight(1f)
+                                                .height(92.dp)
+                                                .clickable { dashboardErgebnis = "Abgearbeitet" },
+                                            colors = CardDefaults.cardColors(containerColor = KuemmeroMint),
+                                            shape = RoundedCornerShape(16.dp)
                                         ) {
-                                            Text("Offen €", color = Color.White)
-                                            Text(euro(offeneZahlungSumme), color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.Bold)
+                                            Column(
+                                                Modifier.fillMaxSize().padding(12.dp),
+                                                verticalArrangement = Arrangement.SpaceBetween
+                                            ) {
+                                                Text("Abgearbeitet", color = KuemmeroText, fontWeight = FontWeight.SemiBold)
+                                                Text("$abgearbeiteteAuftraege", color = KuemmeroGreen, fontSize = 25.sp, fontWeight = FontWeight.Bold)
+                                            }
                                         }
-                                        Spacer(Modifier.weight(2f))
+
+                                        Card(
+                                            modifier = Modifier
+                                                .weight(1f)
+                                                .height(92.dp)
+                                                .clickable { dashboardErgebnis = "OffeneZahlungen" },
+                                            colors = CardDefaults.cardColors(containerColor = KuemmeroMint),
+                                            shape = RoundedCornerShape(16.dp)
+                                        ) {
+                                            Column(
+                                                Modifier.fillMaxSize().padding(12.dp),
+                                                verticalArrangement = Arrangement.SpaceBetween
+                                            ) {
+                                                Text("Offen €", color = KuemmeroText, fontWeight = FontWeight.SemiBold)
+                                                Text(euro(offeneZahlungSumme), color = KuemmeroGreen, fontSize = 19.sp, fontWeight = FontWeight.Bold)
+                                            }
+                                        }
                                     }
                                 }
                             }
