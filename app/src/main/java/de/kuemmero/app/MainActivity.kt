@@ -929,6 +929,7 @@ fun KuemmeroApp() {
     var unterschriftDatum by remember { mutableStateOf("") }
     var fotoTyp by remember { mutableStateOf("Vorher") }
     var unterschriftDialog by remember { mutableStateOf(false) }
+    var unterschriftLoeschenBestaetigung by remember { mutableStateOf(false) }
     var fotoVorschauUri by remember { mutableStateOf<String?>(null) }
     var auftragsSuche by remember { mutableStateOf("") }
     var statusFilter by remember { mutableStateOf("Alle") }
@@ -1566,6 +1567,32 @@ fun KuemmeroApp() {
         )
     }
 
+    if (unterschriftLoeschenBestaetigung) {
+        AlertDialog(
+            onDismissRequest = { unterschriftLoeschenBestaetigung = false },
+            title = { Text("Unterschrift löschen?") },
+            text = { Text("Soll die gespeicherte Kunden-Unterschrift wirklich gelöscht werden?") },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        val alterPfad = unterschriftPfad
+                        if (alterPfad.isNotBlank()) {
+                            try { java.io.File(alterPfad).delete() } catch (_: Exception) {}
+                        }
+                        unterschriftPfad = ""
+                        unterschriftDatum = ""
+                        unterschriftLoeschenBestaetigung = false
+                        android.widget.Toast.makeText(context, "Unterschrift gelöscht.", 0).show()
+                    },
+                    colors = ButtonDefaults.textButtonColors(contentColor = KuemmeroError)
+                ) { Text("Löschen") }
+            },
+            dismissButton = {
+                TextButton(onClick = { unterschriftLoeschenBestaetigung = false }) { Text("Abbrechen") }
+            }
+        )
+    }
+
     kundenAkteName?.let { name ->
         val kundeAkte = kunden.firstOrNull { it.name.equals(name, ignoreCase = true) }
         val kundenAuftraege = auftraege.filter { it.kunde.equals(name, ignoreCase = true) }
@@ -2099,6 +2126,17 @@ fun KuemmeroApp() {
                     KlappBereich("✍ Kunden-Unterschrift", unterschriftBereichOffen, { unterschriftBereichOffen = !unterschriftBereichOffen }) {
                         OutlinedButton(onClick = { unterschriftDialog = true }, modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp), shape = RoundedCornerShape(26.dp), border = BorderStroke(2.dp, KuemmeroGreen), colors = ButtonDefaults.outlinedButtonColors(contentColor = KuemmeroGreen)) {
                             Text(if (unterschriftPfad.isBlank()) "✍ Kunden-Unterschrift aufnehmen" else "✓ Unterschrift vorhanden${if (unterschriftDatum.isBlank()) "" else " · $unterschriftDatum"}", fontWeight = FontWeight.Bold)
+                        }
+                        if (unterschriftPfad.isNotBlank()) {
+                            OutlinedButton(
+                                onClick = { unterschriftLoeschenBestaetigung = true },
+                                modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp),
+                                shape = RoundedCornerShape(26.dp),
+                                border = BorderStroke(2.dp, KuemmeroError),
+                                colors = ButtonDefaults.outlinedButtonColors(contentColor = KuemmeroError)
+                            ) {
+                                Text("🗑 Unterschrift löschen", fontWeight = FontWeight.Bold)
+                            }
                         }
                     }
                 }
