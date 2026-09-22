@@ -926,6 +926,7 @@ fun KuemmeroApp() {
         mutableStateOf(datumFormat.format(cal.time))
     }
     var loeschIndex by remember { mutableStateOf<Int?>(null) }
+    var arbeitszeitLoeschIndex by remember { mutableStateOf<Int?>(null) }
     var bearbeiteIndex by remember { mutableStateOf<Int?>(null) }
     var status by remember { mutableStateOf("Offen") }
     var zahlungsstatus by remember { mutableStateOf("Offen") }
@@ -1734,6 +1735,48 @@ fun KuemmeroApp() {
             },
             confirmButton = { TextButton(onClick = { kalenderOffen = false }) { Text("Schließen") } }
         )
+    }
+
+    arbeitszeitLoeschIndex?.let { index ->
+        val a = auftraege.getOrNull(index)
+        if (a != null) {
+            AlertDialog(
+                onDismissRequest = { arbeitszeitLoeschIndex = null },
+                title = { Text("Arbeitszeit zurücksetzen?") },
+                text = {
+                    Text(
+                        "Die aufgezeichnete Arbeitszeit wird gelöscht. Die eingetragenen Stunden im Auftrag bleiben unverändert."
+                    )
+                },
+                confirmButton = {
+                    TextButton(onClick = {
+                        val aktualisiert = a.copy(
+                            arbeitsStart = 0L,
+                            arbeitsEnde = 0L,
+                            arbeitsSekunden = 0L,
+                            arbeitszeitUebernommen = false
+                        )
+                        auftraege = auftraege.toMutableList().apply { set(index, aktualisiert) }
+                        speichereAuftraege(context, auftraege)
+                        if (timerIndex == index) {
+                            timerIndex = null
+                            timerSekunden = 0L
+                        }
+                        arbeitszeitLoeschIndex = null
+                        android.widget.Toast.makeText(
+                            context,
+                            "Arbeitszeit zurückgesetzt.",
+                            android.widget.Toast.LENGTH_SHORT
+                        ).show()
+                    }) { Text("Zurücksetzen") }
+                },
+                dismissButton = {
+                    TextButton(onClick = { arbeitszeitLoeschIndex = null }) { Text("Abbrechen") }
+                }
+            )
+        } else {
+            arbeitszeitLoeschIndex = null
+        }
     }
 
     loeschIndex?.let { index ->
@@ -2658,6 +2701,21 @@ fun KuemmeroApp() {
                                 color = KuemmeroText,
                                 fontWeight = FontWeight.Bold
                             )
+
+                            if (gespeicherteZeit > 0L) {
+                                OutlinedButton(
+                                    onClick = {
+                                        spieleBestaetigungston(context)
+                                        arbeitszeitLoeschIndex = index
+                                    },
+                                    modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp),
+                                    shape = RoundedCornerShape(26.dp),
+                                    border = BorderStroke(2.dp, KuemmeroError),
+                                    colors = ButtonDefaults.outlinedButtonColors(contentColor = KuemmeroError)
+                                ) {
+                                    Text("🗑 Arbeitszeit zurücksetzen", fontWeight = FontWeight.Bold)
+                                }
+                            }
 
                             if (laufend) {
                                 Button(
