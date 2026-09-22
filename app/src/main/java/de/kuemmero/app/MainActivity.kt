@@ -163,6 +163,9 @@ data class Auftrag(
     val rechnungsnummer: String = "",
     val rechnungsdatum: String = "",
     val faelligAm: String = "",
+    val berichtigungsnummer: String = "",
+    val berichtigungsdatum: String = "",
+    val berichtigungsgrund: String = "",
     val mahnung1Datum: String = "",
     val mahnung1Frist: String = "",
     val mahnung1Gebuehr: Double = 0.0,
@@ -195,6 +198,7 @@ private const val FIRMENPLZORT_KEY = "firmen_plz_ort"
 private const val FIRMENTELEFON_KEY = "firmen_telefon"
 private const val FIRMENEMAIL_KEY = "firmen_email"
 private const val STEUERNUMMER_KEY = "steuernummer"
+private const val KLEINUNTERNEHMER_KEY = "kleinunternehmer"
 private const val MAHNUNG1_FRIST_TAGE_KEY = "mahnung1_frist_tage"
 private const val MAHNUNG1_GEBUEHR_KEY = "mahnung1_gebuehr"
 private const val MAHNUNG1_TEXT_KEY = "mahnung1_text"
@@ -326,6 +330,9 @@ private fun ladeAuftraege(context: Context): List<Auftrag> {
             o.optString("rechnungsnummer", ""),
             o.optString("rechnungsdatum", ""),
             o.optString("faelligAm", ""),
+            o.optString("berichtigungsnummer", ""),
+            o.optString("berichtigungsdatum", ""),
+            o.optString("berichtigungsgrund", ""),
             o.optString("mahnung1Datum", ""),
             o.optString("mahnung1Frist", ""),
             o.optDouble("mahnung1Gebuehr", 0.0),
@@ -413,6 +420,9 @@ private fun speichereAuftraege(context: Context, liste: List<Auftrag>) {
             put("rechnungsnummer", a.rechnungsnummer)
             put("rechnungsdatum", a.rechnungsdatum)
             put("faelligAm", a.faelligAm)
+            put("berichtigungsnummer", a.berichtigungsnummer)
+            put("berichtigungsdatum", a.berichtigungsdatum)
+            put("berichtigungsgrund", a.berichtigungsgrund)
             put("mahnung1Datum", a.mahnung1Datum)
             put("mahnung1Frist", a.mahnung1Frist)
             put("mahnung1Gebuehr", a.mahnung1Gebuehr)
@@ -445,6 +455,7 @@ private fun backupText(context: Context): String {
         put("firmenTelefon", p.getString(FIRMENTELEFON_KEY, "+49 176 16712509") ?: "+49 176 16712509")
         put("firmenEmail", p.getString(FIRMENEMAIL_KEY, "kuemmero@web.de") ?: "kuemmero@web.de")
         put("steuernummer", p.getString(STEUERNUMMER_KEY, "") ?: "")
+        put("kleinunternehmer", p.getBoolean(KLEINUNTERNEHMER_KEY, true))
         put("auftraege", JSONArray(p.getString(AUFTRAEGE_KEY, "[]") ?: "[]"))
         put("kunden", JSONArray(p.getString(KUNDEN_KEY, "[]") ?: "[]"))
         put("kostenvoranschlaege", JSONArray(p.getString(KOSTENVORANSCHLAEGE_KEY, "[]") ?: "[]"))
@@ -676,7 +687,10 @@ private fun erstelleRechnungPdf(
     unterschriftDatum: String = "",
     fotosVorher: List<String> = emptyList(),
     fotosNachher: List<String> = emptyList(),
-    erstellungskosten: Double = 0.0
+    erstellungskosten: Double = 0.0,
+    dokumentTitel: String = "RECHNUNG",
+    originalRechnungsnummer: String = "",
+    berichtigungsgrund: String = ""
 ): PdfDocument {
     val pdf = PdfDocument()
     val page = pdf.startPage(PdfDocument.PageInfo.Builder(595, 842, 1).create())
@@ -701,31 +715,37 @@ private fun erstelleRechnungPdf(
     c.drawText("E-Mail: ${firmenEmail.ifBlank { "bitte eintragen" }}", 40f, 204f, p)
 
     p.textSize = 18f
-    c.drawText("RECHNUNG", 40f, 230f, p)
+    c.drawText(dokumentTitel, 40f, 230f, p)
     p.textSize = 12f
-    c.drawText("Rechnungsnummer: $nummer", 40f, 255f, p)
-    c.drawText("Rechnungsdatum: $rechnungsdatum", 40f, 275f, p)
-    c.drawText("Fällig am: $faelligAm", 40f, 295f, p)
-    c.drawText("Steuer-/USt-ID/KU-IdNr.: ${steuernummer.ifBlank { "BITTE IN MEHR EINTRAGEN" }}", 40f, 315f, p)
-    c.drawText("Leistungsdatum: ${leistungsdatum.ifBlank { rechnungsdatum }}", 40f, 335f, p)
-    c.drawText("Kunde: $kunde", 40f, 365f, p)
-    c.drawText("Adresse: $strasse", 40f, 385f, p)
-    c.drawText("PLZ und Ort: $ort", 40f, 405f, p)
-    c.drawText("Leistung: $leistung", 40f, 435f, p)
+    if (originalRechnungsnummer.isNotBlank()) {
+        c.drawText("Bezug auf Originalrechnung: $originalRechnungsnummer", 40f, 250f, p)
+    }
+    c.drawText("Rechnungsnummer: $nummer", 40f, 270f, p)
+    c.drawText("Rechnungsdatum: $rechnungsdatum", 40f, 290f, p)
+    c.drawText("Fällig am: $faelligAm", 40f, 310f, p)
+    c.drawText("Steuer-/USt-ID/KU-IdNr.: ${steuernummer.ifBlank { "BITTE IN MEHR EINTRAGEN" }}", 40f, 330f, p)
+    c.drawText("Leistungsdatum: ${leistungsdatum.ifBlank { rechnungsdatum }}", 40f, 350f, p)
+    c.drawText("Kunde: $kunde", 40f, 380f, p)
+    c.drawText("Adresse: $strasse", 40f, 400f, p)
+    c.drawText("PLZ und Ort: $ort", 40f, 420f, p)
+    c.drawText("Leistung: $leistung", 40f, 450f, p)
+    if (berichtigungsgrund.isNotBlank()) {
+        c.drawText("Berichtigungsgrund: $berichtigungsgrund", 40f, 468f, p)
+    }
 
-    c.drawLine(40f, 460f, 550f, 460f, p)
-    c.drawText("Arbeitszeit", 40f, 485f, p)
-    c.drawText("%.2f Std.".format(Locale.GERMANY, stunden), 250f, 485f, p)
-    c.drawText(euro(arbeitsbetrag(stunden, stundensatz)), 450f, 485f, p)
-    c.drawText("Material", 40f, 510f, p)
-    c.drawText(euro(material), 450f, 510f, p)
-    c.drawText("Fahrtkosten", 40f, 535f, p)
-    c.drawText(euro(fahrt), 450f, 535f, p)
-    var rechnungY = 560f
+    c.drawLine(40f, 475f, 550f, 475f, p)
+    c.drawText("Arbeitszeit", 40f, 500f, p)
+    c.drawText("%.2f Std.".format(Locale.GERMANY, stunden), 250f, 500f, p)
+    c.drawText(euro(arbeitsbetrag(stunden, stundensatz)), 450f, 500f, p)
+    c.drawText("Material", 40f, 525f, p)
+    c.drawText(euro(material), 450f, 525f, p)
+    c.drawText("Fahrtkosten", 40f, 550f, p)
+    c.drawText(euro(fahrt), 450f, 550f, p)
+    var rechnungY = 575f
     if (erstellungskosten > 0.0) {
-        c.drawText("Erstellungskosten", 40f, 560f, p)
-        c.drawText(euro(erstellungskosten), 450f, 560f, p)
-        rechnungY = 585f
+        c.drawText("Erstellungskosten", 40f, 575f, p)
+        c.drawText(euro(erstellungskosten), 450f, 575f, p)
+        rechnungY = 600f
     }
     c.drawLine(40f, rechnungY, 550f, rechnungY, p)
 
@@ -946,7 +966,43 @@ private fun erstelleMahnung2Pdf(
     return pdf
 }
 
+private fun erstelleBerichtigungsRechnungPdf(
+    context: Context,
+    neueNummer: String,
+    datum: String,
+    auftrag: Auftrag,
+    grund: String
+): PdfDocument {
+    return erstelleRechnungPdf(
+        context,
+        neueNummer,
+        datum,
+        auftrag.faelligAm.ifBlank { datum },
+        auftrag.leistungsdatum.ifBlank { auftrag.terminDatum.ifBlank { auftrag.datum } },
+        auftrag.kunde,
+        auftrag.kundenStrasse,
+        auftrag.kundenOrt,
+        auftrag.leistung,
+        auftrag.stunden,
+        auftrag.material,
+        auftrag.fahrt,
+        auftrag.stundensatz,
+        auftrag.unterschriftPfad,
+        auftrag.unterschriftDatum,
+        auftrag.fotosVorher,
+        auftrag.fotosNachher,
+        auftrag.erstellungskosten,
+        dokumentTitel = "BERICHTIGUNGSRECHNUNG",
+        originalRechnungsnummer = auftrag.rechnungsnummer,
+        berichtigungsgrund = grund
+    )
+}
+
 private fun druckeRechnungPdf(context: Context, auftrag: Auftrag) {
+    rechnungPruefung(context, auftrag)?.let {
+        android.widget.Toast.makeText(context, it, android.widget.Toast.LENGTH_LONG).show()
+        return
+    }
     val printManager = context.getSystemService(Context.PRINT_SERVICE) as PrintManager
     val nummer = auftrag.rechnungsnummer.ifBlank { naechsteRechnungsnummer(context) }
     val rechnungsdatum = auftrag.rechnungsdatum.ifBlank { SimpleDateFormat("dd.MM.yyyy", Locale.GERMANY).format(Date()) }
@@ -1109,6 +1165,34 @@ private fun zeitText(sekunden: Long): String {
     val m = (sekunden % 3600) / 60
     val s = sekunden % 60
     return "%02d:%02d:%02d".format(Locale.GERMANY, h, m, s)
+}
+
+private fun rechnungPruefung(context: Context, auftrag: Auftrag): String? {
+    val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+    val firmenName = prefs.getString(FIRMENNAME_KEY, "")?.trim().orEmpty()
+    val firmenStrasse = prefs.getString(FIRMENSTRASSE_KEY, "")?.trim().orEmpty()
+    val firmenPlzOrt = prefs.getString(FIRMENPLZORT_KEY, "")?.trim().orEmpty()
+    val steuernummer = prefs.getString(STEUERNUMMER_KEY, "")?.trim().orEmpty()
+    val kleinunternehmer = prefs.getBoolean(KLEINUNTERNEHMER_KEY, true)
+
+    val fehlend = mutableListOf<String>()
+    if (firmenName.isBlank()) fehlend += "Name / Inhaber"
+    if (firmenStrasse.isBlank()) fehlend += "Straße / Hausnummer"
+    if (firmenPlzOrt.isBlank()) fehlend += "PLZ / Ort"
+    if (steuernummer.isBlank()) fehlend += "Steuernummer / USt-ID / KU-IdNr."
+    if (auftrag.kunde.isBlank()) fehlend += "Kundenname"
+    if (auftrag.kundenStrasse.isBlank()) fehlend += "Kundenstraße / Hausnummer"
+    if (auftrag.kundenOrt.isBlank()) fehlend += "Kunden-PLZ / Ort"
+    if (auftrag.leistung.isBlank()) fehlend += "Leistungsbeschreibung"
+    if (auftrag.leistungsdatum.isBlank() && auftrag.datum.isBlank() && auftrag.terminDatum.isBlank()) fehlend += "Leistungsdatum"
+
+    return when {
+        fehlend.isNotEmpty() ->
+            "Rechnung kann noch nicht erstellt werden. Bitte ergänzen: ${fehlend.joinToString(", ")}."
+        !kleinunternehmer ->
+            "Die Kleinunternehmerregelung ist deaktiviert. Die aktuelle KÜMMERO-Rechnung ist dafür noch nicht als vollständige Umsatzsteuerrechnung eingerichtet. Bitte zuerst die Umsatzsteuerberechnung ergänzen."
+        else -> null
+    }
 }
 
 private fun rechnungIstUeberfaellig(auftrag: Auftrag, heute: String): Boolean {
@@ -1290,6 +1374,12 @@ fun KuemmeroApp() {
     var bearbeiteIndex by remember { mutableStateOf<Int?>(null) }
     var status by remember { mutableStateOf("Offen") }
     var zahlungsstatus by remember { mutableStateOf("Offen") }
+    var kleinunternehmer by remember {
+        mutableStateOf(
+            context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+                .getBoolean(KLEINUNTERNEHMER_KEY, true)
+        )
+    }
     var bezahltAm by remember { mutableStateOf("") }
     var terminDatum by remember { mutableStateOf("") }
     var terminUhrzeit by remember { mutableStateOf("") }
@@ -1389,6 +1479,8 @@ fun KuemmeroApp() {
 
     var auftragFuerPdf by remember { mutableStateOf<Auftrag?>(null) }
     var rechnungFuerIndex by remember { mutableStateOf<Int?>(null) }
+    var berichtigungFuerIndex by remember { mutableStateOf<Int?>(null) }
+    var berichtigungsgrundText by remember { mutableStateOf("Korrektur der Rechnung") }
     var rechnungNummerEditIndex by remember { mutableStateOf<Int?>(null) }
     var rechnungNummerEditText by remember { mutableStateOf("") }
     var rechnungScanIndex by remember { mutableStateOf<Int?>(null) }
@@ -1681,6 +1773,7 @@ fun KuemmeroApp() {
                 val firmenTelefonBackup = obj.optString("firmenTelefon", "+49 176 16712509")
                 val firmenEmailBackup = obj.optString("firmenEmail", "kuemmero@web.de")
                 val steuernummerBackup = obj.optString("steuernummer", "")
+                val kleinunternehmerBackup = obj.optBoolean("kleinunternehmer", true)
                 val arr = obj.optJSONArray("auftraege") ?: JSONArray()
                 val kundenArr = obj.optJSONArray("kunden") ?: JSONArray()
                 val kvArr = obj.optJSONArray("kostenvoranschlaege") ?: JSONArray()
@@ -1692,6 +1785,7 @@ fun KuemmeroApp() {
                     .putString(FIRMENTELEFON_KEY, firmenTelefonBackup)
                     .putString(FIRMENEMAIL_KEY, firmenEmailBackup)
                     .putString(STEUERNUMMER_KEY, steuernummerBackup)
+                    .putBoolean(KLEINUNTERNEHMER_KEY, kleinunternehmerBackup)
                     .putString(AUFTRAEGE_KEY, arr.toString())
                     .putString(KUNDEN_KEY, kundenArr.toString())
                     .putString(KOSTENVORANSCHLAEGE_KEY, kvArr.toString()).commit()
@@ -1702,6 +1796,7 @@ fun KuemmeroApp() {
                 unternehmerTelefon = firmenTelefonBackup
                 unternehmerEmail = firmenEmailBackup
                 steuernummer = steuernummerBackup
+                kleinunternehmer = kleinunternehmerBackup
                 auftraege = ladeAuftraege(context)
                 kunden = ladeKunden(context)
                 kostenvoranschlaege = ladeKostenvoranschlaege(context)
@@ -1845,6 +1940,34 @@ fun KuemmeroApp() {
             }
             rechnungFuerIndex = null
         }
+    }
+
+    val berichtigungsLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.CreateDocument("application/pdf")
+    ) { uri ->
+        uri?.let { ziel ->
+            val index = berichtigungFuerIndex
+            val a = index?.let { i -> auftraege.getOrNull(i) }
+            if (a != null && a.rechnungsnummer.isNotBlank()) {
+                try {
+                    val neueNummer = naechsteRechnungsnummer(context)
+                    val datum = datumFormat.format(Date())
+                    val grund = berichtigungsgrundText.trim().ifBlank { "Korrektur der Rechnung" }
+                    val pdf = erstelleBerichtigungsRechnungPdf(context, neueNummer, datum, a, grund)
+                    context.contentResolver.openOutputStream(ziel)?.use { out -> pdf.writeTo(out) }
+                    pdf.close()
+                    speichereRechnungsnummer(context, neueNummer)
+                    auftraege = auftraege.toMutableList().apply {
+                        set(index!!, a.copy(berichtigungsnummer = neueNummer, berichtigungsdatum = datum, berichtigungsgrund = grund))
+                    }
+                    speichereAuftraege(context, auftraege)
+                    android.widget.Toast.makeText(context, "Berichtigungsrechnung gespeichert: $neueNummer. Originalrechnung ${a.rechnungsnummer} bleibt erhalten.", android.widget.Toast.LENGTH_LONG).show()
+                } catch (e: Exception) {
+                    android.widget.Toast.makeText(context, "Berichtigungsrechnung konnte nicht erstellt werden.", android.widget.Toast.LENGTH_LONG).show()
+                }
+            }
+        }
+        berichtigungFuerIndex = null
     }
 
     val arbeitsstunden = zahl(stunden)
@@ -2236,6 +2359,47 @@ fun KuemmeroApp() {
                 }) { Text("PDF erstellen") }
             },
             dismissButton = { TextButton(onClick = { mahnung2Index = null }) { Text("Abbrechen") } }
+        )
+    }
+
+    if (berichtigungFuerIndex != null) {
+        val a = berichtigungFuerIndex?.let { auftraege.getOrNull(it) }
+        AlertDialog(
+            onDismissRequest = { berichtigungFuerIndex = null },
+            title = { Text("Berichtigungsrechnung erstellen") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    if (a != null) {
+                        Text("Originalrechnung: ${a.rechnungsnummer}", fontWeight = FontWeight.Bold, color = KuemmeroGreen)
+                        Text("Die Originalrechnung bleibt unverändert erhalten.")
+                        OutlinedTextField(
+                            value = berichtigungsgrundText,
+                            onValueChange = { berichtigungsgrundText = it },
+                            label = { Text("Grund der Berichtigung") },
+                            minLines = 2,
+                            maxLines = 4,
+                            colors = feldFarben,
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    if (a == null) {
+                        berichtigungFuerIndex = null
+                    } else {
+                        val pruefung = rechnungPruefung(context, a)
+                        if (pruefung != null) {
+                            android.widget.Toast.makeText(context, pruefung, android.widget.Toast.LENGTH_LONG).show()
+                        } else {
+                            val name = a.kunde.ifBlank { "Kunde" }.replace("/", "-")
+                            berichtigungsLauncher.launch("KÜMMERO-Berichtigung-${a.rechnungsnummer}-$name.pdf")
+                        }
+                    }
+                }) { Text("PDF erstellen") }
+            },
+            dismissButton = { TextButton(onClick = { berichtigungFuerIndex = null }) { Text("Abbrechen") } }
         )
     }
 
@@ -3822,22 +3986,9 @@ fun KuemmeroApp() {
                                 )
                                 Button(
                                     onClick = {
-                                        val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-                                        val firmenStrasse = prefs.getString(FIRMENSTRASSE_KEY, "")?.trim().orEmpty()
-                                        val firmenPlzOrt = prefs.getString(FIRMENPLZORT_KEY, "")?.trim().orEmpty()
-                                        val steuer = prefs.getString(STEUERNUMMER_KEY, "")?.trim().orEmpty()
-                                        val fehlend = when {
-                                            firmenStrasse.isBlank() -> "Bitte unter Mehr die Firmenstraße / Hausnummer eintragen."
-                                            firmenPlzOrt.isBlank() -> "Bitte unter Mehr PLZ / Ort eintragen."
-                                            steuer.isBlank() -> "Bitte unter Mehr Steuernummer / USt-ID / KU-IdNr. eintragen."
-                                            a.kunde.isBlank() -> "Für die Rechnung fehlt der Kundenname."
-                                            a.kundenStrasse.isBlank() -> "Für die Rechnung fehlt die Kundenstraße / Hausnummer."
-                                            a.kundenOrt.isBlank() -> "Für die Rechnung fehlt PLZ / Ort des Kunden."
-                                            a.leistung.isBlank() -> "Für die Rechnung fehlt die Leistungsbeschreibung."
-                                            else -> ""
-                                        }
-                                        if (fehlend.isNotBlank()) {
-                                            android.widget.Toast.makeText(context, fehlend, android.widget.Toast.LENGTH_LONG).show()
+                                        val pruefung = rechnungPruefung(context, a)
+                                        if (pruefung != null) {
+                                            android.widget.Toast.makeText(context, pruefung, android.widget.Toast.LENGTH_LONG).show()
                                         } else {
                                             rechnungFuerIndex = index
                                             val name = a.kunde.ifBlank { "Kunde" }.replace("/", "-")
@@ -3872,6 +4023,16 @@ fun KuemmeroApp() {
                                 ) {
                                     Text("🧾 Rechnung PDF drucken", fontWeight = FontWeight.Bold)
                                 }
+                                OutlinedButton(
+                                    onClick = {
+                                        berichtigungFuerIndex = index
+                                        berichtigungsgrundText = "Korrektur der Rechnung"
+                                    },
+                                    modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp),
+                                    shape = RoundedCornerShape(26.dp),
+                                    border = BorderStroke(2.dp, KuemmeroGreen),
+                                    colors = ButtonDefaults.outlinedButtonColors(contentColor = KuemmeroGreen)
+                                ) { Text("↻ Berichtigungsrechnung erstellen", fontWeight = FontWeight.Bold) }
                                 OutlinedButton(
                                     onClick = { starteRechnungScan(index) },
                                     modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp),
@@ -4700,7 +4861,32 @@ fun KuemmeroApp() {
                                     OutlinedTextField(unternehmerTelefon, { unternehmerTelefon = it }, label = { Text("Telefon") }, colors = feldFarben, modifier = Modifier.fillMaxWidth(), keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone))
                                     OutlinedTextField(unternehmerEmail, { unternehmerEmail = it }, label = { Text("E-Mail") }, colors = feldFarben, modifier = Modifier.fillMaxWidth(), keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email))
                                     OutlinedTextField(steuernummer, { steuernummer = it }, label = { Text("Steuernummer / USt-ID / KU-IdNr.") }, colors = feldFarben, modifier = Modifier.fillMaxWidth())
-                                    Button(onClick = {
+                                    Row(
+                modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text("Kleinunternehmerregelung (§ 19 UStG)", fontWeight = FontWeight.Bold)
+                    Text(
+                        if (kleinunternehmer)
+                            "Aktiv – Umsatzsteuer wird nicht ausgewiesen."
+                        else
+                            "Deaktiviert – vollständige Umsatzsteuerrechnung erforderlich.",
+                        fontSize = 12.sp
+                    )
+                }
+                Switch(
+                    checked = kleinunternehmer,
+                    onCheckedChange = {
+                        kleinunternehmer = it
+                        context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+                            .edit().putBoolean(KLEINUNTERNEHMER_KEY, it).apply()
+                    }
+                )
+            }
+
+            Button(onClick = {
                                         context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE).edit()
                                             .putString(FIRMENNAME_KEY, unternehmerName.trim())
                                             .putString(FIRMENSTRASSE_KEY, unternehmerStrasse.trim())
