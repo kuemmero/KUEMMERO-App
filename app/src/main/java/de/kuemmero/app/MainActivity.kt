@@ -2033,9 +2033,18 @@ fun KuemmeroApp() {
             confirmButton = {
                 TextButton(onClick = {
                     sicherungBestaetigung = false
-                    backupDateiAuswaehlen.launch(
-                        arrayOf("application/json", "text/plain", "application/octet-stream")
-                    )
+                    if (vorhandeneSicherung) {
+                        backupScope.launch {
+                            val result = withContext(Dispatchers.IO) { sichereBackupAutomatisch(context) }
+                            android.widget.Toast.makeText(
+                                context,
+                                if (result) "Sicherung aktualisiert." else "Sicherung konnte nicht aktualisiert werden.",
+                                android.widget.Toast.LENGTH_LONG
+                            ).show()
+                        }
+                    } else {
+                        createBackup.launch("KÜMMERO-Sicherung.json")
+                    }
                 }) { Text("Ja, sichern") }
             },
             dismissButton = {
