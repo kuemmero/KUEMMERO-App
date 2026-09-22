@@ -4322,8 +4322,130 @@ fun KuemmeroApp() {
                                             Text("Offen €", color = Color.White)
                                             Text(euro(offeneZahlungSumme), color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.Bold)
                                         }
-                                        Spacer(Modifier.weight(2f))
+                                        Column(
+                                            Modifier.weight(1f).clickable {
+                                                hauptseite = "Mahnungen"
+                                                zahlungsFilterOffen = false
+                                            }
+                                        ) {
+                                            Text("Rechnung fällig", color = Color.White)
+                                            Text("$ueberfaelligeRechnungen", color = Color.White, fontSize = 22.sp, fontWeight = FontWeight.Bold)
+                                        }
                                     }
+                                }
+                            }
+                        }
+                        item {
+                            Card(
+                                modifier = Modifier.fillMaxWidth(),
+                                colors = CardDefaults.cardColors(containerColor = KuemmeroSurface),
+                                shape = RoundedCornerShape(20.dp),
+                                border = BorderStroke(1.5.dp, KuemmeroGreenLight)
+                            ) {
+                                Column(
+                                    Modifier.padding(14.dp),
+                                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                                ) {
+                                    Text(
+                                        "Schnellaktionen",
+                                        style = MaterialTheme.typography.titleLarge,
+                                        color = KuemmeroGreen,
+                                        fontWeight = FontWeight.Bold
+                                    )
+
+                                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                        Button(
+                                            onClick = {
+                                                hauptseite = "Aufträge"
+                                                bearbeiteIndex = null
+                                                auftragDetailIndex = null
+                                                auftragFormOffen = true
+                                                nummer = ""
+                                                datum = datumJetzt
+                                                leistungsdatum = datumJetzt
+                                                gueltigBis = ""
+                                                kunde = ""
+                                                strasse = ""
+                                                ort = ""
+                                                leistung = ""
+                                                stunden = ""
+                                                material = ""
+                                                materialBonUri = ""
+                                                fahrt = ""
+                                                status = "Offen"
+                                                zahlungsstatus = "Offen"
+                                                bezahltAm = ""
+                                                terminDatum = ""
+                                                terminUhrzeit = ""
+                                                notiz = ""
+                                                fotosVorher = emptyList()
+                                                fotosNachher = emptyList()
+                                                unterschriftPfad = ""
+                                                unterschriftDatum = ""
+                                            },
+                                            modifier = Modifier.weight(1f).heightIn(min = 52.dp),
+                                            shape = RoundedCornerShape(18.dp),
+                                            colors = ButtonDefaults.buttonColors(containerColor = KuemmeroGreen)
+                                        ) { Text("+ Auftrag", fontWeight = FontWeight.Bold) }
+
+                                        OutlinedButton(
+                                            onClick = { neuerKundeDialog = true },
+                                            modifier = Modifier.weight(1f).heightIn(min = 52.dp),
+                                            shape = RoundedCornerShape(18.dp),
+                                            border = BorderStroke(2.dp, KuemmeroGreen),
+                                            colors = ButtonDefaults.outlinedButtonColors(contentColor = KuemmeroGreen)
+                                        ) { Text("+ Kunde", fontWeight = FontWeight.Bold) }
+                                    }
+
+                                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                        OutlinedButton(
+                                            onClick = {
+                                                hauptseite = "Aufträge"
+                                                auftragFormOffen = false
+                                                auftragDetailIndex = null
+                                                bearbeiteIndex = null
+                                                statusFilter = "Erledigt"
+                                                zahlungsFilterOffen = false
+                                                auftragsSuche = ""
+                                            },
+                                            modifier = Modifier.weight(1f).heightIn(min = 52.dp),
+                                            shape = RoundedCornerShape(18.dp),
+                                            border = BorderStroke(2.dp, KuemmeroGreen),
+                                            colors = ButtonDefaults.outlinedButtonColors(contentColor = KuemmeroGreen)
+                                        ) { Text("🧾 Rechnung", fontWeight = FontWeight.Bold) }
+
+                                        OutlinedButton(
+                                            onClick = {
+                                                hauptseite = "Aufträge"
+                                                auftragFormOffen = false
+                                                auftragDetailIndex = null
+                                                bearbeiteIndex = null
+                                                statusFilter = "In Bearbeitung"
+                                                zahlungsFilterOffen = false
+                                                auftragsSuche = ""
+                                            },
+                                            modifier = Modifier.weight(1f).heightIn(min = 52.dp),
+                                            shape = RoundedCornerShape(18.dp),
+                                            border = BorderStroke(2.dp, KuemmeroGreen),
+                                            colors = ButtonDefaults.outlinedButtonColors(contentColor = KuemmeroGreen)
+                                        ) { Text("📷 Auftrag", fontWeight = FontWeight.Bold) }
+                                    }
+
+                                    OutlinedButton(
+                                        onClick = {
+                                            hauptseite = "Aufträge"
+                                            auftragFormOffen = false
+                                            auftragDetailIndex = null
+                                            bearbeiteIndex = null
+                                            statusFilter = "In Bearbeitung"
+                                            zahlungsFilterOffen = false
+                                            auftragsSuche = ""
+                                        },
+                                        modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp),
+                                        shape = RoundedCornerShape(18.dp),
+                                        border = BorderStroke(2.dp, KuemmeroGreen),
+                                        colors = ButtonDefaults.outlinedButtonColors(contentColor = KuemmeroGreen)
+                                    ) { Text("⏱ Arbeitszeit starten / Auftrag auswählen", fontWeight = FontWeight.Bold) }
                                 }
                             }
                         }
