@@ -1014,6 +1014,7 @@ fun KuemmeroApp() {
     var zahlungsFilterOffen by remember { mutableStateOf(false) }
     var kundenAkteName by remember { mutableStateOf<String?>(null) }
     var kalenderOffen by remember { mutableStateOf(false) }
+    var kalenderHeuteNur by remember { mutableStateOf(false) }
     var terminBereichOffen by remember { mutableStateOf(false) }
     var notizBereichOffen by remember { mutableStateOf(false) }
     var fotosBereichOffen by remember { mutableStateOf(false) }
@@ -1777,15 +1778,19 @@ fun KuemmeroApp() {
     }
 
     if (kalenderOffen) {
+        val angezeigteTermine = if (kalenderHeuteNur) termineHeute else naechsteTermine
         AlertDialog(
-            onDismissRequest = { kalenderOffen = false },
-            title = { Text("📅 Termine") },
+            onDismissRequest = {
+                kalenderOffen = false
+                kalenderHeuteNur = false
+            },
+            title = { Text(if (kalenderHeuteNur) "📅 Heutige Termine" else "📅 Termine") },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    if (naechsteTermine.isEmpty()) {
-                        Text("Noch keine Termine eingetragen.")
+                    if (angezeigteTermine.isEmpty()) {
+                        Text(if (kalenderHeuteNur) "Heute keine Termine." else "Noch keine Termine eingetragen.")
                     } else {
-                        naechsteTermine.forEach { a ->
+                        angezeigteTermine.forEach { a ->
                             Card(
                                 modifier = Modifier.fillMaxWidth(),
                                 colors = CardDefaults.cardColors(containerColor = KuemmeroMint),
@@ -1802,7 +1807,12 @@ fun KuemmeroApp() {
                     }
                 }
             },
-            confirmButton = { TextButton(onClick = { kalenderOffen = false }) { Text("Schließen") } }
+            confirmButton = {
+                TextButton(onClick = {
+                    kalenderOffen = false
+                    kalenderHeuteNur = false
+                }) { Text("Schließen") }
+            }
         )
     }
 
@@ -1947,7 +1957,14 @@ fun KuemmeroApp() {
                 val passtSuche = suche.isBlank() || listOf(
                     a.kunde, a.nummer, a.datum, a.kundenStrasse, a.kundenOrt, a.leistung, a.status
                 ).any { it.lowercase(Locale.GERMANY).contains(suche) }
-                val passtStatus = statusFilter == "Alle" || a.status == statusFilter
+                val passtStatus = when (statusFilter) {
+                    "Alle" -> true
+                    // Dashboard "Offene Aufträge" umfasst alle noch nicht abgerechneten Aufträge.
+                    "Offen" -> a.status == "Offen" || a.status == "In Bearbeitung"
+                    // Dashboard "Abgearbeitet" umfasst erledigte und bereits abgerechnete Aufträge.
+                    "Erledigt" -> a.status == "Erledigt" || a.status == "Abgerechnet"
+                    else -> a.status == statusFilter
+                }
                 val passtZahlung = !zahlungsFilterOffen || a.zahlungsstatus != "Bezahlt"
                 passtSuche && passtStatus && passtZahlung
             }
@@ -3064,9 +3081,11 @@ fun KuemmeroApp() {
                                     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                                         Column(
                                             Modifier.weight(1f).clickable {
-                                                hauptseite = "Kalender"
+                                                kalenderHeuteNur = true
+                                                kalenderOffen = true
                                                 auftragFormOffen = false
                                                 auftragDetailIndex = null
+                                                bearbeiteIndex = null
                                                 statusFilter = "Alle"
                                                 zahlungsFilterOffen = false
                                                 auftragsSuche = ""
@@ -3552,7 +3571,10 @@ fun KuemmeroApp() {
                         item { Text("Mehr", style = MaterialTheme.typography.headlineSmall, color = KuemmeroGreen, fontWeight = FontWeight.Bold) }
                         item {
                             OutlinedButton(
-                                onClick = { hauptseite = "Kalender" },
+                                onClick = {
+                                    kalenderHeuteNur = false
+                                    kalenderOffen = true
+                                },
                                 modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp),
                                 shape = RoundedCornerShape(26.dp),
                                 border = BorderStroke(2.dp, KuemmeroGreen),
