@@ -495,7 +495,7 @@ private fun erstellePdf(
     c.drawText("E-Mail: ${firmenEmail.ifBlank { "bitte eintragen" }}", 40f, 204f, p)
     c.drawText(dokumentTitel, 40f, 233f, p)
     p.textSize = 12f
-    c.drawText("Angebotsnummer: $nummer", 40f, 258f, p)
+    c.drawText("Dokumentnummer: $nummer", 40f, 258f, p)
     c.drawText("Datum: $datum", 40f, 278f, p)
     c.drawText("Gültig bis: $gueltigBis", 40f, 298f, p)
     c.drawText("Kunde: $kunde", 40f, 328f, p)
@@ -524,7 +524,7 @@ private fun erstellePdf(
     val unterschriftTitelY = if (dokumentTitel.contains("KOSTENVORANSCHLAG", ignoreCase = true) && erstellungskosten > 0.0) 650f else 628f
     if (dokumentTitel.contains("KOSTENVORANSCHLAG", ignoreCase = true) && erstellungskosten > 0.0) {
         p.textSize = 11f
-        c.drawText("Hinweis: Dieser Kostenvoranschlag ist kostenpflichtig.", 40f, 628f, p)
+        c.drawText("Hinweis: Die Erstellungskosten sind nur geschuldet, wenn dies vorab vereinbart wurde.", 40f, 628f, p)
     }
     c.drawText("Auftragserteilung / Unterschrift Kunde:", 40f, unterschriftTitelY, p)
     val signBitmap = ladeUnterschriftBitmap(unterschriftPfad)
@@ -626,7 +626,7 @@ private fun erstelleRechnungPdf(
     p.textSize = 18f
     c.drawText("Gesamtsumme: ${euro(gesamt)}", 40f, rechnungY + 40f, p)
     p.textSize = 11f
-    c.drawText("Steuerbefreiung für Kleinunternehmer gemäß § 19 UStG; Umsatzsteuer wird nicht ausgewiesen.", 40f, rechnungY + 68f, p)
+    c.drawText("Gemäß § 19 UStG wird keine Umsatzsteuer berechnet.", 40f, rechnungY + 68f, p)
     c.drawText("Bitte überweisen Sie den Rechnungsbetrag bis zum $faelligAm.", 40f, rechnungY + 90f, p)
     c.drawText("Vielen Dank für Ihr Vertrauen.", 40f, rechnungY + 115f, p)
     pdf.finishPage(page)
@@ -1011,6 +1011,7 @@ fun KuemmeroApp() {
     var fotoVorschauUri by remember { mutableStateOf<String?>(null) }
     var auftragsSuche by remember { mutableStateOf("") }
     var statusFilter by remember { mutableStateOf("Alle") }
+    var dashboardAuftragsFilter by remember { mutableStateOf<String?>(null) }
     var zahlungsFilterOffen by remember { mutableStateOf(false) }
     var kundenAkteName by remember { mutableStateOf<String?>(null) }
     var kalenderOffen by remember { mutableStateOf(false) }
@@ -1399,7 +1400,7 @@ fun KuemmeroApp() {
     val heuteText = datumFormat.format(Date())
     val termineHeute = auftraege.filter { it.terminDatum == heuteText }
         .sortedBy { it.terminUhrzeit }
-    val offeneAuftraege = auftraege.count { it.status != "Abgerechnet" }
+    val offeneAuftraege = auftraege.count { it.status == "Offen" || it.status == "In Bearbeitung" }
     val offeneZahlungen = auftraege.filter { it.zahlungsstatus != "Bezahlt" }
     val offeneZahlungSumme = offeneZahlungen.sumOf { gesamtbetrag(it.stunden, it.material, it.fahrt, it.stundensatz, it.erstellungskosten) }
     val naechsteTermine = auftraege.filter { it.terminDatum.isNotBlank() }
@@ -1925,7 +1926,15 @@ fun KuemmeroApp() {
                     ).forEach { (label, iconText, page) ->
                         NavigationBarItem(
                             selected = hauptseite == page,
-                            onClick = { hauptseite = page },
+                            onClick = {
+                                hauptseite = page
+                                dashboardAuftragsFilter = null
+                                if (page == "Aufträge") {
+                                    statusFilter = "Alle"
+                                    zahlungsFilterOffen = false
+                                    auftragsSuche = ""
+                                }
+                            },
                             icon = { Text(iconText, fontSize = 20.sp) },
                             label = { Text(label) },
                             colors = NavigationBarItemDefaults.colors(
@@ -1947,6 +1956,11 @@ fun KuemmeroApp() {
                 val passtSuche = suche.isBlank() || listOf(
                     a.kunde, a.nummer, a.datum, a.kundenStrasse, a.kundenOrt, a.leistung, a.status
                 ).any { it.lowercase(Locale.GERMANY).contains(suche) }
+                val passtDashboard = when (dashboardAuftragsFilter) {
+                    "OffeneAuftraege" -> a.status == "Offen" || a.status == "In Bearbeitung"
+                    "Abgearbeitet" -> a.status == "Erledigt" || a.status == "Abgerechnet"
+                    else -> true
+                }
                 val passtStatus = when (statusFilter) {
                     "Alle" -> true
                     "Offen" -> a.status == "Offen"
@@ -1956,7 +1970,7 @@ fun KuemmeroApp() {
                     else -> a.status == statusFilter
                 }
                 val passtZahlung = !zahlungsFilterOffen || a.zahlungsstatus != "Bezahlt"
-                passtSuche && passtStatus && passtZahlung
+                passtSuche && passtDashboard && passtStatus && passtZahlung
             }
 
         if (hauptseite == "Aufträge") {
@@ -2591,7 +2605,7 @@ fun KuemmeroApp() {
                             Surface(
                                 modifier = Modifier
                                     .height(42.dp)
-                                    .clickable { statusFilter = option },
+                                    .clickable { dashboardAuftragsFilter = null; statusFilter = option },
                                 shape = RoundedCornerShape(21.dp),
                                 color = if (aktiv) KuemmeroGreen else KuemmeroMint,
                                 border = BorderStroke(1.5.dp, if (aktiv) KuemmeroGreen else Color(0xFF7A8A82))
@@ -2979,6 +2993,7 @@ fun KuemmeroApp() {
                                             a.kundenStrasse.isBlank() -> "Für die Rechnung fehlt die Kundenstraße / Hausnummer."
                                             a.kundenOrt.isBlank() -> "Für die Rechnung fehlt PLZ / Ort des Kunden."
                                             a.leistung.isBlank() -> "Für die Rechnung fehlt die Leistungsbeschreibung."
+                                            a.leistungsdatum.isBlank() && a.terminDatum.isBlank() && a.datum.isBlank() -> "Für die Rechnung fehlt das Leistungsdatum."
                                             else -> ""
                                         }
                                         if (fehlend.isNotBlank()) {
@@ -3085,7 +3100,8 @@ fun KuemmeroApp() {
                                                 auftragFormOffen = false
                                                 auftragDetailIndex = null
                                                 bearbeiteIndex = null
-                                                statusFilter = "Offen"
+                                                dashboardAuftragsFilter = "OffeneAuftraege"
+                                                statusFilter = "Alle"
                                                 zahlungsFilterOffen = false
                                                 auftragsSuche = ""
                                             }
@@ -3099,7 +3115,8 @@ fun KuemmeroApp() {
                                                 auftragFormOffen = false
                                                 auftragDetailIndex = null
                                                 bearbeiteIndex = null
-                                                statusFilter = "Erledigt"
+                                                dashboardAuftragsFilter = "Abgearbeitet"
+                                                statusFilter = "Alle"
                                                 zahlungsFilterOffen = false
                                                 auftragsSuche = ""
                                             }
@@ -3115,6 +3132,7 @@ fun KuemmeroApp() {
                                                 auftragFormOffen = false
                                                 auftragDetailIndex = null
                                                 bearbeiteIndex = null
+                                                dashboardAuftragsFilter = null
                                                 statusFilter = "Alle"
                                                 zahlungsFilterOffen = true
                                                 auftragsSuche = ""
@@ -3503,7 +3521,7 @@ fun KuemmeroApp() {
                                         OutlinedTextField(kvErstellungskosten, { kvErstellungskosten = it }, label = { Text("Erstellungskosten (€)") }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal), colors = feldFarben, modifier = Modifier.fillMaxWidth())
                                         if (zahl(kvErstellungskosten) > 0.0) {
                                             Text(
-                                                "Hinweis: Der Kostenvoranschlag ist kostenpflichtig. Die Erstellungskosten werden mit dem angegebenen Betrag ausgewiesen.",
+                                                "Hinweis: Erstellungskosten werden nur berechnet, wenn dies vorab vereinbart wurde.",
                                                 color = KuemmeroError,
                                                 fontWeight = FontWeight.SemiBold,
                                                 fontSize = 12.sp
@@ -3517,8 +3535,17 @@ fun KuemmeroApp() {
                                         )
                                         Button(
                                             onClick = {
-                                                if (kvKunde.isBlank()) {
-                                                    android.widget.Toast.makeText(context, "Bitte Kundennamen eingeben.", 0).show()
+                                                val fehlendKv = when {
+                                                    kvKunde.isBlank() -> "Für den Kostenvoranschlag fehlt der Kundenname."
+                                                    kvStrasse.isBlank() -> "Für den Kostenvoranschlag fehlt die Kundenstraße / Hausnummer."
+                                                    kvOrt.isBlank() -> "Für den Kostenvoranschlag fehlt PLZ / Ort des Kunden."
+                                                    kvLeistung.isBlank() -> "Für den Kostenvoranschlag fehlt die Leistungsbeschreibung."
+                                                    kvDatum.isBlank() -> "Für den Kostenvoranschlag fehlt das Datum."
+                                                    kvGueltigBis.isBlank() -> "Für den Kostenvoranschlag fehlt die Gültigkeitsdauer."
+                                                    else -> ""
+                                                }
+                                                if (fehlendKv.isNotBlank()) {
+                                                    android.widget.Toast.makeText(context, fehlendKv, android.widget.Toast.LENGTH_LONG).show()
                                                 } else {
                                                     val k = Kostenvoranschlag(
                                                         kvNummer.trim(), kvDatum.trim(), kvGueltigBis.trim(),
