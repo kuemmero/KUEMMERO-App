@@ -2282,6 +2282,7 @@ fun KuemmeroApp() {
                         Triple("Aufträge", "▤", "Aufträge"),
                         Triple("Kostenvoranschläge", "€", "Kostenvoranschläge"),
                         Triple("Kunden", "♙", "Kunden"),
+                        Triple("Mahnungen", "!", "Mahnungen"),
                         Triple("Mehr", "⋯", "Mehr")
                     ).forEach { (label, iconText, page) ->
                         NavigationBarItem(
@@ -3941,6 +3942,109 @@ fun KuemmeroApp() {
                                             border = BorderStroke(2.dp, KuemmeroGreen),
                                             colors = ButtonDefaults.outlinedButtonColors(contentColor = KuemmeroGreen)
                                         ) { Text("Abbrechen") }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    "Mahnungen" -> {
+                        val offeneRechnungen = auftraege.mapIndexed { index, a -> index to a }
+                            .filter { (_, a) -> a.rechnungsnummer.isNotBlank() && a.zahlungsstatus != "Bezahlt" }
+                        val ueberfaelligeRechnungen = offeneRechnungen.filter { (_, a) -> rechnungIstUeberfaellig(a, heuteText) }
+
+                        item {
+                            Card(
+                                Modifier.fillMaxWidth(),
+                                colors = CardDefaults.cardColors(
+                                    containerColor = if (ueberfaelligeRechnungen.isNotEmpty()) KuemmeroMint else KuemmeroSurface
+                                ),
+                                shape = RoundedCornerShape(20.dp),
+                                border = BorderStroke(2.dp, if (ueberfaelligeRechnungen.isNotEmpty()) KuemmeroError else KuemmeroGreenLight)
+                            ) {
+                                Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                    Text(
+                                        "Mahnungen",
+                                        style = MaterialTheme.typography.headlineSmall,
+                                        color = KuemmeroGreen,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                    Text(
+                                        if (ueberfaelligeRechnungen.isEmpty())
+                                            "Keine überfälligen, unbezahlten Rechnungen."
+                                        else
+                                            "${ueberfaelligeRechnungen.size} Rechnung/Rechnungen sind überfällig.",
+                                        color = if (ueberfaelligeRechnungen.isEmpty()) KuemmeroText else KuemmeroError,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                    Text(
+                                        "Eine Mahnung wird niemals automatisch erstellt. Du entscheidest selbst, wann die 1. Mahnung erstellt wird.",
+                                        color = KuemmeroText,
+                                        style = MaterialTheme.typography.bodySmall
+                                    )
+                                }
+                            }
+                        }
+
+                        if (offeneRechnungen.isEmpty()) {
+                            item {
+                                Card(Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = KuemmeroSurface), shape = RoundedCornerShape(18.dp)) {
+                                    Text(
+                                        "Keine offenen Rechnungen vorhanden.",
+                                        modifier = Modifier.padding(16.dp),
+                                        color = KuemmeroText
+                                    )
+                                }
+                            }
+                        } else {
+                            offeneRechnungen.forEach { (index, a) ->
+                                item {
+                                    Card(
+                                        Modifier.fillMaxWidth(),
+                                        colors = CardDefaults.cardColors(containerColor = KuemmeroSurface),
+                                        shape = RoundedCornerShape(18.dp)
+                                    ) {
+                                        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                            Text(
+                                                a.kunde.ifBlank { "Kunde" },
+                                                style = MaterialTheme.typography.titleLarge,
+                                                color = KuemmeroText,
+                                                fontWeight = FontWeight.Bold
+                                            )
+                                            Text("Rechnung: ${a.rechnungsnummer}", color = KuemmeroGreen, fontWeight = FontWeight.Bold)
+                                            Text("Betrag: ${euro(gesamtbetrag(a.stunden, a.material, a.fahrt, a.stundensatz, a.erstellungskosten))}", color = KuemmeroText)
+                                            Text("Fällig am: ${a.faelligAm.ifBlank { "nicht angegeben" }}", color = KuemmeroText)
+
+                                            if (rechnungIstUeberfaellig(a, heuteText)) {
+                                                Text("⚠ Überfällig – Zahlung offen", color = KuemmeroError, fontWeight = FontWeight.Bold)
+                                                if (a.mahnung1Erstellt) {
+                                                    Text(
+                                                        "1. Mahnung erstellt · Mahndatum: ${a.mahnung1Datum.ifBlank { "nicht angegeben" }} · neue Frist: ${a.mahnung1Frist.ifBlank { "nicht angegeben" }}",
+                                                        color = KuemmeroGreen,
+                                                        fontWeight = FontWeight.SemiBold
+                                                    )
+                                                }
+                                                Button(
+                                                    onClick = {
+                                                        mahnung1Index = index
+                                                        mahnung1Datum = a.mahnung1Datum.ifBlank { heuteText }
+                                                        mahnung1Frist = a.mahnung1Frist.ifBlank {
+                                                            val cal = Calendar.getInstance()
+                                                            cal.add(Calendar.DAY_OF_YEAR, 7)
+                                                            datumFormat.format(cal.time)
+                                                        }
+                                                        mahnung1Gebuehr = if (a.mahnung1Gebuehr > 0.0) String.format(Locale.GERMANY, "%.2f", a.mahnung1Gebuehr) else ""
+                                                        mahnung1Text = a.mahnung1Text
+                                                    },
+                                                    modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp),
+                                                    shape = RoundedCornerShape(26.dp),
+                                                    colors = ButtonDefaults.buttonColors(containerColor = KuemmeroError)
+                                                ) {
+                                                    Text(if (a.mahnung1Erstellt) "1. Mahnung bearbeiten / neu erstellen" else "1. Mahnung erstellen", fontWeight = FontWeight.Bold)
+                                                }
+                                            } else {
+                                                Text("Noch nicht überfällig – keine Mahnung erforderlich.", color = KuemmeroGreen, fontWeight = FontWeight.SemiBold)
+                                            }
+                                        }
                                     }
                                 }
                             }
