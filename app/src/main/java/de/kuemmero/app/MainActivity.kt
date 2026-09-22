@@ -2101,7 +2101,19 @@ fun KuemmeroApp() {
                         sicherungBereichOffen,
                         { sicherungBereichOffen = !sicherungBereichOffen },
                     ) {
-                        OutlinedButton(onClick = { sicherungBestaetigung = true }, modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp), shape = RoundedCornerShape(28.dp), border = BorderStroke(2.dp, KuemmeroGreen), colors = ButtonDefaults.outlinedButtonColors(contentColor = KuemmeroGreen)) { Text("Sicherung speichern / aktualisieren", fontWeight = FontWeight.SemiBold) }
+                        OutlinedButton(
+                            onClick = {
+                                backupDateiAuswaehlen.launch(
+                                    arrayOf("application/json", "text/plain", "application/octet-stream")
+                                )
+                            },
+                            modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp),
+                            shape = RoundedCornerShape(28.dp),
+                            border = BorderStroke(2.dp, KuemmeroGreen),
+                            colors = ButtonDefaults.outlinedButtonColors(contentColor = KuemmeroGreen)
+                        ) {
+                            Text("Sicherung speichern / aktualisieren", fontWeight = FontWeight.SemiBold)
+                        }
                         Button(onClick = { restoreBackup.launch(arrayOf("application/json", "text/plain", "application/octet-stream")) }, modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp), shape = RoundedCornerShape(28.dp), colors = ButtonDefaults.buttonColors(containerColor = KuemmeroGreenLight)) { Text("Daten wiederherstellen", fontWeight = FontWeight.Bold) }
                     }
                 }
