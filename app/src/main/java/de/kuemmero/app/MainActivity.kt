@@ -162,6 +162,11 @@ data class Auftrag(
     val rechnungsnummer: String = "",
     val rechnungsdatum: String = "",
     val faelligAm: String = "",
+    val mahnung1Datum: String = "",
+    val mahnung1Frist: String = "",
+    val mahnung1Gebuehr: Double = 0.0,
+    val mahnung1Text: String = "",
+    val mahnung1Erstellt: Boolean = false,
     val arbeitsStart: Long = 0L,
     val arbeitsEnde: Long = 0L,
     val arbeitsSekunden: Long = 0L,
@@ -293,6 +298,11 @@ private fun ladeAuftraege(context: Context): List<Auftrag> {
             o.optString("rechnungsnummer", ""),
             o.optString("rechnungsdatum", ""),
             o.optString("faelligAm", ""),
+            o.optString("mahnung1Datum", ""),
+            o.optString("mahnung1Frist", ""),
+            o.optDouble("mahnung1Gebuehr", 0.0),
+            o.optString("mahnung1Text", ""),
+            o.optBoolean("mahnung1Erstellt", false),
             o.optLong("arbeitsStart", 0L),
             o.optLong("arbeitsEnde", 0L),
             o.optLong("arbeitsSekunden", 0L),
@@ -370,6 +380,11 @@ private fun speichereAuftraege(context: Context, liste: List<Auftrag>) {
             put("rechnungsnummer", a.rechnungsnummer)
             put("rechnungsdatum", a.rechnungsdatum)
             put("faelligAm", a.faelligAm)
+            put("mahnung1Datum", a.mahnung1Datum)
+            put("mahnung1Frist", a.mahnung1Frist)
+            put("mahnung1Gebuehr", a.mahnung1Gebuehr)
+            put("mahnung1Text", a.mahnung1Text)
+            put("mahnung1Erstellt", a.mahnung1Erstellt)
             put("arbeitsStart", a.arbeitsStart)
             put("arbeitsEnde", a.arbeitsEnde)
             put("arbeitsSekunden", a.arbeitsSekunden)
@@ -716,6 +731,93 @@ private fun erstelleRechnungPdf(
     }
 
     fuegeFotoSeitenHinzu(context, pdf, fotosVorher, fotosNachher)
+    return pdf
+}
+
+private fun erstelleMahnung1Pdf(
+    context: Context,
+    auftrag: Auftrag,
+    mahnungDatum: String,
+    zahlungsfrist: String,
+    mahngebuehr: Double,
+    eigenerText: String
+): PdfDocument {
+    val pdf = PdfDocument()
+    val page = pdf.startPage(PdfDocument.PageInfo.Builder(595, 842, 1).create())
+    val c = page.canvas
+    val p = Paint(Paint.ANTI_ALIAS_FLAG)
+    val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+    val firmenName = prefs.getString(FIRMENNAME_KEY, "") ?: ""
+    val firmenStrasse = prefs.getString(FIRMENSTRASSE_KEY, "") ?: ""
+    val firmenPlzOrt = prefs.getString(FIRMENPLZORT_KEY, "") ?: ""
+    val firmenTelefon = prefs.getString(FIRMENTELEFON_KEY, "") ?: ""
+    val firmenEmail = prefs.getString(FIRMENEMAIL_KEY, "") ?: ""
+
+    p.textSize = 16f
+    p.isFakeBoldText = true
+    c.drawText(firmenName.ifBlank { "KÜMMERO" }, 40f, 55f, p)
+    p.isFakeBoldText = false
+    p.textSize = 10f
+    c.drawText(firmenStrasse, 40f, 75f, p)
+    c.drawText(firmenPlzOrt, 40f, 90f, p)
+    if (firmenTelefon.isNotBlank()) c.drawText("Telefon: $firmenTelefon", 40f, 105f, p)
+    if (firmenEmail.isNotBlank()) c.drawText("E-Mail: $firmenEmail", 40f, 120f, p)
+
+    p.textSize = 20f
+    p.isFakeBoldText = true
+    c.drawText("1. MAHNUNG", 40f, 170f, p)
+    p.isFakeBoldText = false
+    p.textSize = 11f
+    c.drawText("Mahndatum: $mahnungDatum", 40f, 195f, p)
+    c.drawText("Rechnungsnummer: ${auftrag.rechnungsnummer}", 40f, 215f, p)
+    c.drawText("Rechnungsdatum: ${auftrag.rechnungsdatum}", 40f, 235f, p)
+    c.drawText("Ursprünglich fällig am: ${auftrag.faelligAm}", 40f, 255f, p)
+    c.drawText("Kunde: ${auftrag.kunde}", 40f, 285f, p)
+    c.drawText("Adresse: ${auftrag.kundenStrasse}", 40f, 305f, p)
+    c.drawText("PLZ und Ort: ${auftrag.kundenOrt}", 40f, 325f, p)
+
+    val rechnungsbetrag = gesamtbetrag(auftrag.stunden, auftrag.material, auftrag.fahrt, auftrag.stundensatz, auftrag.erstellungskosten)
+    val gesamt = runde2(rechnungsbetrag + mahngebuehr)
+    p.textSize = 13f
+    p.isFakeBoldText = true
+    c.drawText("Offener Rechnungsbetrag: ${euro(rechnungsbetrag)}", 40f, 365f, p)
+    var y = 390f
+    if (mahngebuehr > 0.0) {
+        c.drawText("Mahngebühr: ${euro(mahngebuehr)}", 40f, y, p)
+        y += 25f
+        c.drawText("Gesamt zu zahlen: ${euro(gesamt)}", 40f, y, p)
+        y += 40f
+    } else {
+        c.drawText("Gesamt zu zahlen: ${euro(gesamt)}", 40f, y, p)
+        y += 40f
+    }
+    p.isFakeBoldText = false
+    p.textSize = 11f
+
+    val text = eigenerText.ifBlank {
+        "Zu unserer Rechnung ${auftrag.rechnungsnummer} ist bisher kein Zahlungseingang festgestellt worden. Bitte begleichen Sie den offenen Betrag spätestens bis zum $zahlungsfrist."
+    }
+    val words = text.split(Regex("\\s+"))
+    var line = ""
+    for (word in words) {
+        val test = if (line.isBlank()) word else "$line $word"
+        if (p.measureText(test) > 510f) {
+            c.drawText(line, 40f, y, p)
+            y += 17f
+            line = word
+        } else line = test
+    }
+    if (line.isNotBlank()) {
+        c.drawText(line, 40f, y, p)
+        y += 17f
+    }
+    y += 18f
+    c.drawText("Neue Zahlungsfrist: $zahlungsfrist", 40f, y, p)
+    y += 30f
+    c.drawText("Mit freundlichen Grüßen", 40f, y, p)
+    y += 18f
+    c.drawText(firmenName.ifBlank { "KÜMMERO" }, 40f, y, p)
+    pdf.finishPage(page)
     return pdf
 }
 
@@ -1156,6 +1258,40 @@ fun KuemmeroApp() {
     var rechnungNummerEditText by remember { mutableStateOf("") }
     var rechnungScanIndex by remember { mutableStateOf<Int?>(null) }
     var rechnungScanUri by remember { mutableStateOf<Uri?>(null) }
+    var mahnung1Index by remember { mutableStateOf<Int?>(null) }
+    var mahnung1Datum by remember { mutableStateOf("") }
+    var mahnung1Frist by remember { mutableStateOf("") }
+    var mahnung1Gebuehr by remember { mutableStateOf("") }
+    var mahnung1Text by remember { mutableStateOf("") }
+
+    val mahnung1Launcher = rememberLauncherForActivityResult(
+        ActivityResultContracts.CreateDocument("application/pdf")
+    ) { uri ->
+        uri?.let {
+            val index = mahnung1Index
+            val a = index?.let { i -> auftraege.getOrNull(i) }
+            if (a != null) {
+                try {
+                    val pdf = erstelleMahnung1Pdf(context, a, mahnung1Datum.trim(), mahnung1Frist.trim(), zahl(mahnung1Gebuehr), mahnung1Text.trim())
+                    context.contentResolver.openOutputStream(it)?.use { out -> pdf.writeTo(out) } ?: throw Exception("Datei konnte nicht geöffnet werden")
+                    pdf.close()
+                    val aktualisiert = a.copy(
+                        mahnung1Datum = mahnung1Datum.trim(),
+                        mahnung1Frist = mahnung1Frist.trim(),
+                        mahnung1Gebuehr = zahl(mahnung1Gebuehr),
+                        mahnung1Text = mahnung1Text.trim(),
+                        mahnung1Erstellt = true
+                    )
+                    auftraege = auftraege.toMutableList().apply { set(index, aktualisiert) }
+                    speichereAuftraege(context, auftraege)
+                    android.widget.Toast.makeText(context, "1. Mahnung gespeichert.", 0).show()
+                } catch (_: Exception) {
+                    android.widget.Toast.makeText(context, "1. Mahnung konnte nicht erstellt werden.", 1).show()
+                }
+            }
+        }
+        mahnung1Index = null
+    }
 
     val rechnungScanLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.TakePicture()
@@ -1497,6 +1633,7 @@ fun KuemmeroApp() {
     val offeneAuftraege = auftraege.count { it.status != "Abgerechnet" }
     val offeneZahlungen = auftraege.filter { it.zahlungsstatus != "Bezahlt" }
     val offeneZahlungSumme = offeneZahlungen.sumOf { gesamtbetrag(it.stunden, it.material, it.fahrt, it.stundensatz, it.erstellungskosten) }
+    val ueberfaelligeRechnungen = auftraege.count { rechnungIstUeberfaellig(it, heuteText) }
     val naechsteTermine = auftraege.filter { it.terminDatum.isNotBlank() }
         .sortedWith(compareBy<Auftrag> {
             try { datumFormat.parse(it.terminDatum)?.time ?: Long.MAX_VALUE } catch (_: Exception) { Long.MAX_VALUE }
@@ -1632,6 +1769,39 @@ fun KuemmeroApp() {
                 }, colors = ButtonDefaults.textButtonColors(contentColor = KuemmeroError)) { Text("Löschen") }
             },
             dismissButton = { TextButton(onClick = { kvLoeschIndex = null }) { Text("Abbrechen") } }
+        )
+    }
+
+    if (mahnung1Index != null) {
+        AlertDialog(
+            onDismissRequest = { mahnung1Index = null },
+            title = { Text("1. Mahnung erstellen") },
+            text = {
+                Column(
+                    modifier = Modifier.fillMaxWidth().heightIn(max = 520.dp),
+                    verticalArrangement = Arrangement.spacedBy(9.dp)
+                ) {
+                    Text("Alle Angaben können vor dem Erstellen geändert werden.")
+                    OutlinedTextField(mahnung1Datum, { mahnung1Datum = it }, label = { Text("Mahndatum") }, singleLine = true, colors = feldFarben, modifier = Modifier.fillMaxWidth())
+                    OutlinedTextField(mahnung1Frist, { mahnung1Frist = it }, label = { Text("Neue Zahlungsfrist") }, singleLine = true, colors = feldFarben, modifier = Modifier.fillMaxWidth())
+                    OutlinedTextField(mahnung1Gebuehr, { mahnung1Gebuehr = it }, label = { Text("Mahngebühr (€)") }, singleLine = true, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal), colors = feldFarben, modifier = Modifier.fillMaxWidth())
+                    OutlinedTextField(mahnung1Text, { mahnung1Text = it }, label = { Text("Mahntext (änderbar)") }, minLines = 4, maxLines = 7, colors = feldFarben, modifier = Modifier.fillMaxWidth())
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    val index = mahnung1Index
+                    val a = index?.let { auftraege.getOrNull(it) }
+                    if (a == null) mahnung1Index = null
+                    else if (mahnung1Datum.isBlank() || mahnung1Frist.isBlank()) {
+                        android.widget.Toast.makeText(context, "Bitte Mahndatum und Zahlungsfrist eingeben.", 0).show()
+                    } else {
+                        val name = a.kunde.ifBlank { "Kunde" }.replace("/", "-")
+                        mahnung1Launcher.launch("KÜMMERO-1-Mahnung-${a.rechnungsnummer}-$name.pdf")
+                    }
+                }) { Text("PDF erstellen") }
+            },
+            dismissButton = { TextButton(onClick = { mahnung1Index = null }) { Text("Abbrechen") } }
         )
     }
 
@@ -2910,6 +3080,27 @@ fun KuemmeroApp() {
                                     if (a.zahlungsstatus == "Bezahlt") "Zahlung zurücksetzen" else "Als bezahlt markieren",
                                     fontWeight = FontWeight.Bold
                                 )
+                            }
+
+                            if (a.rechnungsnummer.isNotBlank() && a.zahlungsstatus != "Bezahlt" && rechnungIstUeberfaellig(a, heuteText)) {
+                                Button(
+                                    onClick = {
+                                        mahnung1Index = index
+                                        mahnung1Datum = a.mahnung1Datum.ifBlank { heuteText }
+                                        mahnung1Frist = a.mahnung1Frist.ifBlank {
+                                            val cal = Calendar.getInstance()
+                                            cal.add(Calendar.DAY_OF_YEAR, 7)
+                                            datumFormat.format(cal.time)
+                                        }
+                                        mahnung1Gebuehr = if (a.mahnung1Gebuehr > 0.0) String.format(Locale.GERMANY, "%.2f", a.mahnung1Gebuehr) else ""
+                                        mahnung1Text = a.mahnung1Text
+                                    },
+                                    modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp),
+                                    shape = RoundedCornerShape(26.dp),
+                                    colors = ButtonDefaults.buttonColors(containerColor = KuemmeroError)
+                                ) {
+                                    Text(if (a.mahnung1Erstellt) "1. Mahnung bearbeiten / neu erstellen" else "1. Mahnung erstellen", fontWeight = FontWeight.Bold)
+                                }
                             }
 
                             val laufend = timerIndex == index && a.arbeitsStart > 0L
