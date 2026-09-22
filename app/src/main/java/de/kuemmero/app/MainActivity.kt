@@ -428,7 +428,6 @@ private fun erstellePdf(
     fotosNachher: List<String> = emptyList(),
     dokumentTitel: String = "ANGEBOT"
 ): PdfDocument {
-    val effektivesDatum = effektivesUnterschriftDatum(unterschriftPfad, unterschriftDatum)
     val pdf = PdfDocument()
     val page = pdf.startPage(PdfDocument.PageInfo.Builder(595, 842, 1).create())
     val c = page.canvas
@@ -480,28 +479,13 @@ private fun erstellePdf(
     c.drawLine(40f, 693f, 280f, 693f, p)
     c.drawText("Unterschrift", 40f, 711f, p)
     c.drawLine(330f, 693f, 550f, 693f, p)
-    c.drawText("Datum: ${effektivesDatum.ifBlank { "—" }}", 330f, 711f, p)
+    c.drawText("Datum", 330f, 711f, p)
     c.drawText("Vielen Dank für Ihr Vertrauen.", 40f, 763f, p)
     pdf.finishPage(page)
     fuegeFotoSeitenHinzu(context, pdf, fotosVorher, fotosNachher)
     return pdf
 }
 
-
-private fun effektivesUnterschriftDatum(unterschriftPfad: String, unterschriftDatum: String): String {
-    if (unterschriftDatum.isNotBlank()) return unterschriftDatum
-    if (unterschriftPfad.isBlank()) return ""
-    return try {
-        val file = java.io.File(unterschriftPfad)
-        if (file.exists()) {
-            SimpleDateFormat("dd.MM.yyyy", Locale.GERMANY).format(Date(file.lastModified()))
-        } else {
-            ""
-        }
-    } catch (_: Exception) {
-        ""
-    }
-}
 
 private fun erstelleRechnungPdf(
     context: Context,
@@ -521,7 +505,6 @@ private fun erstelleRechnungPdf(
     fotosVorher: List<String> = emptyList(),
     fotosNachher: List<String> = emptyList()
 ): PdfDocument {
-    val effektivesDatum = effektivesUnterschriftDatum(unterschriftPfad, unterschriftDatum)
     val pdf = PdfDocument()
     val page = pdf.startPage(PdfDocument.PageInfo.Builder(595, 842, 1).create())
     val c = page.canvas
@@ -563,28 +546,62 @@ private fun erstelleRechnungPdf(
     p.textSize = 11f
     c.drawText("Gemäß § 19 UStG wird keine Umsatzsteuer berechnet.", 40f, 578f, p)
     c.drawText("Bitte überweisen Sie den Rechnungsbetrag bis zum $faelligAm.", 40f, 600f, p)
-    c.drawText("Kunden-Unterschrift:", 40f, 625f, p)
-    val signBitmap = ladeUnterschriftBitmap(unterschriftPfad)
-    if (signBitmap != null) {
-        val maxW = 260f
-        val maxH = 55f
-        val scale = minOf(maxW / signBitmap.width.toFloat(), maxH / signBitmap.height.toFloat())
-        val drawW = signBitmap.width * scale
-        val drawH = signBitmap.height * scale
-        val top = 635f + (maxH - drawH) / 2f
-        c.drawBitmap(signBitmap, null, android.graphics.RectF(40f, top, 40f + drawW, top + drawH), null)
-        signBitmap.recycle()
-    } else {
-        p.textSize = 10f
-        c.drawText("Keine Unterschrift erfasst", 40f, 655f, p)
-        p.textSize = 11f
-    }
-    c.drawLine(40f, 700f, 300f, 700f, p)
-    c.drawText("Unterschrift", 40f, 718f, p)
-    c.drawLine(330f, 700f, 550f, 700f, p)
-    c.drawText("Datum: ${effektivesDatum.ifBlank { "—" }}", 330f, 718f, p)
-    c.drawText("Vielen Dank für Ihr Vertrauen.", 40f, 730f, p)
+    c.drawText("Vielen Dank für Ihr Vertrauen.", 40f, 625f, p)
     pdf.finishPage(page)
+
+    // Anlage: unterschriebener Auftrag. Die Unterschrift steht bewusst
+    // nicht auf der Rechnung selbst, sondern als separate Nachweis-Seite.
+    if (unterschriftPfad.isNotBlank()) {
+        val anlage = pdf.startPage(PdfDocument.PageInfo.Builder(595, 842, 2).create())
+        val ac = anlage.canvas
+        val ap = Paint()
+        ap.textSize = 22f
+        ac.drawText("KÜMMERO", 40f, 60f, ap)
+        ap.textSize = 16f
+        ac.drawText("ANLAGE – UNTERSCHRIEBENER AUFTRAG", 40f, 105f, ap)
+        ap.textSize = 11f
+        ac.drawText("Zur Rechnung: $nummer", 40f, 130f, ap)
+        ac.drawText("Kunde: $kunde", 40f, 155f, ap)
+        ac.drawText("Adresse: $strasse, $ort", 40f, 175f, ap)
+        ac.drawText("Leistung: $leistung", 40f, 195f, ap)
+        ac.drawText("Unterschriftsdatum: ${unterschriftDatum.ifBlank { "—" }}", 40f, 215f, ap)
+
+        ac.drawLine(40f, 245f, 550f, 245f, ap)
+        ap.textSize = 14f
+        ac.drawText("Digitale Kunden-Unterschrift", 40f, 275f, ap)
+
+        val signBitmap = ladeUnterschriftBitmap(unterschriftPfad)
+        if (signBitmap != null) {
+            val maxW = 420f
+            val maxH = 180f
+            val scale = minOf(
+                maxW / signBitmap.width.toFloat(),
+                maxH / signBitmap.height.toFloat()
+            )
+            val drawW = signBitmap.width * scale
+            val drawH = signBitmap.height * scale
+            val left = 40f
+            val top = 300f
+            ac.drawBitmap(
+                signBitmap,
+                null,
+                android.graphics.RectF(left, top, left + drawW, top + drawH),
+                null
+            )
+            signBitmap.recycle()
+        } else {
+            ap.textSize = 11f
+            ac.drawText("Keine digitale Unterschrift erfasst.", 40f, 320f, ap)
+        }
+
+        ap.textSize = 10f
+        ac.drawText(
+            "Diese Seite ist als Nachweis dem Rechnungsdokument beigefügt.",
+            40f, 530f, ap
+        )
+        pdf.finishPage(anlage)
+    }
+
     fuegeFotoSeitenHinzu(context, pdf, fotosVorher, fotosNachher)
     return pdf
 }
