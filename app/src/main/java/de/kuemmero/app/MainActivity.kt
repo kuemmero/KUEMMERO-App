@@ -34,6 +34,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
@@ -189,6 +190,27 @@ private const val FIRMENPLZORT_KEY = "firmen_plz_ort"
 private const val FIRMENTELEFON_KEY = "firmen_telefon"
 private const val FIRMENEMAIL_KEY = "firmen_email"
 private const val STEUERNUMMER_KEY = "steuernummer"
+private const val MAHNUNG1_FRIST_TAGE_KEY = "mahnung1_frist_tage"
+private const val MAHNUNG1_GEBUEHR_KEY = "mahnung1_gebuehr"
+private const val MAHNUNG1_TEXT_KEY = "mahnung1_text"
+private fun standardMahnung1Frist(context: Context, basisDatum: Date = Date()): String {
+    val tage = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        .getInt(MAHNUNG1_FRIST_TAGE_KEY, 7)
+        .coerceAtLeast(0)
+    val cal = Calendar.getInstance().apply {
+        time = basisDatum
+        add(Calendar.DAY_OF_YEAR, tage)
+    }
+    return SimpleDateFormat("dd.MM.yyyy", Locale.GERMANY).format(cal.time)
+}
+
+private fun standardMahnung1Text(context: Context): String =
+    context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        .getString(
+            MAHNUNG1_TEXT_KEY,
+            "Bitte begleichen Sie den offenen Rechnungsbetrag innerhalb der angegebenen Zahlungsfrist."
+        ) ?: "Bitte begleichen Sie den offenen Rechnungsbetrag innerhalb der angegebenen Zahlungsfrist."
+
 
 data class Kostenvoranschlag(
     val nummer: String = "",
@@ -1264,6 +1286,22 @@ fun KuemmeroApp() {
     var mahnung1Gebuehr by remember { mutableStateOf("") }
     var mahnung1Text by remember { mutableStateOf("") }
 
+    var mahnungEinstellungenOffen by remember { mutableStateOf(false) }
+    val mahnungPrefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+    var mahnungEinstellungFristTage by remember {
+        mutableStateOf(mahnungPrefs.getInt(MAHNUNG1_FRIST_TAGE_KEY, 7).toString())
+    }
+    var mahnungEinstellungGebuehr by remember {
+        mutableStateOf(
+            String.format(
+                Locale.GERMANY,
+                "%.2f",
+                mahnungPrefs.getFloat(MAHNUNG1_GEBUEHR_KEY, 0f).toDouble()
+            )
+        )
+    }
+    var mahnungEinstellungText by remember { mutableStateOf(standardMahnung1Text(context)) }
+
     val mahnung1Launcher = rememberLauncherForActivityResult(
         ActivityResultContracts.CreateDocument("application/pdf")
     ) { uri ->
@@ -1769,6 +1807,74 @@ fun KuemmeroApp() {
                 }, colors = ButtonDefaults.textButtonColors(contentColor = KuemmeroError)) { Text("Löschen") }
             },
             dismissButton = { TextButton(onClick = { kvLoeschIndex = null }) { Text("Abbrechen") } }
+        )
+    }
+
+    if (mahnungEinstellungenOffen) {
+        AlertDialog(
+            onDismissRequest = { mahnungEinstellungenOffen = false },
+            title = { Text("⚙ Mahnung-Einstellungen") },
+            text = {
+                Column(
+                    verticalArrangement = Arrangement.spacedBy(10.dp),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .verticalScroll(rememberScrollState())
+                ) {
+                    Text(
+                        "Diese Werte sind nur Voreinstellungen. Bei jeder einzelnen Mahnung kannst du sie trotzdem ändern.",
+                        color = KuemmeroText
+                    )
+                    OutlinedTextField(
+                        value = mahnungEinstellungFristTage,
+                        onValueChange = { mahnungEinstellungFristTage = it },
+                        label = { Text("Zahlungsfrist nach 1. Mahnung (Tage)") },
+                        singleLine = true,
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                        colors = feldFarben,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    OutlinedTextField(
+                        value = mahnungEinstellungGebuehr,
+                        onValueChange = { mahnungEinstellungGebuehr = it },
+                        label = { Text("Mahngebühr (€)") },
+                        singleLine = true,
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                        colors = feldFarben,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    OutlinedTextField(
+                        value = mahnungEinstellungText,
+                        onValueChange = { mahnungEinstellungText = it },
+                        label = { Text("Standard-Mahnungstext") },
+                        minLines = 5,
+                        maxLines = 8,
+                        colors = feldFarben,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    val tage = mahnungEinstellungFristTage.toIntOrNull()?.coerceAtLeast(0) ?: 7
+                    val gebuehr = zahl(mahnungEinstellungGebuehr)
+                    val text = mahnungEinstellungText.trim()
+                    context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+                        .edit()
+                        .putInt(MAHNUNG1_FRIST_TAGE_KEY, tage)
+                        .putFloat(MAHNUNG1_GEBUEHR_KEY, gebuehr.toFloat())
+                        .putString(MAHNUNG1_TEXT_KEY, text)
+                        .apply()
+                    mahnungEinstellungFristTage = tage.toString()
+                    mahnungEinstellungGebuehr = String.format(Locale.GERMANY, "%.2f", gebuehr)
+                    mahnungEinstellungText = text
+                    mahnungEinstellungenOffen = false
+                    android.widget.Toast.makeText(context, "Mahnung-Einstellungen gespeichert.", 0).show()
+                }) { Text("Speichern") }
+            },
+            dismissButton = {
+                TextButton(onClick = { mahnungEinstellungenOffen = false }) { Text("Abbrechen") }
+            }
         )
     }
 
@@ -3962,12 +4068,26 @@ fun KuemmeroApp() {
                                 border = BorderStroke(2.dp, if (ueberfaelligeRechnungen.isNotEmpty()) KuemmeroError else KuemmeroGreenLight)
                             ) {
                                 Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                                    Text(
-                                        "Mahnungen",
-                                        style = MaterialTheme.typography.headlineSmall,
-                                        color = KuemmeroGreen,
-                                        fontWeight = FontWeight.Bold
-                                    )
+                                    Row(
+                                        Modifier.fillMaxWidth(),
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.SpaceBetween
+                                    ) {
+                                        Text(
+                                            "Mahnungen",
+                                            style = MaterialTheme.typography.headlineSmall,
+                                            color = KuemmeroGreen,
+                                            fontWeight = FontWeight.Bold
+                                        )
+                                        OutlinedButton(
+                                            onClick = { mahnungEinstellungenOffen = true },
+                                            shape = RoundedCornerShape(20.dp),
+                                            border = BorderStroke(1.dp, KuemmeroGreen),
+                                            colors = ButtonDefaults.outlinedButtonColors(contentColor = KuemmeroGreen)
+                                        ) {
+                                            Text("⚙")
+                                        }
+                                    }
                                     Text(
                                         if (ueberfaelligeRechnungen.isEmpty())
                                             "Keine überfälligen, unbezahlten Rechnungen."
@@ -4027,13 +4147,13 @@ fun KuemmeroApp() {
                                                     onClick = {
                                                         mahnung1Index = index
                                                         mahnung1Datum = a.mahnung1Datum.ifBlank { heuteText }
-                                                        mahnung1Frist = a.mahnung1Frist.ifBlank {
-                                                            val cal = Calendar.getInstance()
-                                                            cal.add(Calendar.DAY_OF_YEAR, 7)
-                                                            datumFormat.format(cal.time)
+                                                        mahnung1Frist = a.mahnung1Frist.ifBlank { standardMahnung1Frist(context) }
+                                                        mahnung1Gebuehr = if (a.mahnung1Gebuehr > 0.0) {
+                                                            String.format(Locale.GERMANY, "%.2f", a.mahnung1Gebuehr)
+                                                        } else {
+                                                            mahnungEinstellungGebuehr
                                                         }
-                                                        mahnung1Gebuehr = if (a.mahnung1Gebuehr > 0.0) String.format(Locale.GERMANY, "%.2f", a.mahnung1Gebuehr) else ""
-                                                        mahnung1Text = a.mahnung1Text
+                                                        mahnung1Text = a.mahnung1Text.ifBlank { mahnungEinstellungText }
                                                     },
                                                     modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp),
                                                     shape = RoundedCornerShape(26.dp),
