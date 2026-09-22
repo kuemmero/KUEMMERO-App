@@ -137,7 +137,6 @@ data class Kostenvoranschlag(
     val material: Double = 0.0,
     val fahrt: Double = 0.0,
     val stundensatz: Double = 42.0,
-    val erstellungskosten: Double = 0.0,
     val materialBonUri: String = "",
     val fotosVorher: List<String> = emptyList()
 )
@@ -152,7 +151,7 @@ private fun ladeKostenvoranschlaege(context: Context): List<Kostenvoranschlag> {
             o.optString("nummer"), o.optString("datum"), o.optString("gueltigBis"),
             o.optString("kunde"), o.optString("kundenStrasse"), o.optString("kundenOrt"),
             o.optString("leistung"), o.optDouble("stunden", 0.0), o.optDouble("material", 0.0),
-            o.optDouble("fahrt", 0.0), o.optDouble("stundensatz", 42.0), o.optDouble("erstellungskosten", 0.0), o.optString("materialBonUri", ""),
+            o.optDouble("fahrt", 0.0), o.optDouble("stundensatz", 42.0), o.optString("materialBonUri", ""),
             run { val a = o.optJSONArray("fotosVorher") ?: JSONArray(); List(a.length()) { j -> a.optString(j) } }
         )
     }
@@ -165,7 +164,7 @@ private fun speichereKostenvoranschlaege(context: Context, liste: List<Kostenvor
             put("nummer", k.nummer); put("datum", k.datum); put("gueltigBis", k.gueltigBis)
             put("kunde", k.kunde); put("kundenStrasse", k.kundenStrasse); put("kundenOrt", k.kundenOrt)
             put("leistung", k.leistung); put("stunden", k.stunden); put("material", k.material)
-            put("fahrt", k.fahrt); put("stundensatz", k.stundensatz); put("erstellungskosten", k.erstellungskosten); put("materialBonUri", k.materialBonUri)
+            put("fahrt", k.fahrt); put("stundensatz", k.stundensatz); put("materialBonUri", k.materialBonUri)
             put("fotosVorher", JSONArray(k.fotosVorher))
         })
     }
@@ -450,8 +449,7 @@ private fun erstellePdf(
     unterschriftDatum: String = "",
     fotosVorher: List<String> = emptyList(),
     fotosNachher: List<String> = emptyList(),
-    dokumentTitel: String = "ANGEBOT",
-    erstellungskosten: Double = 0.0
+    dokumentTitel: String = "ANGEBOT"
 ): PdfDocument {
     val pdf = PdfDocument()
     val page = pdf.startPage(PdfDocument.PageInfo.Builder(595, 842, 1).create())
@@ -483,14 +481,8 @@ private fun erstellePdf(
     c.drawText(euro(material), 450f, 473f, p)
     c.drawText("Fahrtkosten", 40f, 498f, p)
     c.drawText(euro(fahrt), 450f, 498f, p)
-    var gesamtY = 513f
-    if (erstellungskosten > 0.0) {
-        c.drawText("Erstellungskosten", 40f, 523f, p)
-        c.drawText(euro(erstellungskosten), 450f, 523f, p)
-        gesamtY = 538f
-    }
-    c.drawLine(40f, gesamtY, 550f, gesamtY, p)
-    val gesamt = runde2(gesamtbetrag(stunden, material, fahrt, stundensatz) + erstellungskosten)
+    c.drawLine(40f, 513f, 550f, 513f, p)
+    val gesamt = gesamtbetrag(stunden, material, fahrt, stundensatz)
     p.textSize = 18f
     c.drawText("Gesamtsumme: ${euro(gesamt)}", 40f, 548f, p)
     p.textSize = 11f
@@ -698,8 +690,7 @@ private fun druckePdf(
     datum: String,
     gueltigBis: String,
     auftrag: Auftrag,
-    dokumentTitel: String = "ANGEBOT",
-    erstellungskosten: Double = 0.0
+    dokumentTitel: String = "ANGEBOT"
 ) {
     val printManager = context.getSystemService(Context.PRINT_SERVICE) as PrintManager
     val adapter = object : PrintDocumentAdapter() {
@@ -721,7 +712,7 @@ private fun druckePdf(
                 context, nummer, datum, gueltigBis,
                 auftrag.kunde, auftrag.kundenStrasse, auftrag.kundenOrt, auftrag.leistung,
                 auftrag.stunden, auftrag.material, auftrag.fahrt, auftrag.stundensatz,
-                auftrag.unterschriftPfad, auftrag.unterschriftDatum, auftrag.fotosVorher, auftrag.fotosNachher, dokumentTitel, erstellungskosten
+                auftrag.unterschriftPfad, auftrag.unterschriftDatum, auftrag.fotosVorher, auftrag.fotosNachher, dokumentTitel
             )
             val info = PrintDocumentInfo.Builder(dateiname)
                 .setContentType(PrintDocumentInfo.CONTENT_TYPE_DOCUMENT)
@@ -966,8 +957,6 @@ fun KuemmeroApp() {
     var kostenvoranschlaege by remember { mutableStateOf(ladeKostenvoranschlaege(context)) }
     var kvFormOffen by remember { mutableStateOf(false) }
     var kvBearbeiteIndex by remember { mutableStateOf<Int?>(null) }
-    var kvLoeschIndex by remember { mutableStateOf<Int?>(null) }
-    var kvErstellungskostenLoeschBestaetigung by remember { mutableStateOf(false) }
     var kvNummer by remember { mutableStateOf("KV-" + SimpleDateFormat("yyyyMMdd-HHmmss", Locale.GERMANY).format(heute)) }
     var kvDatum by remember { mutableStateOf(datumFormat.format(heute)) }
     var kvGueltigBis by remember { mutableStateOf(datumFormat.format(Calendar.getInstance().apply { add(Calendar.DAY_OF_YEAR, 14) }.time)) }
@@ -981,7 +970,6 @@ fun KuemmeroApp() {
     var kvFotosVorher by remember { mutableStateOf<List<String>>(emptyList()) }
     var kvFahrt by remember { mutableStateOf("") }
     var kvStundensatz by remember { mutableStateOf(context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE).getString(STUNDENSATZ_KEY, "42.00") ?: "42.00") }
-    var kvErstellungskosten by remember { mutableStateOf("") }
     var kvKundenDialog by remember { mutableStateOf(false) }
     var auftragDetailIndex by remember { mutableStateOf<Int?>(null) }
     var auftragFormOffen by remember { mutableStateOf(false) }
@@ -1789,41 +1777,6 @@ fun KuemmeroApp() {
         } else {
             arbeitszeitLoeschIndex = null
         }
-    }
-
-    if (kvErstellungskostenLoeschBestaetigung) {
-        AlertDialog(
-            onDismissRequest = { kvErstellungskostenLoeschBestaetigung = false },
-            title = { Text("Erstellungskosten löschen?") },
-            text = { Text("Die eingetragenen Erstellungskosten werden aus diesem Kostenvoranschlag entfernt.") },
-            confirmButton = {
-                TextButton(onClick = {
-                    kvErstellungskosten = ""
-                    kvErstellungskostenLoeschBestaetigung = false
-                    android.widget.Toast.makeText(context, "Erstellungskosten gelöscht.", android.widget.Toast.LENGTH_SHORT).show()
-                }) { Text("Löschen") }
-            },
-            dismissButton = {
-                TextButton(onClick = { kvErstellungskostenLoeschBestaetigung = false }) { Text("Abbrechen") }
-            }
-        )
-    }
-
-    kvLoeschIndex?.let { index ->
-        AlertDialog(
-            onDismissRequest = { kvLoeschIndex = null },
-            title = { Text("Kostenvoranschlag löschen?") },
-            text = { Text("Soll dieser Kostenvoranschlag wirklich gelöscht werden? Aufträge, Kunden und andere Dokumente bleiben erhalten.") },
-            confirmButton = {
-                TextButton(onClick = {
-                    kostenvoranschlaege = kostenvoranschlaege.toMutableList().apply { if (index in indices) removeAt(index) }
-                    speichereKostenvoranschlaege(context, kostenvoranschlaege)
-                    kvLoeschIndex = null
-                    android.widget.Toast.makeText(context, "Kostenvoranschlag gelöscht.", android.widget.Toast.LENGTH_SHORT).show()
-                }) { Text("Löschen") }
-            },
-            dismissButton = { TextButton(onClick = { kvLoeschIndex = null }) { Text("Abbrechen") } }
-        )
     }
 
     loeschIndex?.let { index ->
@@ -3109,15 +3062,19 @@ fun KuemmeroApp() {
                                         Text("${naechsterTermin.terminDatum} · ${naechsterTermin.terminUhrzeit.ifBlank { "ohne Uhrzeit" }}", color = KuemmeroGreen, fontWeight = FontWeight.Bold)
                                         Text(naechsterTermin.kunde, color = KuemmeroText, style = MaterialTheme.typography.titleMedium)
                                         if (naechsterTermin.leistung.isNotBlank()) Text(naechsterTermin.leistung, color = KuemmeroText)
-                                        Button(
+                                        OutlinedButton(
                                             onClick = {
                                                 val index = auftraege.indexOfFirst { it.nummer == naechsterTermin.nummer && it.kunde == naechsterTermin.kunde && it.terminDatum == naechsterTermin.terminDatum }
                                                 if (index >= 0) { hauptseite = "Aufträge"; auftragFormOffen = false; auftragDetailIndex = index }
                                             },
                                             modifier = Modifier.fillMaxWidth().heightIn(min = 50.dp),
                                             shape = RoundedCornerShape(25.dp),
-                                            colors = ButtonDefaults.buttonColors(containerColor = KuemmeroGreen)
-                                        ) { Text("Auftrag öffnen →", fontWeight = FontWeight.Bold) }
+                                            border = BorderStroke(1.5.dp, KuemmeroGreen),
+                                            colors = ButtonDefaults.outlinedButtonColors(
+                                                containerColor = KuemmeroSurface,
+                                                contentColor = KuemmeroGreen
+                                            )
+                                        ) { Text("Auftrag öffnen  →", fontWeight = FontWeight.Bold) }
                                     }
                                 }
                             }
@@ -3256,13 +3213,10 @@ fun KuemmeroApp() {
                                         Text("${k.nummer} · ${k.datum}", color = KuemmeroText)
                                         if (k.leistung.isNotBlank()) Text(k.leistung, color = KuemmeroText)
                                         Text(
-                                            euro(runde2(gesamtbetrag(k.stunden, k.material, k.fahrt, k.stundensatz) + k.erstellungskosten)),
+                                            euro(gesamtbetrag(k.stunden, k.material, k.fahrt, k.stundensatz)),
                                             color = KuemmeroGreen,
                                             fontWeight = FontWeight.Bold
                                         )
-                                        if (k.erstellungskosten > 0.0) {
-                                            Text("Erstellungskosten: ${euro(k.erstellungskosten)}", color = KuemmeroGreen, fontWeight = FontWeight.SemiBold)
-                                        }
                                         if (k.materialBonUri.isNotBlank()) {
                                             Text("🧾 Material-Kassenbon vorhanden", color = KuemmeroGreen, fontWeight = FontWeight.SemiBold)
                                         }
@@ -3289,21 +3243,10 @@ fun KuemmeroApp() {
                                                     kvFotosVorher = k.fotosVorher
                                                     kvFahrt = k.fahrt.toString().replace(".", ",")
                                                     kvStundensatz = k.stundensatz.toString().replace(".", ",")
-                                                    kvErstellungskosten = k.erstellungskosten.toString().replace(".", ",")
                                                     kvFormOffen = true
                                                 },
                                                 modifier = Modifier.weight(1f)
                                             ) { Text("Bearbeiten") }
-
-                                            OutlinedButton(
-                                                onClick = {
-                                                    spieleBestaetigungston(context)
-                                                    kvLoeschIndex = index
-                                                },
-                                                modifier = Modifier.weight(1f),
-                                                border = BorderStroke(2.dp, KuemmeroError),
-                                                colors = ButtonDefaults.outlinedButtonColors(contentColor = KuemmeroError)
-                                            ) { Text("Löschen") }
 
                                             Button(
                                                 onClick = {
@@ -3352,7 +3295,7 @@ fun KuemmeroApp() {
                                                         context,
                                                         "Kostenvoranschlag-${k.kunde.ifBlank { "Kunde" }}.pdf",
                                                         k.nummer, k.datum, k.gueltigBis, a,
-                                                        "KOSTENVORANSCHLAG", k.erstellungskosten
+                                                        "KOSTENVORANSCHLAG"
                                                     )
                                                 },
                                                 modifier = Modifier.weight(1f),
@@ -3450,18 +3393,8 @@ fun KuemmeroApp() {
                                         }
                                         OutlinedTextField(kvFahrt, { kvFahrt = it }, label = { Text("Fahrtkosten (€)") }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal), colors = feldFarben, modifier = Modifier.fillMaxWidth())
                                         OutlinedTextField(kvStundensatz, { kvStundensatz = it }, label = { Text("Stundensatz (€ / Stunde)") }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal), colors = feldFarben, modifier = Modifier.fillMaxWidth())
-                                        OutlinedTextField(kvErstellungskosten, { kvErstellungskosten = it }, label = { Text("Erstellungskosten (€)") }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal), colors = feldFarben, modifier = Modifier.fillMaxWidth())
-                                        if (zahl(kvErstellungskosten) > 0.0) {
-                                            TextButton(
-                                                onClick = {
-                                                    spieleBestaetigungston(context)
-                                                    kvErstellungskostenLoeschBestaetigung = true
-                                                },
-                                                colors = ButtonDefaults.textButtonColors(contentColor = KuemmeroError)
-                                            ) { Text("🗑 Erstellungskosten löschen") }
-                                        }
                                         Text(
-                                            "Gesamtsumme: ${euro(runde2(gesamtbetrag(zahl(kvStunden), zahl(kvMaterial), zahl(kvFahrt), zahl(kvStundensatz, 42.0)) + zahl(kvErstellungskosten)))}",
+                                            "Gesamtsumme: ${euro(gesamtbetrag(zahl(kvStunden), zahl(kvMaterial), zahl(kvFahrt), zahl(kvStundensatz, 42.0)))}",
                                             style = MaterialTheme.typography.titleLarge,
                                             color = KuemmeroGreen,
                                             fontWeight = FontWeight.Bold
@@ -3475,7 +3408,7 @@ fun KuemmeroApp() {
                                                         kvNummer.trim(), kvDatum.trim(), kvGueltigBis.trim(),
                                                         kvKunde.trim(), kvStrasse.trim(), kvOrt.trim(), kvLeistung.trim(),
                                                         zahl(kvStunden), zahl(kvMaterial), zahl(kvFahrt), zahl(kvStundensatz, 42.0),
-                                                        zahl(kvErstellungskosten), kvMaterialBonUri, kvFotosVorher
+                                                        kvMaterialBonUri, kvFotosVorher
                                                     )
                                                     val list = kostenvoranschlaege.toMutableList()
                                                     if (kvBearbeiteIndex != null) list[kvBearbeiteIndex!!] = k else list.add(k)
