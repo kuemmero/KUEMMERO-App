@@ -769,6 +769,16 @@ private fun zeitText(sekunden: Long): String {
     return "%02d:%02d:%02d".format(Locale.GERMANY, h, m, s)
 }
 
+private fun spieleBestaetigungston(context: Context) {
+    try {
+        ToneGenerator(AudioManager.STREAM_NOTIFICATION, 80).startTone(
+            ToneGenerator.TONE_PROP_BEEP,
+            150
+        )
+    } catch (_: Exception) {
+    }
+}
+
 private fun rechnungIstUeberfaellig(auftrag: Auftrag, heute: String): Boolean {
     if (auftrag.rechnungsnummer.isBlank() || auftrag.zahlungsstatus == "Bezahlt" || auftrag.faelligAm.isBlank()) return false
     return try {
@@ -2142,7 +2152,10 @@ fun KuemmeroApp() {
                         }
                         if (unterschriftPfad.isNotBlank()) {
                             OutlinedButton(
-                                onClick = { unterschriftLoeschenBestaetigung = true },
+                                onClick = {
+                                    spieleBestaetigungston(context)
+                                    unterschriftLoeschenBestaetigung = true
+                                },
                                 modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp),
                                 shape = RoundedCornerShape(26.dp),
                                 border = BorderStroke(2.dp, KuemmeroError),
@@ -2273,9 +2286,15 @@ fun KuemmeroApp() {
                         sicherungBereichOffen,
                         { sicherungBereichOffen = !sicherungBereichOffen },
                     ) {
-                        OutlinedButton(onClick = { sicherungBestaetigung = true }, modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp), shape = RoundedCornerShape(28.dp), border = BorderStroke(2.dp, KuemmeroGreen), colors = ButtonDefaults.outlinedButtonColors(contentColor = KuemmeroGreen)) { Text("Sicherung speichern / aktualisieren", fontWeight = FontWeight.SemiBold) }
+                        OutlinedButton(onClick = {
+                            spieleBestaetigungston(context)
+                            sicherungBestaetigung = true
+                        }, modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp), shape = RoundedCornerShape(28.dp), border = BorderStroke(2.dp, KuemmeroGreen), colors = ButtonDefaults.outlinedButtonColors(contentColor = KuemmeroGreen)) { Text("Sicherung speichern / aktualisieren", fontWeight = FontWeight.SemiBold) }
                         Button(onClick = { restoreBackup.launch(arrayOf("application/json", "text/plain", "application/octet-stream")) }, modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp), shape = RoundedCornerShape(28.dp), colors = ButtonDefaults.buttonColors(containerColor = KuemmeroGreenLight)) { Text("Daten wiederherstellen", fontWeight = FontWeight.Bold) }
-                        OutlinedButton(onClick = { sicherungBestaetigung = true }, modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp), shape = RoundedCornerShape(26.dp), border = BorderStroke(2.dp, KuemmeroGreen), colors = ButtonDefaults.outlinedButtonColors(contentColor = KuemmeroGreen)) { Text("Sicherung jetzt aktualisieren", fontWeight = FontWeight.SemiBold) }
+                        OutlinedButton(onClick = {
+                            spieleBestaetigungston(context)
+                            sicherungBestaetigung = true
+                        }, modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp), shape = RoundedCornerShape(26.dp), border = BorderStroke(2.dp, KuemmeroGreen), colors = ButtonDefaults.outlinedButtonColors(contentColor = KuemmeroGreen)) { Text("Sicherung jetzt aktualisieren", fontWeight = FontWeight.SemiBold) }
                     }
                 }
 
@@ -2841,7 +2860,7 @@ fun KuemmeroApp() {
 
                             OutlinedButton(
                                 onClick = {
-                                    ToneGenerator(AudioManager.STREAM_NOTIFICATION, 80).startTone(ToneGenerator.TONE_PROP_BEEP, 150)
+                                                                        spieleBestaetigungston(context)
                                     loeschIndex = index
                                 },
                                 modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp),
@@ -3302,7 +3321,10 @@ fun KuemmeroApp() {
                             Card(Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = KuemmeroSurface), shape = RoundedCornerShape(18.dp)) {
                                 Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                                     Text("Sicherung & Daten", style = MaterialTheme.typography.titleMedium, color = KuemmeroGreen, fontWeight = FontWeight.Bold)
-                                    OutlinedButton(onClick = { sicherungBestaetigung = true }, modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp), shape = RoundedCornerShape(26.dp), border = BorderStroke(2.dp, KuemmeroGreen), colors = ButtonDefaults.outlinedButtonColors(contentColor = KuemmeroGreen)) { Text("Sicherung speichern / aktualisieren") }
+                                    OutlinedButton(onClick = {
+                                spieleBestaetigungston(context)
+                                sicherungBestaetigung = true
+                            }, modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp), shape = RoundedCornerShape(26.dp), border = BorderStroke(2.dp, KuemmeroGreen), colors = ButtonDefaults.outlinedButtonColors(contentColor = KuemmeroGreen)) { Text("Sicherung speichern / aktualisieren") }
                                     Button(onClick = { restoreBackup.launch(arrayOf("application/json", "text/plain", "application/octet-stream")) }, modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp), shape = RoundedCornerShape(26.dp), colors = ButtonDefaults.buttonColors(containerColor = KuemmeroGreenLight)) { Text("Daten wiederherstellen", fontWeight = FontWeight.Bold) }
                                 }
                             }
