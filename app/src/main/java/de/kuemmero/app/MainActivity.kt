@@ -4551,7 +4551,23 @@ fun KuemmeroApp() {
                                                     }
                                                     .padding(vertical = 4.dp)
                                             )
-                                            Text("Rechnung: ${a.rechnungsnummer}", color = KuemmeroGreen, fontWeight = FontWeight.Bold)
+                                            Text(
+                                                "Rechnung: ${a.rechnungsnummer}",
+                                                color = KuemmeroGreen,
+                                                fontWeight = FontWeight.Bold,
+                                                modifier = Modifier
+                                                    .fillMaxWidth()
+                                                    .clickable {
+                                                        val auftragIndex = auftraege.indexOfFirst { it.nummer == a.nummer && it.kunde.equals(a.kunde, ignoreCase = true) }
+                                                        if (auftragIndex >= 0) {
+                                                            hauptseite = "Aufträge"
+                                                            auftragFormOffen = false
+                                                            bearbeiteIndex = null
+                                                            auftragDetailIndex = auftragIndex
+                                                        }
+                                                    }
+                                                    .padding(vertical = 4.dp)
+                                            )
                                             Text("Betrag: ${euro(gesamtbetrag(a.stunden, a.material, a.fahrt, a.stundensatz, a.erstellungskosten))}", color = KuemmeroText)
                                             Text("Fällig am: ${a.faelligAm.ifBlank { "nicht angegeben" }}", color = KuemmeroText)
 
