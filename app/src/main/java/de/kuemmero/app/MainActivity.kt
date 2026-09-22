@@ -4388,17 +4388,16 @@ fun KuemmeroApp() {
                                             colors = ButtonDefaults.buttonColors(containerColor = KuemmeroGreen)
                                         ) { Text("+ Auftrag", fontWeight = FontWeight.Bold) }
 
-                                        OutlinedButton(
+                                        Button(
                                             onClick = { neuerKundeDialog = true },
                                             modifier = Modifier.weight(1f).heightIn(min = 52.dp),
                                             shape = RoundedCornerShape(18.dp),
-                                            border = BorderStroke(2.dp, KuemmeroGreen),
-                                            colors = ButtonDefaults.outlinedButtonColors(contentColor = KuemmeroGreen)
+                                            colors = ButtonDefaults.buttonColors(containerColor = KuemmeroGreen, contentColor = Color.White)
                                         ) { Text("+ Kunde", fontWeight = FontWeight.Bold) }
                                     }
 
                                     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                        OutlinedButton(
+                                        Button(
                                             onClick = {
                                                 hauptseite = "Aufträge"
                                                 auftragFormOffen = false
@@ -4410,11 +4409,10 @@ fun KuemmeroApp() {
                                             },
                                             modifier = Modifier.weight(1f).heightIn(min = 52.dp),
                                             shape = RoundedCornerShape(18.dp),
-                                            border = BorderStroke(2.dp, KuemmeroGreen),
-                                            colors = ButtonDefaults.outlinedButtonColors(contentColor = KuemmeroGreen)
+                                            colors = ButtonDefaults.buttonColors(containerColor = KuemmeroGreen, contentColor = Color.White)
                                         ) { Text("🧾 Rechnung", fontWeight = FontWeight.Bold) }
 
-                                        OutlinedButton(
+                                        Button(
                                             onClick = {
                                                 hauptseite = "Aufträge"
                                                 auftragFormOffen = false
@@ -4426,12 +4424,11 @@ fun KuemmeroApp() {
                                             },
                                             modifier = Modifier.weight(1f).heightIn(min = 52.dp),
                                             shape = RoundedCornerShape(18.dp),
-                                            border = BorderStroke(2.dp, KuemmeroGreen),
-                                            colors = ButtonDefaults.outlinedButtonColors(contentColor = KuemmeroGreen)
+                                            colors = ButtonDefaults.buttonColors(containerColor = KuemmeroGreen, contentColor = Color.White)
                                         ) { Text("📷 Auftrag", fontWeight = FontWeight.Bold) }
                                     }
 
-                                    OutlinedButton(
+                                    Button(
                                         onClick = {
                                             hauptseite = "Aufträge"
                                             auftragFormOffen = false
@@ -4443,8 +4440,7 @@ fun KuemmeroApp() {
                                         },
                                         modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp),
                                         shape = RoundedCornerShape(18.dp),
-                                        border = BorderStroke(2.dp, KuemmeroGreen),
-                                        colors = ButtonDefaults.outlinedButtonColors(contentColor = KuemmeroGreen)
+                                        colors = ButtonDefaults.buttonColors(containerColor = KuemmeroGreen, contentColor = Color.White)
                                     ) { Text("⏱ Arbeitszeit starten / Auftrag auswählen", fontWeight = FontWeight.Bold) }
                                 }
                             }
