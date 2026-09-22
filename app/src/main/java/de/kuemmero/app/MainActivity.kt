@@ -8,6 +8,7 @@ import android.graphics.BitmapFactory
 import android.graphics.pdf.PdfDocument
 import android.net.Uri
 import android.provider.MediaStore
+import android.provider.DocumentsContract
 import android.content.Intent
 import android.os.Bundle
 import android.os.CancellationSignal
@@ -70,6 +71,7 @@ import kotlinx.coroutines.launch
 
 private const val RECHNUNG_SCAN_PREFIX = "rechnung_scan_"
 private const val RECHNUNGSNUMMER_COUNTER_KEY = "rechnungsnummer_counter"
+private const val RECHNUNGSARCHIV_URI_KEY = "rechnungsarchiv_uri"
 
 private fun naechsteRechnungsnummer(context: Context): String {
     val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
@@ -114,6 +116,90 @@ private fun synchronisiereRechnungsnummerCounter(context: Context, nummer: Strin
     val bisher = prefs.getInt(key, 0)
     if (nummerWert > bisher) {
         prefs.edit().putInt(key, nummerWert).commit()
+    }
+}
+
+private fun findeOderErstelleArchivOrdner(context: Context, parentUri: Uri, name: String): Uri? {
+    val resolver = context.contentResolver
+    return try {
+        resolver.query(
+            DocumentsContract.buildChildDocumentsUriUsingTree(
+                parentUri,
+                DocumentsContract.getTreeDocumentId(parentUri)
+            ),
+            arrayOf(
+                DocumentsContract.Document.COLUMN_DOCUMENT_ID,
+                DocumentsContract.Document.COLUMN_DISPLAY_NAME,
+                DocumentsContract.Document.COLUMN_MIME_TYPE
+            ),
+            null,
+            null,
+            null
+        )?.use { cursor ->
+            while (cursor.moveToNext()) {
+                val displayName = cursor.getString(1) ?: ""
+                val mime = cursor.getString(2) ?: ""
+                if (displayName == name && mime == DocumentsContract.Document.MIME_TYPE_DIR) {
+                    return@use DocumentsContract.buildDocumentUriUsingTree(parentUri, cursor.getString(0))
+                }
+            }
+            null
+        } ?: DocumentsContract.createDocument(
+            resolver,
+            parentUri,
+            DocumentsContract.Document.MIME_TYPE_DIR,
+            name
+        )
+    } catch (_: Exception) {
+        null
+    }
+}
+
+private fun speichereRechnungImArchiv(
+    context: Context,
+    rechnungsnummer: String,
+    rechnungsdatum: String,
+    kunde: String,
+    pdf: PdfDocument
+): Boolean {
+    val rootText = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        .getString(RECHNUNGSARCHIV_URI_KEY, null) ?: return false
+
+    return try {
+        val rootUri = Uri.parse(rootText)
+        val archivUri = findeOderErstelleArchivOrdner(context, rootUri, "KÜMMERO-Rechnungsarchiv")
+            ?: return false
+        val jahr = rechnungsdatum.takeLast(4).ifBlank {
+            SimpleDateFormat("yyyy", Locale.GERMANY).format(Date())
+        }
+        val jahrUri = findeOderErstelleArchivOrdner(context, archivUri, jahr) ?: return false
+        val kundenName = kunde.trim()
+            .replace(Regex("[\\\\/:*?\"<>|]"), "_")
+            .replace(Regex("\\s+"), "_")
+            .ifBlank { "Kunde" }
+
+        fun schreibePdf(dateiname: String): Boolean {
+            val uri = DocumentsContract.createDocument(
+                context.contentResolver,
+                jahrUri,
+                "application/pdf",
+                dateiname
+            ) ?: return false
+            return try {
+                context.contentResolver.openOutputStream(uri)?.use { out ->
+                    pdf.writeTo(out)
+                } ?: false
+            } catch (_: Exception) {
+                try { DocumentsContract.deleteDocument(context.contentResolver, uri) } catch (_: Exception) {}
+                false
+            }
+        }
+
+        val kundenPdf = schreibePdf("${rechnungsnummer}_${kundenName}_Kunde.pdf")
+        val unterlagenPdf = schreibePdf("${rechnungsnummer}_${kundenName}_Unterlagen.pdf")
+        kundenPdf && unterlagenPdf
+    } catch (_: Exception) {
+        false
     }
 }
 
@@ -1392,6 +1478,12 @@ fun KuemmeroApp() {
     var rechnungNummerEditIndex by remember { mutableStateOf<Int?>(null) }
     var rechnungNummerEditText by remember { mutableStateOf("") }
     var rechnungScanIndex by remember { mutableStateOf<Int?>(null) }
+    var rechnungsarchivEingerichtet by remember {
+        mutableStateOf(
+            context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+                .getString(RECHNUNGSARCHIV_URI_KEY, null) != null
+        )
+    }
     var rechnungScanUri by remember { mutableStateOf<Uri?>(null) }
     var mahnung1Index by remember { mutableStateOf<Int?>(null) }
     var mahnung1Datum by remember { mutableStateOf("") }
@@ -1519,6 +1611,33 @@ fun KuemmeroApp() {
         }
         mahnung2Index = null
     }
+
+    val rechnungsarchivLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.OpenDocumentTree()
+    ) { uri ->
+        uri?.let {
+            try {
+                val flags = Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION
+                context.contentResolver.takePersistableUriPermission(it, flags)
+                context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+                    .edit()
+                    .putString(RECHNUNGSARCHIV_URI_KEY, it.toString())
+                    .apply()
+                rechnungsarchivEingerichtet = true
+                android.widget.Toast.makeText(
+                    context,
+                    "Rechnungsarchiv eingerichtet.",
+                    android.widget.Toast.LENGTH_LONG
+                ).show()
+            } catch (_: Exception) {
+                android.widget.Toast.makeText(
+                    context,
+                    "Rechnungsarchiv konnte nicht eingerichtet werden.",
+                    android.widget.Toast.LENGTH_LONG
+                ).show()
+            }
+        }
+    )
 
     val rechnungScanLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.TakePicture()
@@ -1824,6 +1943,13 @@ fun KuemmeroApp() {
                         a.fotosVorher, a.fotosNachher, a.erstellungskosten
                     )
                     context.contentResolver.openOutputStream(it)?.use { out -> pdf.writeTo(out) }
+                    val archivGespeichert = speichereRechnungImArchiv(
+                        context,
+                        rechnungsnummer,
+                        rechnungsdatum,
+                        a.kunde,
+                        pdf
+                    )
                     pdf.close()
                     speichereRechnungsnummer(context, rechnungsnummer)
                     auftraege = auftraege.toMutableList().apply {
@@ -1838,7 +1964,17 @@ fun KuemmeroApp() {
                         )
                     }
                     speichereAuftraege(context, auftraege)
-                    android.widget.Toast.makeText(context, "Rechnung gespeichert: $rechnungsnummer", 0).show()
+                    android.widget.Toast.makeText(
+                        context,
+                        if (archivGespeichert) {
+                            "Rechnung gespeichert: $rechnungsnummer – Kunden-PDF + Unterlagen-PDF archiviert."
+                        } else if (!rechnungsarchivEingerichtet) {
+                            "Rechnung gespeichert: $rechnungsnummer. Bitte Rechnungsarchiv unter Mehr einrichten."
+                        } else {
+                            "Rechnung gespeichert: $rechnungsnummer. Archivierung konnte nicht abgeschlossen werden."
+                        },
+                        android.widget.Toast.LENGTH_LONG
+                    ).show()
                 } catch (e: Exception) {
                     android.widget.Toast.makeText(context, "Rechnung konnte nicht erstellt werden.", 1).show()
                 }
@@ -4668,6 +4804,31 @@ fun KuemmeroApp() {
                                 border = BorderStroke(2.dp, KuemmeroGreen),
                                 colors = ButtonDefaults.outlinedButtonColors(contentColor = KuemmeroGreen)
                             ) { Text("!  Mahnungen", fontWeight = FontWeight.Bold) }
+                        }
+                        item {
+                            OutlinedButton(
+                                onClick = { rechnungsarchivLauncher.launch(null) },
+                                modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp),
+                                shape = RoundedCornerShape(26.dp),
+                                border = BorderStroke(2.dp, KuemmeroGreen),
+                                colors = ButtonDefaults.outlinedButtonColors(contentColor = KuemmeroGreen)
+                            ) {
+                                Text(
+                                    if (rechnungsarchivEingerichtet)
+                                        "📁  Rechnungsarchiv ändern"
+                                    else
+                                        "📁  Rechnungsarchiv einrichten",
+                                    fontWeight = FontWeight.Bold
+                                )
+                            }
+                            Text(
+                                if (rechnungsarchivEingerichtet)
+                                    "✓ Archiv aktiv – fertige Rechnungen werden als Kunden-PDF und Unterlagen-PDF nach Jahr abgelegt."
+                                else
+                                    "Noch nicht eingerichtet – bitte einmal einen Archivordner auswählen.",
+                                fontSize = 12.sp,
+                                color = KuemmeroText
+                            )
                         }
                         item {
                             Card(Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = KuemmeroSurface), shape = RoundedCornerShape(18.dp)) {
