@@ -218,6 +218,9 @@ private fun standardMahnung1Text(context: Context): String =
             "Bitte begleichen Sie den offenen Rechnungsbetrag innerhalb der angegebenen Zahlungsfrist."
         ) ?: "Bitte begleichen Sie den offenen Rechnungsbetrag innerhalb der angegebenen Zahlungsfrist."
 
+private fun csvFeld(wert: String): String =
+    "\"" + wert.replace("\"", "\"\"").replace("\n", " ").replace("\r", " ") + "\""
+
 
 data class Kostenvoranschlag(
     val nummer: String = "",
@@ -1313,6 +1316,9 @@ fun KuemmeroApp() {
     var unterschriftBereichOffen by remember { mutableStateOf(false) }
     var sicherungBereichOffen by remember { mutableStateOf(false) }
     var hauptseite by remember { mutableStateOf("Heute") }
+    var globaleSuche by remember { mutableStateOf("") }
+    var rechnungArchivSuche by remember { mutableStateOf("") }
+    var rechnungArchivJahr by remember { mutableStateOf("Alle") }
     var kostenvoranschlaege by remember { mutableStateOf(ladeKostenvoranschlaege(context)) }
     var kvFormOffen by remember { mutableStateOf(false) }
     var kvBearbeiteIndex by remember { mutableStateOf<Int?>(null) }
@@ -1600,6 +1606,51 @@ fun KuemmeroApp() {
             }
         }
     }
+    val createDataExport = rememberLauncherForActivityResult(
+        ActivityResultContracts.CreateDocument("text/csv")
+    ) { uri ->
+        uri?.let { selectedUri ->
+            backupScope.launch {
+                val csv = buildString {
+                    append("KÜMMERO Datenexport\n")
+                    append("Aufträge\n")
+                    append(listOf("Nummer", "Datum", "Leistungsdatum", "Kunde", "Adresse", "Ort", "Leistung", "Stunden", "Material", "Fahrt", "Stundensatz", "Betrag", "Status", "Zahlungsstatus", "Rechnungsnummer", "Rechnungsdatum", "Fällig am").joinToString(";") { csvFeld(it) })
+                    append("\n")
+                    auftraege.forEach { a ->
+                        append(listOf(
+                            a.nummer, a.datum, a.leistungsdatum, a.kunde, a.kundenStrasse, a.kundenOrt,
+                            a.leistung, a.stunden.toString(), a.material.toString(), a.fahrt.toString(), a.stundensatz.toString(),
+                            gesamtbetrag(a.stunden, a.material, a.fahrt, a.stundensatz, a.erstellungskosten).toString(),
+                            a.status, a.zahlungsstatus, a.rechnungsnummer, a.rechnungsdatum, a.faelligAm
+                        ).joinToString(";") { csvFeld(it) })
+                        append("\n")
+                    }
+                    append("\nKunden\n")
+                    append(listOf("Name", "Adresse", "Ort", "Telefon", "E-Mail").joinToString(";") { csvFeld(it) })
+                    append("\n")
+                    kunden.forEach { k ->
+                        append(listOf(k.name, k.adresse, k.ort, k.telefon, k.email).joinToString(";") { csvFeld(it) })
+                        append("\n")
+                    }
+                }
+                val ok = withContext(Dispatchers.IO) {
+                    try {
+                        context.contentResolver.openOutputStream(selectedUri, "wt")?.use { out ->
+                            out.write(csv.toByteArray(Charsets.UTF_8))
+                            out.flush()
+                        } ?: throw Exception("Datei konnte nicht geöffnet werden")
+                        true
+                    } catch (_: Exception) { false }
+                }
+                android.widget.Toast.makeText(
+                    context,
+                    if (ok) "Datenexport gespeichert." else "Datenexport fehlgeschlagen.",
+                    if (ok) 0 else 1
+                ).show()
+            }
+        }
+    }
+
     // Vorhandene Backup-Datei auswählen und als feste KÜMMERO-Sicherung hinterlegen.
     // Dadurch wird bei einem gelöschten/ungültigen URI keine neue Datei mit (1), (2) usw. erzeugt.
     val backupDateiAuswaehlen = rememberLauncherForActivityResult(
@@ -4786,6 +4837,42 @@ fun KuemmeroApp() {
                             ) { Text("!  Mahnungen", fontWeight = FontWeight.Bold) }
                         }
                         item {
+                            OutlinedButton(
+                                onClick = { hauptseite = "Rechnungsarchiv" },
+                                modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp),
+                                shape = RoundedCornerShape(26.dp),
+                                border = BorderStroke(2.dp, KuemmeroGreen),
+                                colors = ButtonDefaults.outlinedButtonColors(contentColor = KuemmeroGreen)
+                            ) { Text("🧾 Rechnungsarchiv", fontWeight = FontWeight.Bold) }
+                        }
+                        item {
+                            OutlinedButton(
+                                onClick = { hauptseite = "Auswertung" },
+                                modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp),
+                                shape = RoundedCornerShape(26.dp),
+                                border = BorderStroke(2.dp, KuemmeroGreen),
+                                colors = ButtonDefaults.outlinedButtonColors(contentColor = KuemmeroGreen)
+                            ) { Text("📊 Monats-/Jahresübersicht", fontWeight = FontWeight.Bold) }
+                        }
+                        item {
+                            OutlinedButton(
+                                onClick = { globaleSuche = ""; hauptseite = "Suche" },
+                                modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp),
+                                shape = RoundedCornerShape(26.dp),
+                                border = BorderStroke(2.dp, KuemmeroGreen),
+                                colors = ButtonDefaults.outlinedButtonColors(contentColor = KuemmeroGreen)
+                            ) { Text("🔎 Globale Suche", fontWeight = FontWeight.Bold) }
+                        }
+                        item {
+                            OutlinedButton(
+                                onClick = { createDataExport.launch("KÜMMERO-Datenexport-${SimpleDateFormat("yyyyMMdd-HHmm", Locale.GERMANY).format(Date())}.csv") },
+                                modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp),
+                                shape = RoundedCornerShape(26.dp),
+                                border = BorderStroke(2.dp, KuemmeroGreen),
+                                colors = ButtonDefaults.outlinedButtonColors(contentColor = KuemmeroGreen)
+                            ) { Text("📤 Datenexport (CSV)", fontWeight = FontWeight.Bold) }
+                        }
+                        item {
                             Card(Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = KuemmeroSurface), shape = RoundedCornerShape(18.dp)) {
                                 Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                                     Text("Sicherung & Daten", style = MaterialTheme.typography.titleMedium, color = KuemmeroGreen, fontWeight = FontWeight.Bold)
@@ -4837,6 +4924,121 @@ fun KuemmeroApp() {
                                     Text("Haus & Alltag – wir kümmern uns.", color = KuemmeroText)
                                     Text("${auftraege.size} Aufträge · ${kunden.size} Kunden", color = KuemmeroText)
                                 }
+                            }
+                        }
+                    }
+                    "Rechnungsarchiv" -> {
+                        item { Text("Rechnungsarchiv", style = MaterialTheme.typography.headlineSmall, color = KuemmeroGreen, fontWeight = FontWeight.Bold) }
+                        item {
+                            OutlinedTextField(
+                                value = rechnungArchivSuche,
+                                onValueChange = { rechnungArchivSuche = it },
+                                label = { Text("Rechnungen suchen") },
+                                placeholder = { Text("Kunde, Rechnungsnummer, Leistung ...") },
+                                singleLine = true, colors = feldFarben, modifier = Modifier.fillMaxWidth()
+                            )
+                        }
+                        item {
+                            Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                listOf("Alle", SimpleDateFormat("yyyy", Locale.GERMANY).format(Date()), (Calendar.getInstance().get(Calendar.YEAR) - 1).toString()).forEach { jahr ->
+                                    val aktiv = rechnungArchivJahr == jahr
+                                    Surface(Modifier.height(42.dp).clickable { rechnungArchivJahr = jahr }, shape = RoundedCornerShape(21.dp), color = if (aktiv) KuemmeroGreen else KuemmeroMint, border = BorderStroke(1.5.dp, KuemmeroGreen)) {
+                                        Box(Modifier.padding(horizontal = 16.dp), contentAlignment = Alignment.Center) { Text(jahr, color = if (aktiv) Color.White else KuemmeroText, fontWeight = FontWeight.SemiBold) }
+                                    }
+                                }
+                            }
+                        }
+                        val archiv = auftraege.filter { a ->
+                            a.rechnungsnummer.isNotBlank() &&
+                            (rechnungArchivJahr == "Alle" || a.rechnungsdatum.endsWith(rechnungArchivJahr)) &&
+                            (rechnungArchivSuche.isBlank() || listOf(a.kunde, a.rechnungsnummer, a.leistung).any { it.contains(rechnungArchivSuche, ignoreCase = true) })
+                        }.sortedByDescending { it.rechnungsdatum }
+                        if (archiv.isEmpty()) {
+                            item { Card(Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = KuemmeroSurface), shape = RoundedCornerShape(18.dp)) { Text("Keine Rechnungen im Archiv gefunden.", Modifier.padding(16.dp), color = KuemmeroText) } }
+                        } else {
+                            itemsIndexed(archiv) { _, a ->
+                                val index = auftraege.indexOfFirst { it.nummer == a.nummer }
+                                Card(Modifier.fillMaxWidth().clickable { if (index >= 0) { hauptseite = "Aufträge"; auftragDetailIndex = index; auftragFormOffen = false } }, colors = CardDefaults.cardColors(containerColor = KuemmeroSurface), shape = RoundedCornerShape(18.dp)) {
+                                    Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(5.dp)) {
+                                        Text(a.rechnungsnummer, color = KuemmeroGreen, fontWeight = FontWeight.Bold)
+                                        Text(a.kunde.ifBlank { "Kunde" }, color = KuemmeroText, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                                        Text("${a.rechnungsdatum.ifBlank { "ohne Rechnungsdatum" }} · ${euro(gesamtbetrag(a.stunden, a.material, a.fahrt, a.stundensatz, a.erstellungskosten))}", color = KuemmeroText)
+                                        Text("Auftrag öffnen →", color = KuemmeroGreen, fontWeight = FontWeight.Bold)
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    "Auswertung" -> {
+                        item { Text("Monats-/Jahresübersicht", style = MaterialTheme.typography.headlineSmall, color = KuemmeroGreen, fontWeight = FontWeight.Bold) }
+                        val aktuellesJahr = Calendar.getInstance().get(Calendar.YEAR)
+                        val jahrAuftraege = auftraege.filter { a ->
+                            val datumWert = a.leistungsdatum.ifBlank { a.datum }
+                            datumWert.endsWith(aktuellesJahr.toString())
+                        }
+                        item {
+                            Card(Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = KuemmeroGreen), shape = RoundedCornerShape(18.dp)) {
+                                Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(5.dp)) {
+                                    Text("Jahr $aktuellesJahr", color = Color.White, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleLarge)
+                                    Text("Umsatz: ${euro(jahrAuftraege.sumOf { gesamtbetrag(it.stunden, it.material, it.fahrt, it.stundensatz, it.erstellungskosten) })}", color = Color.White)
+                                    Text("Aufträge: ${jahrAuftraege.size}", color = Color.White)
+                                    Text("Bezahlt: ${euro(jahrAuftraege.filter { it.zahlungsstatus == "Bezahlt" }.sumOf { gesamtbetrag(it.stunden, it.material, it.fahrt, it.stundensatz, it.erstellungskosten) })}", color = Color.White)
+                                    Text("Offen: ${euro(jahrAuftraege.filter { it.zahlungsstatus != "Bezahlt" }.sumOf { gesamtbetrag(it.stunden, it.material, it.fahrt, it.stundensatz, it.erstellungskosten) })}", color = Color.White)
+                                }
+                            }
+                        }
+                        for (monat in 1..12) {
+                            val monatAuftraege = jahrAuftraege.filter { a ->
+                                try {
+                                    val d = datumFormat.parse(a.leistungsdatum.ifBlank { a.datum }) ?: return@filter false
+                                    val c = Calendar.getInstance().apply { time = d }
+                                    c.get(Calendar.MONTH) + 1 == monat
+                                } catch (_: Exception) { false }
+                            }
+                            if (monatAuftraege.isNotEmpty()) {
+                                item {
+                                    val name = SimpleDateFormat("MMMM", Locale.GERMANY).format(Calendar.getInstance().apply { set(Calendar.MONTH, monat - 1) }.time).replaceFirstChar { it.uppercase(Locale.GERMANY) }
+                                    Card(Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = KuemmeroSurface), shape = RoundedCornerShape(16.dp)) {
+                                        Row(Modifier.fillMaxWidth().padding(14.dp), horizontalArrangement = Arrangement.SpaceBetween) {
+                                            Column { Text(name, color = KuemmeroGreen, fontWeight = FontWeight.Bold); Text("${monatAuftraege.size} Aufträge", color = KuemmeroText) }
+                                            Text(euro(monatAuftraege.sumOf { gesamtbetrag(it.stunden, it.material, it.fahrt, it.stundensatz, it.erstellungskosten) }), color = KuemmeroText, fontWeight = FontWeight.Bold)
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                        item { Text("Die Übersicht dient der betrieblichen Orientierung und ersetzt keine Buchführung oder Steuerberatung.", color = KuemmeroText, style = MaterialTheme.typography.bodySmall) }
+                    }
+                    "Suche" -> {
+                        item { Text("Globale Suche", style = MaterialTheme.typography.headlineSmall, color = KuemmeroGreen, fontWeight = FontWeight.Bold) }
+                        item {
+                            OutlinedTextField(
+                                value = globaleSuche,
+                                onValueChange = { globaleSuche = it },
+                                label = { Text("Suche in KÜMMERO") },
+                                placeholder = { Text("Kunde, Auftrag, Rechnung, Leistung ...") },
+                                singleLine = true, colors = feldFarben, modifier = Modifier.fillMaxWidth()
+                            )
+                        }
+                        if (globaleSuche.trim().isNotBlank()) {
+                            val q = globaleSuche.trim()
+                            val kundenTreffer = kunden.filter { listOf(it.name, it.adresse, it.ort, it.telefon, it.email).any { v -> v.contains(q, true) } }
+                            val auftragTreffer = auftraege.filter { listOf(it.nummer, it.kunde, it.kundenStrasse, it.kundenOrt, it.leistung, it.rechnungsnummer, it.status).any { v -> v.contains(q, true) } }
+                            val kvTreffer = kostenvoranschlaege.filter { listOf(it.nummer, it.kunde, it.leistung).any { v -> v.contains(q, true) } }
+                            item { Text("Kunden (${kundenTreffer.size})", color = KuemmeroGreen, fontWeight = FontWeight.Bold) }
+                            kundenTreffer.take(10).forEach { k ->
+                                item { Card(Modifier.fillMaxWidth().clickable { hauptseite = "Kunden"; kundenAkteName = k.name }, colors = CardDefaults.cardColors(containerColor = KuemmeroSurface), shape = RoundedCornerShape(16.dp)) { Column(Modifier.padding(14.dp)) { Text(k.name, fontWeight = FontWeight.Bold, color = KuemmeroText); Text("Kunde öffnen →", color = KuemmeroGreen) } } }
+                            }
+                            item { Text("Aufträge / Rechnungen (${auftragTreffer.size})", color = KuemmeroGreen, fontWeight = FontWeight.Bold) }
+                            auftragTreffer.take(15).forEach { a ->
+                                item { val index = auftraege.indexOfFirst { it.nummer == a.nummer }; Card(Modifier.fillMaxWidth().clickable { if (index >= 0) { hauptseite = "Aufträge"; auftragDetailIndex = index; auftragFormOffen = false } }, colors = CardDefaults.cardColors(containerColor = KuemmeroSurface), shape = RoundedCornerShape(16.dp)) { Column(Modifier.padding(14.dp)) { Text(a.kunde.ifBlank { "Kunde" }, fontWeight = FontWeight.Bold, color = KuemmeroText); Text("${a.nummer}${if (a.rechnungsnummer.isBlank()) "" else " · ${a.rechnungsnummer}"}", color = KuemmeroGreen); if (a.leistung.isNotBlank()) Text(a.leistung, color = KuemmeroText) } } }
+                            }
+                            item { Text("Kostenvoranschläge (${kvTreffer.size})", color = KuemmeroGreen, fontWeight = FontWeight.Bold) }
+                            kvTreffer.take(10).forEach { k ->
+                                item { Card(Modifier.fillMaxWidth().clickable { hauptseite = "Kostenvoranschläge" }, colors = CardDefaults.cardColors(containerColor = KuemmeroSurface), shape = RoundedCornerShape(16.dp)) { Column(Modifier.padding(14.dp)) { Text(k.kunde.ifBlank { "Kunde" }, fontWeight = FontWeight.Bold, color = KuemmeroText); Text(k.nummer, color = KuemmeroGreen); Text("Kostenvoranschlag öffnen →", color = KuemmeroGreen) } } }
+                            }
+                            if (kundenTreffer.isEmpty() && auftragTreffer.isEmpty() && kvTreffer.isEmpty()) {
+                                item { Text("Keine Treffer gefunden.", color = KuemmeroText) }
                             }
                         }
                     }
