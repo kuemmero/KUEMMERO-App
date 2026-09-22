@@ -927,6 +927,8 @@ fun KuemmeroApp() {
     }
     var loeschIndex by remember { mutableStateOf<Int?>(null) }
     var arbeitszeitLoeschIndex by remember { mutableStateOf<Int?>(null) }
+    var arbeitszeitAendernIndex by remember { mutableStateOf<Int?>(null) }
+    var arbeitszeitAendernText by remember { mutableStateOf("") }
     var bearbeiteIndex by remember { mutableStateOf<Int?>(null) }
     var status by remember { mutableStateOf("Offen") }
     var zahlungsstatus by remember { mutableStateOf("Offen") }
@@ -1735,6 +1737,72 @@ fun KuemmeroApp() {
             },
             confirmButton = { TextButton(onClick = { kalenderOffen = false }) { Text("Schließen") } }
         )
+    }
+
+    arbeitszeitAendernIndex?.let { index ->
+        val a = auftraege.getOrNull(index)
+        if (a != null) {
+            AlertDialog(
+                onDismissRequest = { arbeitszeitAendernIndex = null },
+                title = { Text("Arbeitszeit ändern?") },
+                text = {
+                    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                        Text("Die aufgezeichnete Arbeitszeit wird geändert. Die Stunden im Auftrag werden dabei nicht automatisch geändert.")
+                        OutlinedTextField(
+                            value = arbeitszeitAendernText,
+                            onValueChange = { arbeitszeitAendernText = it },
+                            label = { Text("Arbeitszeit in Stunden") },
+                            singleLine = true,
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                            colors = OutlinedTextFieldDefaults.colors(
+                                focusedContainerColor = KuemmeroMint,
+                                unfocusedContainerColor = KuemmeroMint,
+                                focusedBorderColor = KuemmeroGreen,
+                                unfocusedBorderColor = Color(0xFF7A8A82),
+                                focusedLabelColor = KuemmeroGreen,
+                                unfocusedLabelColor = KuemmeroText
+                            )
+                        )
+                    }
+                },
+                confirmButton = {
+                    TextButton(onClick = {
+                        val neueStunden = zahl(arbeitszeitAendernText)
+                        if (neueStunden >= 0.0) {
+                            val neueSekunden = (neueStunden * 3600.0).toLong().coerceAtLeast(0L)
+                            val aktualisiert = a.copy(
+                                arbeitsSekunden = neueSekunden,
+                                arbeitszeitUebernommen = false
+                            )
+                            auftraege = auftraege.toMutableList().apply { set(index, aktualisiert) }
+                            speichereAuftraege(context, auftraege)
+                            if (timerIndex == index) {
+                                timerIndex = null
+                                timerSekunden = 0L
+                            }
+                            arbeitszeitAendernIndex = null
+                            arbeitszeitAendernText = ""
+                            android.widget.Toast.makeText(
+                                context,
+                                "Arbeitszeit geändert.",
+                                android.widget.Toast.LENGTH_SHORT
+                            ).show()
+                        } else {
+                            android.widget.Toast.makeText(
+                                context,
+                                "Bitte eine gültige Arbeitszeit eingeben.",
+                                android.widget.Toast.LENGTH_SHORT
+                            ).show()
+                        }
+                    }) { Text("Ändern") }
+                },
+                dismissButton = {
+                    TextButton(onClick = { arbeitszeitAendernIndex = null }) { Text("Abbrechen") }
+                }
+            )
+        } else {
+            arbeitszeitAendernIndex = null
+        }
     }
 
     arbeitszeitLoeschIndex?.let { index ->
@@ -2703,6 +2771,26 @@ fun KuemmeroApp() {
                             )
 
                             if (gespeicherteZeit > 0L) {
+                                if (!laufend) {
+                                    OutlinedButton(
+                                        onClick = {
+                                            spieleBestaetigungston(context)
+                                            arbeitszeitAendernIndex = index
+                                            arbeitszeitAendernText = String.format(
+                                                Locale.GERMANY,
+                                                "%.2f",
+                                                gespeicherteZeit / 3600.0
+                                            )
+                                        },
+                                        modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp),
+                                        shape = RoundedCornerShape(26.dp),
+                                        border = BorderStroke(2.dp, KuemmeroGreen),
+                                        colors = ButtonDefaults.outlinedButtonColors(contentColor = KuemmeroGreen)
+                                    ) {
+                                        Text("✏ Arbeitszeit ändern", fontWeight = FontWeight.Bold)
+                                    }
+                                }
+
                                 OutlinedButton(
                                     onClick = {
                                         spieleBestaetigungston(context)
