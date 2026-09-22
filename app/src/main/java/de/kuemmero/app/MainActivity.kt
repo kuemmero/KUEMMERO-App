@@ -3062,9 +3062,47 @@ fun KuemmeroApp() {
                                 Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                                     Text("Heute · $heuteText", color = Color.White, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
                                     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                        Column(Modifier.weight(1f)) { Text("Termine", color = Color.White); Text("${termineHeute.size}", color = Color.White, fontSize = 26.sp, fontWeight = FontWeight.Bold) }
-                                        Column(Modifier.weight(1f)) { Text("Offene Aufträge", color = Color.White); Text("$offeneAuftraege", color = Color.White, fontSize = 26.sp, fontWeight = FontWeight.Bold) }
-                                        Column(Modifier.weight(1f)) { Text("Abgearbeitet", color = Color.White); Text("$abgearbeiteteAuftraege", color = Color.White, fontSize = 22.sp, fontWeight = FontWeight.Bold) }
+                                        Column(
+                                            Modifier.weight(1f).clickable {
+                                                hauptseite = "Kalender"
+                                                auftragFormOffen = false
+                                                auftragDetailIndex = null
+                                                statusFilter = "Alle"
+                                                zahlungsFilterOffen = false
+                                                auftragsSuche = ""
+                                            }
+                                        ) {
+                                            Text("Termine", color = Color.White)
+                                            Text("${termineHeute.size}", color = Color.White, fontSize = 26.sp, fontWeight = FontWeight.Bold)
+                                        }
+                                        Column(
+                                            Modifier.weight(1f).clickable {
+                                                hauptseite = "Aufträge"
+                                                auftragFormOffen = false
+                                                auftragDetailIndex = null
+                                                bearbeiteIndex = null
+                                                statusFilter = "Offen"
+                                                zahlungsFilterOffen = false
+                                                auftragsSuche = ""
+                                            }
+                                        ) {
+                                            Text("Offene Aufträge", color = Color.White)
+                                            Text("$offeneAuftraege", color = Color.White, fontSize = 26.sp, fontWeight = FontWeight.Bold)
+                                        }
+                                        Column(
+                                            Modifier.weight(1f).clickable {
+                                                hauptseite = "Aufträge"
+                                                auftragFormOffen = false
+                                                auftragDetailIndex = null
+                                                bearbeiteIndex = null
+                                                statusFilter = "Erledigt"
+                                                zahlungsFilterOffen = false
+                                                auftragsSuche = ""
+                                            }
+                                        ) {
+                                            Text("Abgearbeitet", color = Color.White)
+                                            Text("$abgearbeiteteAuftraege", color = Color.White, fontSize = 22.sp, fontWeight = FontWeight.Bold)
+                                        }
                                     }
                                     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                                         Column(Modifier.weight(1f)) { Text("Offen €", color = Color.White); Text(euro(offeneZahlungSumme), color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.Bold) }
