@@ -1688,6 +1688,7 @@ fun KuemmeroApp() {
     }
 
     var sicherungBestaetigung by remember { mutableStateOf(false) }
+    var restoreBestaetigung by remember { mutableStateOf(false) }
     var abschlusspruefungIndex by remember { mutableStateOf<Int?>(null) }
     val backupScope = rememberCoroutineScope()
 
@@ -1782,61 +1783,69 @@ fun KuemmeroApp() {
     }
 
 
+    fun stelleDatenWiederHer(uri: Uri): Boolean {
+        return try {
+            context.openFileOutput(BACKUP_PRE_RESTORE_FILE, Context.MODE_PRIVATE).use { out ->
+                out.write(backupText(context).toByteArray(Charsets.UTF_8))
+                out.flush()
+            }
+            val text = context.contentResolver.openInputStream(uri)?.bufferedReader()?.use { r -> r.readText() }
+                ?: throw Exception("Datei konnte nicht gelesen werden")
+            val obj = JSONObject(text)
+            val rate = obj.optString("stundensatz", "42.00")
+            val firmenNameBackup = obj.optString("firmenName", "Markus Becker")
+            val firmenStrasseBackup = obj.optString("firmenStrasse", "")
+            val firmenPlzOrtBackup = obj.optString("firmenPlzOrt", "")
+            val firmenTelefonBackup = obj.optString("firmenTelefon", "+49 176 16712509")
+            val firmenEmailBackup = obj.optString("firmenEmail", "kuemmero@web.de")
+            val steuernummerBackup = obj.optString("steuernummer", "")
+            val arr = obj.optJSONArray("auftraege") ?: JSONArray()
+            val kundenArr = obj.optJSONArray("kunden") ?: JSONArray()
+            val kvArr = obj.optJSONArray("kostenvoranschlaege") ?: JSONArray()
+            context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE).edit()
+                .putString(STUNDENSATZ_KEY, rate)
+                .putString(FIRMENNAME_KEY, firmenNameBackup)
+                .putString(FIRMENSTRASSE_KEY, firmenStrasseBackup)
+                .putString(FIRMENPLZORT_KEY, firmenPlzOrtBackup)
+                .putString(FIRMENTELEFON_KEY, firmenTelefonBackup)
+                .putString(FIRMENEMAIL_KEY, firmenEmailBackup)
+                .putString(STEUERNUMMER_KEY, steuernummerBackup)
+                .putString(AUFTRAEGE_KEY, arr.toString())
+                .putString(KUNDEN_KEY, kundenArr.toString())
+                .putString(KOSTENVORANSCHLAEGE_KEY, kvArr.toString()).commit()
+            stundensatz = rate
+            unternehmerName = firmenNameBackup
+            unternehmerStrasse = firmenStrasseBackup
+            unternehmerPlzOrt = firmenPlzOrtBackup
+            unternehmerTelefon = firmenTelefonBackup
+            unternehmerEmail = firmenEmailBackup
+            steuernummer = steuernummerBackup
+            auftraege = ladeAuftraege(context)
+            kunden = ladeKunden(context)
+            kostenvoranschlaege = ladeKostenvoranschlaege(context)
+            auftragDetailIndex = null
+            auftragFormOffen = false
+            bearbeiteIndex = null
+            kvFormOffen = false
+            kvBearbeiteIndex = null
+            timerIndex = null
+            timerSekunden = 0L
+            android.widget.Toast.makeText(
+                context,
+                "Daten wiederhergestellt. Sicherheitskopie des vorherigen Datenstands wurde erstellt.",
+                android.widget.Toast.LENGTH_LONG
+            ).show()
+            true
+        } catch (_: Exception) {
+            android.widget.Toast.makeText(context, "Wiederherstellung fehlgeschlagen", android.widget.Toast.LENGTH_LONG).show()
+            false
+        }
+    }
+
     val restoreBackup = rememberLauncherForActivityResult(
         ActivityResultContracts.OpenDocument()
     ) { uri ->
-        uri?.let {
-            try {
-                context.openFileOutput(BACKUP_PRE_RESTORE_FILE, Context.MODE_PRIVATE).use { out ->
-                    out.write(backupText(context).toByteArray(Charsets.UTF_8))
-                    out.flush()
-                }
-                val text = context.contentResolver.openInputStream(it)?.bufferedReader()?.use { r -> r.readText() }
-                    ?: throw Exception("Datei konnte nicht gelesen werden")
-                val obj = JSONObject(text)
-                val rate = obj.optString("stundensatz", "42.00")
-                val firmenNameBackup = obj.optString("firmenName", "Markus Becker")
-                val firmenStrasseBackup = obj.optString("firmenStrasse", "")
-                val firmenPlzOrtBackup = obj.optString("firmenPlzOrt", "")
-                val firmenTelefonBackup = obj.optString("firmenTelefon", "+49 176 16712509")
-                val firmenEmailBackup = obj.optString("firmenEmail", "kuemmero@web.de")
-                val steuernummerBackup = obj.optString("steuernummer", "")
-                val arr = obj.optJSONArray("auftraege") ?: JSONArray()
-                val kundenArr = obj.optJSONArray("kunden") ?: JSONArray()
-                val kvArr = obj.optJSONArray("kostenvoranschlaege") ?: JSONArray()
-                context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE).edit()
-                    .putString(STUNDENSATZ_KEY, rate)
-                    .putString(FIRMENNAME_KEY, firmenNameBackup)
-                    .putString(FIRMENSTRASSE_KEY, firmenStrasseBackup)
-                    .putString(FIRMENPLZORT_KEY, firmenPlzOrtBackup)
-                    .putString(FIRMENTELEFON_KEY, firmenTelefonBackup)
-                    .putString(FIRMENEMAIL_KEY, firmenEmailBackup)
-                    .putString(STEUERNUMMER_KEY, steuernummerBackup)
-                    .putString(AUFTRAEGE_KEY, arr.toString())
-                    .putString(KUNDEN_KEY, kundenArr.toString())
-                    .putString(KOSTENVORANSCHLAEGE_KEY, kvArr.toString()).commit()
-                stundensatz = rate
-                unternehmerName = firmenNameBackup
-                unternehmerStrasse = firmenStrasseBackup
-                unternehmerPlzOrt = firmenPlzOrtBackup
-                unternehmerTelefon = firmenTelefonBackup
-                unternehmerEmail = firmenEmailBackup
-                steuernummer = steuernummerBackup
-                auftraege = ladeAuftraege(context)
-                kunden = ladeKunden(context)
-                kostenvoranschlaege = ladeKostenvoranschlaege(context)
-                auftragDetailIndex = null
-                auftragFormOffen = false
-                bearbeiteIndex = null
-                kvFormOffen = false
-                kvBearbeiteIndex = null
-                timerIndex = null
-                timerSekunden = 0L
-                android.widget.Toast.makeText(context, "Daten wiederhergestellt. Sicherheitskopie des vorherigen Datenstands wurde erstellt.", android.widget.Toast.LENGTH_LONG).show()
-            } catch (e: Exception) {
-                android.widget.Toast.makeText(context, "Wiederherstellung fehlgeschlagen", 1).show()
-            }
-        }
+        uri?.let { stelleDatenWiederHer(it) }
     }
 
     val fotoLauncher = rememberLauncherForActivityResult(
@@ -2031,6 +2040,42 @@ fun KuemmeroApp() {
             },
             dismissButton = {
                 TextButton(onClick = { sicherungBestaetigung = false }) { Text("Abbrechen") }
+            }
+        )
+    }
+
+    if (restoreBestaetigung) {
+        val gespeicherteSicherung = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            .getString(BACKUP_URI_KEY, null)
+        AlertDialog(
+            onDismissRequest = { restoreBestaetigung = false },
+            title = { Text("Daten wiederherstellen") },
+            text = {
+                Text(
+                    if (!gespeicherteSicherung.isNullOrBlank())
+                        "Die hinterlegte KÜMMERO-Sicherungsdatei wird verwendet. Der aktuelle Datenstand wird vorher als Sicherheitskopie gespeichert."
+                    else
+                        "Es ist keine hinterlegte Sicherungsdatei vorhanden. Eine Sicherungsdatei kann jetzt ausgewählt werden."
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    restoreBestaetigung = false
+                    val uriText = gespeicherteSicherung
+                    if (!uriText.isNullOrBlank()) {
+                        val ok = stelleDatenWiederHer(Uri.parse(uriText))
+                        if (!ok) {
+                            context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+                                .edit().remove(BACKUP_URI_KEY).apply()
+                            restoreBackup.launch(arrayOf("application/json", "text/plain", "application/octet-stream"))
+                        }
+                    } else {
+                        restoreBackup.launch(arrayOf("application/json", "text/plain", "application/octet-stream"))
+                    }
+                }) { Text("Wiederherstellen") }
+            },
+            dismissButton = {
+                TextButton(onClick = { restoreBestaetigung = false }) { Text("Abbrechen") }
             }
         )
     }
@@ -3385,7 +3430,7 @@ fun KuemmeroApp() {
                         { sicherungBereichOffen = !sicherungBereichOffen },
                     ) {
                         OutlinedButton(onClick = { sicherungBestaetigung = true }, modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp), shape = RoundedCornerShape(28.dp), border = BorderStroke(2.dp, KuemmeroGreen), colors = ButtonDefaults.outlinedButtonColors(contentColor = KuemmeroGreen)) { Text("Sicherung speichern / aktualisieren", fontWeight = FontWeight.SemiBold) }
-                        Button(onClick = { restoreBackup.launch(arrayOf("application/json", "text/plain", "application/octet-stream")) }, modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp), shape = RoundedCornerShape(28.dp), colors = ButtonDefaults.buttonColors(containerColor = KuemmeroGreenLight)) { Text("Daten wiederherstellen", fontWeight = FontWeight.Bold) }
+                        Button(onClick = { restoreBestaetigung = true }, modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp), shape = RoundedCornerShape(28.dp), colors = ButtonDefaults.buttonColors(containerColor = KuemmeroGreenLight)) { Text("Daten wiederherstellen", fontWeight = FontWeight.Bold) }
                         OutlinedButton(onClick = { sicherungBestaetigung = true }, modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp), shape = RoundedCornerShape(26.dp), border = BorderStroke(2.dp, KuemmeroGreen), colors = ButtonDefaults.outlinedButtonColors(contentColor = KuemmeroGreen)) { Text("Sicherung jetzt aktualisieren", fontWeight = FontWeight.SemiBold) }
                     }
                 }
@@ -4848,7 +4893,7 @@ fun KuemmeroApp() {
                                         color = if (backupZeit > 0L) KuemmeroGreen else KuemmeroText
                                     )
                                     OutlinedButton(onClick = { sicherungBestaetigung = true }, modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp), shape = RoundedCornerShape(26.dp), border = BorderStroke(2.dp, KuemmeroGreen), colors = ButtonDefaults.outlinedButtonColors(contentColor = KuemmeroGreen)) { Text("Sicherung speichern / aktualisieren") }
-                                    Button(onClick = { restoreBackup.launch(arrayOf("application/json", "text/plain", "application/octet-stream")) }, modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp), shape = RoundedCornerShape(26.dp), colors = ButtonDefaults.buttonColors(containerColor = KuemmeroGreenLight)) { Text("Daten wiederherstellen", fontWeight = FontWeight.Bold) }
+                                    Button(onClick = { restoreBestaetigung = true }, modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp), shape = RoundedCornerShape(26.dp), colors = ButtonDefaults.buttonColors(containerColor = KuemmeroGreenLight)) { Text("Daten wiederherstellen", fontWeight = FontWeight.Bold) }
                                 }
                             }
                         }
