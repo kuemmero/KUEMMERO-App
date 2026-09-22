@@ -57,6 +57,7 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.style.TextAlign
 import org.json.JSONArray
 import org.json.JSONObject
 import java.text.SimpleDateFormat
@@ -1868,6 +1869,12 @@ fun KuemmeroApp() {
         .take(8)
     val naechsterTermin = naechsteTermine.firstOrNull { it.terminDatum != heuteText }
     val abgearbeiteteAuftraege = auftraege.count { it.status == "Erledigt" || it.status == "Abgerechnet" }
+    val heuteZuErledigen = auftraege.filter { a ->
+        a.terminDatum == heuteText ||
+        rechnungIstUeberfaellig(a, heuteText) ||
+        (a.status == "Erledigt" && a.rechnungsnummer.isBlank()) ||
+        a.status == "In Bearbeitung"
+    }.distinctBy { it.nummer.ifBlank { "${it.kunde}|${it.datum}|${it.leistung}" } }
 
     if (sicherungBestaetigung) {
         val vorhandeneSicherung = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
@@ -2729,7 +2736,7 @@ fun KuemmeroApp() {
                     listOf(
                         Triple("Heute", "⌂", "Heute"),
                         Triple("Aufträge", "▤", "Aufträge"),
-                        Triple("Kostenvoranschläge", "€", "Kostenvoranschläge"),
+                        Triple("KV", "€", "Kostenvoranschläge"),
                         Triple("Kunden", "♙", "Kunden"),
                         Triple("Mahnungen", "!", "Mahnungen"),
                         Triple("Mehr", "⋯", "Mehr")
@@ -2747,7 +2754,7 @@ fun KuemmeroApp() {
                                 }
                             },
                             icon = { Text(iconText, fontSize = 20.sp) },
-                            label = { Text(label) },
+                            label = { Text(label, fontSize = 10.sp, maxLines = 2, textAlign = TextAlign.Center) },
                             colors = NavigationBarItemDefaults.colors(
                                 selectedIconColor = KuemmeroGreen,
                                 selectedTextColor = KuemmeroGreen,
@@ -3995,6 +4002,115 @@ fun KuemmeroApp() {
                                         Spacer(Modifier.weight(2f))
                                     }
                                 }
+                            }
+                        }
+                        item {
+                            Text("Heute erledigen", style = MaterialTheme.typography.titleLarge, color = KuemmeroGreen, fontWeight = FontWeight.Bold)
+                        }
+                        if (heuteZuErledigen.isEmpty()) {
+                            item {
+                                Card(Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = KuemmeroSurface), shape = RoundedCornerShape(18.dp)) {
+                                    Text("Heute ist alles erledigt. ✓", Modifier.padding(18.dp), color = KuemmeroGreen, fontWeight = FontWeight.Bold)
+                                }
+                            }
+                        } else {
+                            itemsIndexed(heuteZuErledigen.take(6)) { _, a ->
+                                val index = auftraege.indexOfFirst { it.nummer == a.nummer && it.kunde == a.kunde && it.datum == a.datum }
+                                val rechnungOffen = a.status == "Erledigt" && a.rechnungsnummer.isBlank()
+                                val ueberfaellig = rechnungIstUeberfaellig(a, heuteText)
+                                val heuteTermin = a.terminDatum == heuteText
+                                val titel = when {
+                                    ueberfaellig -> "🔴 Rechnung überfällig"
+                                    rechnungOffen -> "🧾 Rechnung noch nicht erstellt"
+                                    heuteTermin -> "📅 Termin heute"
+                                    else -> "🟢 Auftrag bearbeiten"
+                                }
+                                Card(
+                                    Modifier.fillMaxWidth().clickable {
+                                        if (index >= 0) {
+                                            hauptseite = "Aufträge"
+                                            auftragFormOffen = false
+                                            auftragDetailIndex = index
+                                            bearbeiteIndex = null
+                                        }
+                                    },
+                                    colors = CardDefaults.cardColors(containerColor = KuemmeroSurface),
+                                    shape = RoundedCornerShape(16.dp),
+                                    border = BorderStroke(1.5.dp, if (ueberfaellig) KuemmeroError else KuemmeroGreenLight)
+                                ) {
+                                    Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                                        Text(titel, color = if (ueberfaellig) KuemmeroError else KuemmeroGreen, fontWeight = FontWeight.Bold)
+                                        Text(a.kunde.ifBlank { "Kunde" }, color = KuemmeroText, fontWeight = FontWeight.SemiBold)
+                                        if (a.leistung.isNotBlank()) Text(a.leistung, color = KuemmeroText, maxLines = 2)
+                                        Text("Auftrag öffnen →", color = KuemmeroGreen, fontWeight = FontWeight.Bold)
+                                    }
+                                }
+                            }
+                        }
+                        item {
+                            Text("Schnellaktionen", style = MaterialTheme.typography.titleLarge, color = KuemmeroGreen, fontWeight = FontWeight.Bold)
+                        }
+                        item {
+                            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                                Button(
+                                    onClick = {
+                                        hauptseite = "Aufträge"
+                                        auftragDetailIndex = null
+                                        bearbeiteIndex = null
+                                        nummer = ""
+                                        datum = datumJetzt
+                                        leistungsdatum = datumJetzt
+                                        gueltigBis = ""
+                                        kunde = ""; strasse = ""; ort = ""; leistung = ""
+                                        stunden = ""; material = ""; materialBonUri = ""; fahrt = ""
+                                        status = "Offen"; zahlungsstatus = "Offen"; bezahltAm = ""
+                                        terminDatum = ""; terminUhrzeit = ""; notiz = ""
+                                        fotosVorher = emptyList(); fotosNachher = emptyList()
+                                        unterschriftPfad = ""; unterschriftDatum = ""
+                                        auftragFormOffen = true
+                                    },
+                                    modifier = Modifier.weight(1f).heightIn(min = 56.dp),
+                                    shape = RoundedCornerShape(18.dp),
+                                    colors = ButtonDefaults.buttonColors(containerColor = KuemmeroGreen)
+                                ) { Text("➕ Neuer Auftrag", fontWeight = FontWeight.Bold) }
+                                Button(
+                                    onClick = { neuerKundeDialog = true },
+                                    modifier = Modifier.weight(1f).heightIn(min = 56.dp),
+                                    shape = RoundedCornerShape(18.dp),
+                                    colors = ButtonDefaults.buttonColors(containerColor = KuemmeroGreen)
+                                ) { Text("👤 Neuer Kunde", fontWeight = FontWeight.Bold) }
+                            }
+                        }
+                        item {
+                            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                                Button(
+                                    onClick = {
+                                        hauptseite = "Aufträge"
+                                        auftragFormOffen = false
+                                        auftragDetailIndex = null
+                                        bearbeiteIndex = null
+                                        statusFilter = "Erledigt"
+                                        zahlungsFilterOffen = false
+                                        auftragsSuche = ""
+                                    },
+                                    modifier = Modifier.weight(1f).heightIn(min = 56.dp),
+                                    shape = RoundedCornerShape(18.dp),
+                                    colors = ButtonDefaults.buttonColors(containerColor = KuemmeroGreen)
+                                ) { Text("🧾 Rechnung", fontWeight = FontWeight.Bold) }
+                                Button(
+                                    onClick = {
+                                        hauptseite = "Aufträge"
+                                        auftragFormOffen = false
+                                        auftragDetailIndex = null
+                                        bearbeiteIndex = null
+                                        statusFilter = "In Bearbeitung"
+                                        zahlungsFilterOffen = false
+                                        auftragsSuche = ""
+                                    },
+                                    modifier = Modifier.weight(1f).heightIn(min = 56.dp),
+                                    shape = RoundedCornerShape(18.dp),
+                                    colors = ButtonDefaults.buttonColors(containerColor = KuemmeroGreen)
+                                ) { Text("⏱ Arbeitszeit", fontWeight = FontWeight.Bold) }
                             }
                         }
                         item {
