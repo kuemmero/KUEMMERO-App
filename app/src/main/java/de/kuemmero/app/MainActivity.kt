@@ -1,11 +1,13 @@
 package de.kuemmero.app
 
 import android.content.Context
+import android.content.ContentValues
 import android.graphics.Paint
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.graphics.pdf.PdfDocument
 import android.net.Uri
+import android.provider.MediaStore
 import android.content.Intent
 import android.os.Bundle
 import android.os.CancellationSignal
@@ -61,6 +63,31 @@ import java.util.Calendar
 import java.util.Date
 import java.util.Locale
 import kotlinx.coroutines.delay
+
+private const val RECHNUNG_SCAN_PREFIX = "rechnung_scan_"
+
+private fun rechnungScanKey(auftrag: Auftrag): String =
+    RECHNUNG_SCAN_PREFIX + auftrag.nummer
+
+private fun ladeRechnungScan(context: Context, auftrag: Auftrag): String =
+    context.getSharedPreferences("kuemmero_rechnung_scans", Context.MODE_PRIVATE)
+        .getString(rechnungScanKey(auftrag), "") ?: ""
+
+private fun speichereRechnungScan(context: Context, auftrag: Auftrag, uri: Uri) {
+    context.getSharedPreferences("kuemmero_rechnung_scans", Context.MODE_PRIVATE)
+        .edit()
+        .putString(rechnungScanKey(auftrag), uri.toString())
+        .apply()
+}
+
+private fun loescheRechnungScan(context: Context, auftrag: Auftrag) {
+    val prefs = context.getSharedPreferences("kuemmero_rechnung_scans", Context.MODE_PRIVATE)
+    val uriText = prefs.getString(rechnungScanKey(auftrag), null)
+    if (!uriText.isNullOrBlank()) {
+        try { context.contentResolver.delete(Uri.parse(uriText), null, null) } catch (_: Exception) {}
+    }
+    prefs.edit().remove(rechnungScanKey(auftrag)).apply()
+}
 
 data class Kunde(
     val name: String,
@@ -546,62 +573,28 @@ private fun erstelleRechnungPdf(
     p.textSize = 11f
     c.drawText("Gemäß § 19 UStG wird keine Umsatzsteuer berechnet.", 40f, 578f, p)
     c.drawText("Bitte überweisen Sie den Rechnungsbetrag bis zum $faelligAm.", 40f, 600f, p)
-    c.drawText("Vielen Dank für Ihr Vertrauen.", 40f, 625f, p)
-    pdf.finishPage(page)
-
-    // Anlage: unterschriebener Auftrag. Die Unterschrift steht bewusst
-    // nicht auf der Rechnung selbst, sondern als separate Nachweis-Seite.
-    if (unterschriftPfad.isNotBlank()) {
-        val anlage = pdf.startPage(PdfDocument.PageInfo.Builder(595, 842, 2).create())
-        val ac = anlage.canvas
-        val ap = Paint()
-        ap.textSize = 22f
-        ac.drawText("KÜMMERO", 40f, 60f, ap)
-        ap.textSize = 16f
-        ac.drawText("ANLAGE – UNTERSCHRIEBENER AUFTRAG", 40f, 105f, ap)
-        ap.textSize = 11f
-        ac.drawText("Zur Rechnung: $nummer", 40f, 130f, ap)
-        ac.drawText("Kunde: $kunde", 40f, 155f, ap)
-        ac.drawText("Adresse: $strasse, $ort", 40f, 175f, ap)
-        ac.drawText("Leistung: $leistung", 40f, 195f, ap)
-        ac.drawText("Unterschriftsdatum: ${unterschriftDatum.ifBlank { "—" }}", 40f, 215f, ap)
-
-        ac.drawLine(40f, 245f, 550f, 245f, ap)
-        ap.textSize = 14f
-        ac.drawText("Digitale Kunden-Unterschrift", 40f, 275f, ap)
-
-        val signBitmap = ladeUnterschriftBitmap(unterschriftPfad)
-        if (signBitmap != null) {
-            val maxW = 420f
-            val maxH = 180f
-            val scale = minOf(
-                maxW / signBitmap.width.toFloat(),
-                maxH / signBitmap.height.toFloat()
-            )
-            val drawW = signBitmap.width * scale
-            val drawH = signBitmap.height * scale
-            val left = 40f
-            val top = 300f
-            ac.drawBitmap(
-                signBitmap,
-                null,
-                android.graphics.RectF(left, top, left + drawW, top + drawH),
-                null
-            )
-            signBitmap.recycle()
-        } else {
-            ap.textSize = 11f
-            ac.drawText("Keine digitale Unterschrift erfasst.", 40f, 320f, ap)
-        }
-
-        ap.textSize = 10f
-        ac.drawText(
-            "Diese Seite ist als Nachweis dem Rechnungsdokument beigefügt.",
-            40f, 530f, ap
-        )
-        pdf.finishPage(anlage)
+    c.drawText("Kunden-Unterschrift:", 40f, 625f, p)
+    val signBitmap = ladeUnterschriftBitmap(unterschriftPfad)
+    if (signBitmap != null) {
+        val maxW = 260f
+        val maxH = 55f
+        val scale = minOf(maxW / signBitmap.width.toFloat(), maxH / signBitmap.height.toFloat())
+        val drawW = signBitmap.width * scale
+        val drawH = signBitmap.height * scale
+        val top = 635f + (maxH - drawH) / 2f
+        c.drawBitmap(signBitmap, null, android.graphics.RectF(40f, top, 40f + drawW, top + drawH), null)
+        signBitmap.recycle()
+    } else {
+        p.textSize = 10f
+        c.drawText("Keine Unterschrift erfasst", 40f, 655f, p)
+        p.textSize = 11f
     }
-
+    c.drawLine(40f, 700f, 300f, 700f, p)
+    c.drawText("Unterschrift", 40f, 718f, p)
+    c.drawLine(330f, 700f, 550f, 700f, p)
+    c.drawText("Datum: ${unterschriftDatum.ifBlank { "—" }}", 330f, 718f, p)
+    c.drawText("Vielen Dank für Ihr Vertrauen.", 40f, 730f, p)
+    pdf.finishPage(page)
     fuegeFotoSeitenHinzu(context, pdf, fotosVorher, fotosNachher)
     return pdf
 }
@@ -1006,6 +999,63 @@ fun KuemmeroApp() {
 
     var auftragFuerPdf by remember { mutableStateOf<Auftrag?>(null) }
     var rechnungFuerIndex by remember { mutableStateOf<Int?>(null) }
+    var rechnungScanIndex by remember { mutableStateOf<Int?>(null) }
+    var rechnungScanUri by remember { mutableStateOf<Uri?>(null) }
+
+    val rechnungScanLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.TakePicture()
+    ) { erfolgreich ->
+        val uri = rechnungScanUri
+        val index = rechnungScanIndex
+        if (erfolgreich && uri != null && index != null) {
+            val a = auftraege.getOrNull(index)
+            if (a != null) {
+                try {
+                    if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q) {
+                        val values = ContentValues().apply {
+                            put(MediaStore.Images.Media.IS_PENDING, 0)
+                        }
+                        context.contentResolver.update(uri, values, null, null)
+                    }
+                    speichereRechnungScan(context, a, uri)
+                    android.widget.Toast.makeText(
+                        context,
+                        "Rechnung eingescannt und beim Auftrag gespeichert.",
+                        android.widget.Toast.LENGTH_SHORT
+                    ).show()
+                } catch (_: Exception) {
+                    try { context.contentResolver.delete(uri, null, null) } catch (_: Exception) {}
+                }
+            }
+        } else if (uri != null) {
+            try { context.contentResolver.delete(uri, null, null) } catch (_: Exception) {}
+        }
+        rechnungScanUri = null
+        rechnungScanIndex = null
+    }
+
+    fun starteRechnungScan(index: Int) {
+        val a = auftraege.getOrNull(index) ?: return
+        val values = ContentValues().apply {
+            put(MediaStore.Images.Media.DISPLAY_NAME,
+                "KÜMMERO-Rechnung-${a.rechnungsnummer.ifBlank { a.nummer }}-${System.currentTimeMillis()}.jpg")
+            put(MediaStore.Images.Media.MIME_TYPE, "image/jpeg")
+            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q) {
+                put(MediaStore.Images.Media.RELATIVE_PATH, "Pictures/KÜMMERO")
+                put(MediaStore.Images.Media.IS_PENDING, 1)
+            }
+        }
+        val uri = context.contentResolver.insert(
+            MediaStore.Images.Media.EXTERNAL_CONTENT_URI, values
+        )
+        if (uri == null) {
+            android.widget.Toast.makeText(context, "Kamera konnte nicht gestartet werden.", android.widget.Toast.LENGTH_SHORT).show()
+            return
+        }
+        rechnungScanIndex = index
+        rechnungScanUri = uri
+        rechnungScanLauncher.launch(uri)
+    }
     var sicherungBestaetigung by remember { mutableStateOf(false) }
 
     val createBackup = rememberLauncherForActivityResult(
@@ -2640,6 +2690,44 @@ fun KuemmeroApp() {
                                     colors = ButtonDefaults.buttonColors(containerColor = KuemmeroGreenLight)
                                 ) {
                                     Text("🧾 Rechnung PDF drucken", fontWeight = FontWeight.Bold)
+                                }
+
+                                OutlinedButton(
+                                    onClick = { starteRechnungScan(index) },
+                                    modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp),
+                                    shape = RoundedCornerShape(26.dp),
+                                    border = BorderStroke(2.dp, KuemmeroGreen),
+                                    colors = ButtonDefaults.outlinedButtonColors(contentColor = KuemmeroGreen)
+                                ) {
+                                    Text("📷 Rechnung scannen", fontWeight = FontWeight.Bold)
+                                }
+
+                                val scanUriText = ladeRechnungScan(context, a)
+                                if (scanUriText.isNotBlank()) {
+                                    OutlinedButton(
+                                        onClick = {
+                                            try {
+                                                context.startActivity(
+                                                    Intent(Intent.ACTION_VIEW).apply {
+                                                        setDataAndType(Uri.parse(scanUriText), "image/*")
+                                                        addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                                                    }
+                                                )
+                                            } catch (_: Exception) {
+                                                android.widget.Toast.makeText(
+                                                    context,
+                                                    "Gespeicherter Scan kann nicht geöffnet werden.",
+                                                    android.widget.Toast.LENGTH_SHORT
+                                                ).show()
+                                            }
+                                        },
+                                        modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp),
+                                        shape = RoundedCornerShape(26.dp),
+                                        border = BorderStroke(1.dp, KuemmeroGreenLight),
+                                        colors = ButtonDefaults.outlinedButtonColors(contentColor = KuemmeroGreenLight)
+                                    ) {
+                                        Text("📄 Eingescannte Rechnung öffnen", fontWeight = FontWeight.Bold)
+                                    }
                                 }
                             }
 
