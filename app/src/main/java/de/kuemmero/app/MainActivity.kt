@@ -1,6 +1,7 @@
 package de.kuemmero.app
 
 import android.content.Context
+import android.content.ContentUris
 import android.content.ContentValues
 import android.graphics.Paint
 import android.graphics.Bitmap
@@ -11,6 +12,7 @@ import android.provider.MediaStore
 import android.provider.DocumentsContract
 import android.content.Intent
 import android.os.Bundle
+import android.os.Environment
 import android.os.CancellationSignal
 import android.os.ParcelFileDescriptor
 import android.print.PrintAttributes
@@ -275,6 +277,8 @@ private const val STUNDENSATZ_KEY = "stundensatz"
 private const val BACKUP_URI_KEY = "backup_uri"
 private const val BACKUP_LAST_SUCCESS_KEY = "backup_last_success"
 private const val BACKUP_PRE_RESTORE_FILE = "kuemmero_vor_restore_backup.json"
+private const val BACKUP_FILE_NAME = "KÜMMERO-Sicherung.json"
+private const val BACKUP_FOLDER_NAME = "KÜMMERO"
 private const val KOSTENVORANSCHLAEGE_KEY = "kostenvoranschlaege"
 private const val FIRMENNAME_KEY = "firmen_name"
 private const val FIRMENSTRASSE_KEY = "firmen_strasse"
@@ -538,9 +542,62 @@ private fun backupText(context: Context): String {
     }.toString(2)
 }
 
+
+private fun sichereBackupInKuemmeroOrdner(context: Context): Boolean {
+    if (android.os.Build.VERSION.SDK_INT < android.os.Build.VERSION_CODES.Q) return false
+
+    val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+    val resolver = context.contentResolver
+    val relativePath = Environment.DIRECTORY_DOWNLOADS + "/" + BACKUP_FOLDER_NAME + "/"
+
+    return try {
+        var uri: Uri? = null
+        resolver.query(
+            MediaStore.Downloads.EXTERNAL_CONTENT_URI,
+            arrayOf(MediaStore.MediaColumns._ID, MediaStore.MediaColumns.DISPLAY_NAME),
+            "${MediaStore.MediaColumns.DISPLAY_NAME} = ? AND ${MediaStore.MediaColumns.RELATIVE_PATH} = ?",
+            arrayOf(BACKUP_FILE_NAME, relativePath),
+            null
+        )?.use { cursor ->
+            if (cursor.moveToFirst()) {
+                val id = cursor.getLong(0)
+                uri = ContentUris.withAppendedId(MediaStore.Downloads.EXTERNAL_CONTENT_URI, id)
+            }
+        }
+
+        if (uri == null) {
+            val values = ContentValues().apply {
+                put(MediaStore.MediaColumns.DISPLAY_NAME, BACKUP_FILE_NAME)
+                put(MediaStore.MediaColumns.MIME_TYPE, "application/json")
+                put(MediaStore.MediaColumns.RELATIVE_PATH, relativePath)
+            }
+            uri = resolver.insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, values)
+        }
+
+        val targetUri = uri ?: return false
+        val ok = resolver.openOutputStream(targetUri, "wt")?.use { out ->
+            out.write(backupText(context).toByteArray(Charsets.UTF_8))
+            out.flush()
+            true
+        } ?: false
+
+        if (ok) {
+            prefs.edit()
+                .putString(BACKUP_URI_KEY, targetUri.toString())
+                .putLong(BACKUP_LAST_SUCCESS_KEY, System.currentTimeMillis())
+                .apply()
+        }
+        ok
+    } catch (_: Exception) {
+        false
+    }
+}
+
 private fun sichereBackupAutomatisch(context: Context): Boolean {
     val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-    val uriText = prefs.getString(BACKUP_URI_KEY, null) ?: return false
+    val uriText = prefs.getString(BACKUP_URI_KEY, null)
+    if (uriText.isNullOrBlank()) return sichereBackupInKuemmeroOrdner(context)
+
     return try {
         val uri = Uri.parse(uriText)
         val ok = context.contentResolver.openOutputStream(uri, "wt")?.use { out ->
@@ -548,17 +605,16 @@ private fun sichereBackupAutomatisch(context: Context): Boolean {
             out.flush()
             true
         } ?: false
-        if (!ok) {
-            prefs.edit().remove(BACKUP_URI_KEY).apply()
-        } else {
+        if (ok) {
             prefs.edit().putLong(BACKUP_LAST_SUCCESS_KEY, System.currentTimeMillis()).apply()
+            true
+        } else {
+            prefs.edit().remove(BACKUP_URI_KEY).apply()
+            sichereBackupInKuemmeroOrdner(context)
         }
-        ok
     } catch (_: Exception) {
-        // Die bisher gewählte Datei wurde z. B. gelöscht oder verschoben.
-        // Die alte URI darf danach nicht weiter verwendet werden.
         prefs.edit().remove(BACKUP_URI_KEY).apply()
-        false
+        sichereBackupInKuemmeroOrdner(context)
     }
 }
 
@@ -2033,17 +2089,16 @@ fun KuemmeroApp() {
             confirmButton = {
                 TextButton(onClick = {
                     sicherungBestaetigung = false
-                    if (vorhandeneSicherung) {
-                        backupScope.launch {
-                            val result = withContext(Dispatchers.IO) { sichereBackupAutomatisch(context) }
-                            android.widget.Toast.makeText(
-                                context,
-                                if (result) "Sicherung aktualisiert." else "Sicherung konnte nicht aktualisiert werden.",
-                                android.widget.Toast.LENGTH_LONG
-                            ).show()
-                        }
-                    } else {
-                        createBackup.launch("KÜMMERO-Sicherung.json")
+                    backupScope.launch {
+                        val result = withContext(Dispatchers.IO) { sichereBackupAutomatisch(context) }
+                        android.widget.Toast.makeText(
+                            context,
+                            if (result)
+                                "Sicherung gespeichert: Download/KÜMMERO/$BACKUP_FILE_NAME"
+                            else
+                                "Sicherung konnte nicht gespeichert werden.",
+                            android.widget.Toast.LENGTH_LONG
+                        ).show()
                     }
                 }) { Text("Ja, sichern") }
             },
