@@ -162,8 +162,7 @@ private fun ladeKostenvoranschlaege(context: Context): List<Kostenvoranschlag> {
             o.optString("leistung"), o.optDouble("stunden", 0.0), o.optDouble("material", 0.0),
             o.optDouble("fahrt", 0.0), o.optDouble("stundensatz", 42.0), o.optString("materialBonUri", ""),
             run { val a = o.optJSONArray("fotosVorher") ?: JSONArray(); List(a.length()) { j -> a.optString(j) } },
-            o.optDouble("erstellungskosten", 0.0),
-            o.optString("leistungsdatum", "")
+            o.optDouble("erstellungskosten", 0.0)
         )
     }
 }
