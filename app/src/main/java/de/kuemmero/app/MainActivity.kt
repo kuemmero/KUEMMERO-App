@@ -2338,17 +2338,7 @@ fun KuemmeroApp() {
                     }
                 }
                 if (!auftragFormOffen) {
-                // Detailansicht immer direkt aus der vollständigen Auftragsliste holen.
-                // Dadurch bleibt der Auftrag auch nach dem Bearbeiten sichtbar,
-                // selbst wenn Such-/Statusfilter aktiv sind.
-                val auftragsAnzeige = if (auftragDetailIndex == null) {
-                    gefilterteAuftraege
-                } else {
-                    auftragDetailIndex?.let { idx ->
-                        auftraege.getOrNull(idx)?.let { idx to it }
-                    }?.let { listOf(it) } ?: emptyList()
-                }
-                itemsIndexed(auftragsAnzeige) { _, pair ->
+                itemsIndexed(if (auftragDetailIndex == null) gefilterteAuftraege else gefilterteAuftraege.filter { it.first == auftragDetailIndex }) { _, pair ->
                     val index = pair.first
                     val a = pair.second
                     Card(
@@ -2756,7 +2746,7 @@ fun KuemmeroApp() {
                         }
                         item {
                             Card(
-                                Modifier.fillMaxWidth(),
+                                modifier = Modifier.fillMaxWidth(),
                                 colors = CardDefaults.cardColors(containerColor = KuemmeroSurface),
                                 shape = RoundedCornerShape(18.dp),
                                 border = BorderStroke(1.5.dp, KuemmeroGreenLight)
@@ -2764,14 +2754,50 @@ fun KuemmeroApp() {
                                 if (naechsterTermin == null) {
                                     Text("Keine zukünftigen Termine.", Modifier.padding(18.dp), color = KuemmeroText)
                                 } else {
-                                    Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                    Column(
+                                        Modifier.padding(16.dp),
+                                        verticalArrangement = Arrangement.spacedBy(6.dp)
+                                    ) {
                                         Text(
                                             "${naechsterTermin.terminDatum} · ${naechsterTermin.terminUhrzeit.ifBlank { "ohne Uhrzeit" }}",
                                             color = KuemmeroGreen,
                                             fontWeight = FontWeight.Bold
                                         )
-                                        Text(naechsterTermin.kunde, color = KuemmeroText, style = MaterialTheme.typography.titleMedium)
-                                        if (naechsterTermin.leistung.isNotBlank()) Text(naechsterTermin.leistung, color = KuemmeroText)
+                                        Text(
+                                            naechsterTermin.kunde,
+                                            color = KuemmeroText,
+                                            style = MaterialTheme.typography.titleMedium
+                                        )
+                                        if (naechsterTermin.leistung.isNotBlank()) {
+                                            Text(naechsterTermin.leistung, color = KuemmeroText)
+                                        }
+
+                                        Button(
+                                            onClick = {
+                                                val index = auftraege.indexOfFirst {
+                                                    it.nummer == naechsterTermin.nummer &&
+                                                    it.kunde == naechsterTermin.kunde &&
+                                                    it.terminDatum == naechsterTermin.terminDatum
+                                                }
+                                                if (index >= 0) {
+                                                    hauptseite = "Aufträge"
+                                                    auftragFormOffen = false
+                                                    auftragDetailIndex = index
+                                                }
+                                            },
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .heightIn(min = 50.dp),
+                                            shape = RoundedCornerShape(25.dp),
+                                            colors = ButtonDefaults.buttonColors(
+                                                containerColor = KuemmeroGreen
+                                            )
+                                        ) {
+                                            Text(
+                                                "Auftrag öffnen →",
+                                                fontWeight = FontWeight.Bold
+                                            )
+                                        }
                                     }
                                 }
                             }
