@@ -1637,7 +1637,7 @@ fun KuemmeroApp() {
                 ).show()
             }
         }
-    )
+    }
 
     val rechnungScanLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.TakePicture()
@@ -4890,4 +4890,3 @@ fun KuemmeroApp() {
         }
     }
 }
-                                     }
