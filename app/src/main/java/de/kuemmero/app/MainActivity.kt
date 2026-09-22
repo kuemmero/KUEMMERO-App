@@ -967,6 +967,7 @@ fun KuemmeroApp() {
     var kvFormOffen by remember { mutableStateOf(false) }
     var kvBearbeiteIndex by remember { mutableStateOf<Int?>(null) }
     var kvLoeschIndex by remember { mutableStateOf<Int?>(null) }
+    var kvErstellungskostenLoeschBestaetigung by remember { mutableStateOf(false) }
     var kvNummer by remember { mutableStateOf("KV-" + SimpleDateFormat("yyyyMMdd-HHmmss", Locale.GERMANY).format(heute)) }
     var kvDatum by remember { mutableStateOf(datumFormat.format(heute)) }
     var kvGueltigBis by remember { mutableStateOf(datumFormat.format(Calendar.getInstance().apply { add(Calendar.DAY_OF_YEAR, 14) }.time)) }
@@ -1788,6 +1789,24 @@ fun KuemmeroApp() {
         } else {
             arbeitszeitLoeschIndex = null
         }
+    }
+
+    if (kvErstellungskostenLoeschBestaetigung) {
+        AlertDialog(
+            onDismissRequest = { kvErstellungskostenLoeschBestaetigung = false },
+            title = { Text("Erstellungskosten löschen?") },
+            text = { Text("Die eingetragenen Erstellungskosten werden aus diesem Kostenvoranschlag entfernt.") },
+            confirmButton = {
+                TextButton(onClick = {
+                    kvErstellungskosten = ""
+                    kvErstellungskostenLoeschBestaetigung = false
+                    android.widget.Toast.makeText(context, "Erstellungskosten gelöscht.", android.widget.Toast.LENGTH_SHORT).show()
+                }) { Text("Löschen") }
+            },
+            dismissButton = {
+                TextButton(onClick = { kvErstellungskostenLoeschBestaetigung = false }) { Text("Abbrechen") }
+            }
+        )
     }
 
     kvLoeschIndex?.let { index ->
@@ -3276,6 +3295,16 @@ fun KuemmeroApp() {
                                                 modifier = Modifier.weight(1f)
                                             ) { Text("Bearbeiten") }
 
+                                            OutlinedButton(
+                                                onClick = {
+                                                    spieleBestaetigungston(context)
+                                                    kvLoeschIndex = index
+                                                },
+                                                modifier = Modifier.weight(1f),
+                                                border = BorderStroke(2.dp, KuemmeroError),
+                                                colors = ButtonDefaults.outlinedButtonColors(contentColor = KuemmeroError)
+                                            ) { Text("Löschen") }
+
                                             Button(
                                                 onClick = {
                                                     val a = Auftrag(
@@ -3423,7 +3452,13 @@ fun KuemmeroApp() {
                                         OutlinedTextField(kvStundensatz, { kvStundensatz = it }, label = { Text("Stundensatz (€ / Stunde)") }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal), colors = feldFarben, modifier = Modifier.fillMaxWidth())
                                         OutlinedTextField(kvErstellungskosten, { kvErstellungskosten = it }, label = { Text("Erstellungskosten (€)") }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal), colors = feldFarben, modifier = Modifier.fillMaxWidth())
                                         if (zahl(kvErstellungskosten) > 0.0) {
-                                            TextButton(onClick = { spieleBestaetigungston(context); kvErstellungskosten = "" }, colors = ButtonDefaults.textButtonColors(contentColor = KuemmeroError)) { Text("🗑 Erstellungskosten löschen") }
+                                            TextButton(
+                                                onClick = {
+                                                    spieleBestaetigungston(context)
+                                                    kvErstellungskostenLoeschBestaetigung = true
+                                                },
+                                                colors = ButtonDefaults.textButtonColors(contentColor = KuemmeroError)
+                                            ) { Text("🗑 Erstellungskosten löschen") }
                                         }
                                         Text(
                                             "Gesamtsumme: ${euro(runde2(gesamtbetrag(zahl(kvStunden), zahl(kvMaterial), zahl(kvFahrt), zahl(kvStundensatz, 42.0)) + zahl(kvErstellungskosten)))}",
