@@ -116,7 +116,8 @@ data class Auftrag(
     val arbeitsEnde: Long = 0L,
     val arbeitsSekunden: Long = 0L,
     val arbeitszeitUebernommen: Boolean = false,
-    val erstellungskosten: Double = 0.0
+    val erstellungskosten: Double = 0.0,
+    val leistungsdatum: String = ""
 )
 
 private const val PREFS_NAME = "kuemmero_speicher"
@@ -161,7 +162,8 @@ private fun ladeKostenvoranschlaege(context: Context): List<Kostenvoranschlag> {
             o.optString("leistung"), o.optDouble("stunden", 0.0), o.optDouble("material", 0.0),
             o.optDouble("fahrt", 0.0), o.optDouble("stundensatz", 42.0), o.optString("materialBonUri", ""),
             run { val a = o.optJSONArray("fotosVorher") ?: JSONArray(); List(a.length()) { j -> a.optString(j) } },
-            o.optDouble("erstellungskosten", 0.0)
+            o.optDouble("erstellungskosten", 0.0),
+            o.optString("leistungsdatum", "")
         )
     }
 }
@@ -322,6 +324,7 @@ private fun speichereAuftraege(context: Context, liste: List<Auftrag>) {
             put("arbeitsSekunden", a.arbeitsSekunden)
             put("arbeitszeitUebernommen", a.arbeitszeitUebernommen)
             put("erstellungskosten", a.erstellungskosten)
+            put("leistungsdatum", a.leistungsdatum)
         })
     }
     context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
@@ -517,8 +520,14 @@ private fun erstellePdf(
     p.textSize = 18f
     c.drawText("Gesamtsumme: ${euro(gesamt)}", 40f, if (erstellungskosten > 0.0) 573f else 548f, p)
     p.textSize = 11f
-    c.drawText("Gemäß § 19 UStG wird keine Umsatzsteuer berechnet.", 40f, if (erstellungskosten > 0.0) 603f else 578f, p)
-    c.drawText("Auftragserteilung / Unterschrift Kunde:", 40f, 628f, p)
+    val kvHinweisY = if (erstellungskosten > 0.0) 603f else 578f
+    c.drawText("Gemäß § 19 UStG wird keine Umsatzsteuer berechnet.", 40f, kvHinweisY, p)
+    val unterschriftTitelY = if (dokumentTitel.contains("KOSTENVORANSCHLAG", ignoreCase = true) && erstellungskosten > 0.0) 650f else 628f
+    if (dokumentTitel.contains("KOSTENVORANSCHLAG", ignoreCase = true) && erstellungskosten > 0.0) {
+        p.textSize = 11f
+        c.drawText("Hinweis: Dieser Kostenvoranschlag ist kostenpflichtig.", 40f, 628f, p)
+    }
+    c.drawText("Auftragserteilung / Unterschrift Kunde:", 40f, unterschriftTitelY, p)
     val signBitmap = ladeUnterschriftBitmap(unterschriftPfad)
     if (signBitmap != null) {
         val maxW = 225f
@@ -526,15 +535,17 @@ private fun erstellePdf(
         val scale = minOf(maxW / signBitmap.width.toFloat(), maxH / signBitmap.height.toFloat())
         val drawW = signBitmap.width * scale
         val drawH = signBitmap.height * scale
-        val dst = android.graphics.RectF(40f, 648f, 40f + drawW, 648f + drawH)
+        val signTop = if (dokumentTitel.contains("KOSTENVORANSCHLAG", ignoreCase = true) && erstellungskosten > 0.0) 670f else 648f
+        val dst = android.graphics.RectF(40f, signTop, 40f + drawW, signTop + drawH)
         c.drawBitmap(signBitmap, null, dst, null)
         signBitmap.recycle()
     }
-    c.drawLine(40f, 693f, 280f, 693f, p)
-    c.drawText("Unterschrift", 40f, 711f, p)
-    c.drawLine(330f, 693f, 550f, 693f, p)
-    c.drawText("Datum", 330f, 711f, p)
-    c.drawText("Vielen Dank für Ihr Vertrauen.", 40f, 763f, p)
+    val signLineY = if (dokumentTitel.contains("KOSTENVORANSCHLAG", ignoreCase = true) && erstellungskosten > 0.0) 715f else 693f
+    c.drawLine(40f, signLineY, 280f, signLineY, p)
+    c.drawText("Unterschrift", 40f, signLineY + 18f, p)
+    c.drawLine(330f, signLineY, 550f, signLineY, p)
+    c.drawText("Datum", 330f, signLineY + 18f, p)
+    c.drawText("Vielen Dank für Ihr Vertrauen.", 40f, if (signLineY > 700f) 785f else 763f, p)
     pdf.finishPage(page)
     fuegeFotoSeitenHinzu(context, pdf, fotosVorher, fotosNachher)
     return pdf
@@ -881,6 +892,24 @@ private fun KlappBereich(
     }
 }
 
+private fun leistungsumfangHinweis(leistung: String): String? {
+    val text = leistung.lowercase(Locale.GERMANY)
+    val elektro = listOf(
+        "elektroinstallation", "elektroinstall", "steckdose", "lichtschalter",
+        "sicherungskasten", "unterverteilung", "stromleitung", "stromanschluss",
+        "kabel verlegen", "elektrische installation"
+    ).any { text.contains(it) }
+    val schimmel = listOf(
+        "schimmelsanierung", "schimmelsanieren", "professionelle schimmel",
+        "schimmelbeseitigung", "schimmel sanierung"
+    ).any { text.contains(it) }
+    return when {
+        elektro -> "Hinweis: Diese Leistungsbeschreibung kann in den Bereich des zulassungspflichtigen Elektrotechniker-Handwerks fallen. Nur Leistungen anbieten/ausführen, für die eine entsprechende Berechtigung besteht."
+        schimmel -> "Hinweis: Professionelle Schimmel-Sanierungsarbeiten können besondere fachliche und rechtliche Anforderungen haben. Nur den tatsächlich zulässigen Leistungsumfang anbieten."
+        else -> null
+    }
+}
+
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -959,6 +988,7 @@ fun KuemmeroApp() {
         mutableStateOf("ANG-" + SimpleDateFormat("yyyyMMdd-HHmmss", Locale.GERMANY).format(heute))
     }
     var datum by remember { mutableStateOf(datumFormat.format(heute)) }
+    var leistungsdatum by remember { mutableStateOf(datumFormat.format(heute)) }
     var gueltigBis by remember {
         val cal = Calendar.getInstance()
         cal.time = heute
@@ -1324,7 +1354,7 @@ fun KuemmeroApp() {
                         rechnungsnummer,
                         rechnungsdatum,
                         faelligAm,
-                        a.terminDatum.ifBlank { a.datum },
+                        a.leistungsdatum.ifBlank { a.terminDatum.ifBlank { a.datum } },
                         a.kunde,
                         a.kundenStrasse,
                         a.kundenOrt,
@@ -2058,6 +2088,15 @@ fun KuemmeroApp() {
                 }
                 item {
                     OutlinedTextField(
+                        leistungsdatum, { leistungsdatum = it },
+                        label = { Text("Leistungsdatum") },
+                        placeholder = { Text("TT.MM.JJJJ") },
+                        colors = feldFarben,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+                item {
+                    OutlinedTextField(
                         gueltigBis, { gueltigBis = it },
                         label = { Text("Gültig bis") },
                         colors = feldFarben,
@@ -2087,6 +2126,14 @@ fun KuemmeroApp() {
                         colors = feldFarben,
                         modifier = Modifier.fillMaxWidth()
                     )
+                    leistungsumfangHinweis(leistung)?.let { hinweis ->
+                        Text(
+                            "⚠ $hinweis",
+                            color = KuemmeroError,
+                            fontWeight = FontWeight.SemiBold,
+                            fontSize = 12.sp
+                        )
+                    }
                 }
                 item {
                     OutlinedTextField(
@@ -2274,7 +2321,9 @@ fun KuemmeroApp() {
                                     bearbeiteIndex?.let { auftraege.getOrNull(it)?.faelligAm } ?: "",
                                     bearbeiteIndex?.let { auftraege.getOrNull(it)?.arbeitsStart } ?: 0L,
                                     bearbeiteIndex?.let { auftraege.getOrNull(it)?.arbeitsEnde } ?: 0L,
-                                    bearbeiteIndex?.let { auftraege.getOrNull(it)?.arbeitsSekunden } ?: 0L
+                                    bearbeiteIndex?.let { auftraege.getOrNull(it)?.arbeitsSekunden } ?: 0L,
+                                    erstellungskosten = bearbeiteIndex?.let { auftraege.getOrNull(it)?.erstellungskosten } ?: 0.0,
+                                    leistungsdatum = leistungsdatum.trim().ifBlank { datum.trim() }
                                 )
                                 val index = bearbeiteIndex
                                 if (index != null) {
@@ -2288,6 +2337,7 @@ fun KuemmeroApp() {
                                     android.widget.Toast.makeText(context, "Auftrag gespeichert.", 0).show()
                                 }
                                 auftragFormOffen = false
+                                leistungsdatum = datumFormat.format(Date())
                                 kunde = ""
                                 strasse = ""
                                 ort = ""
@@ -2480,6 +2530,7 @@ fun KuemmeroApp() {
                                 auftragFormOffen = true
                                 nummer = ""
                                 datum = datumJetzt
+                                leistungsdatum = datumJetzt
                                 gueltigBis = ""
                                 kunde = ""
                                 strasse = ""
@@ -2810,6 +2861,7 @@ fun KuemmeroApp() {
                                     auftragFormOffen = true
                                     nummer = a.nummer.ifBlank { nummer }
                                     datum = a.datum.ifBlank { datum }
+                                    leistungsdatum = a.leistungsdatum.ifBlank { a.terminDatum.ifBlank { a.datum.ifBlank { datum } } }
                                     gueltigBis = a.gueltigBis.ifBlank { gueltigBis }
                                     kunde = a.kunde
                                     strasse = a.kundenStrasse
@@ -3264,7 +3316,8 @@ fun KuemmeroApp() {
                                                         status = "Offen",
                                                         zahlungsstatus = "Offen",
                                                         fotosVorher = k.fotosVorher,
-                                                        erstellungskosten = k.erstellungskosten
+                                                        erstellungskosten = k.erstellungskosten,
+                                                        leistungsdatum = k.datum
                                                     )
                                                     auftraege = auftraege + a
                                                     speichereAuftraege(context, auftraege)
@@ -3394,6 +3447,14 @@ fun KuemmeroApp() {
                                         OutlinedTextField(kvFahrt, { kvFahrt = it }, label = { Text("Fahrtkosten (€)") }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal), colors = feldFarben, modifier = Modifier.fillMaxWidth())
                                         OutlinedTextField(kvStundensatz, { kvStundensatz = it }, label = { Text("Stundensatz (€ / Stunde)") }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal), colors = feldFarben, modifier = Modifier.fillMaxWidth())
                                         OutlinedTextField(kvErstellungskosten, { kvErstellungskosten = it }, label = { Text("Erstellungskosten (€)") }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal), colors = feldFarben, modifier = Modifier.fillMaxWidth())
+                                        if (zahl(kvErstellungskosten) > 0.0) {
+                                            Text(
+                                                "Hinweis: Der Kostenvoranschlag ist kostenpflichtig. Die Erstellungskosten werden mit dem angegebenen Betrag ausgewiesen.",
+                                                color = KuemmeroError,
+                                                fontWeight = FontWeight.SemiBold,
+                                                fontSize = 12.sp
+                                            )
+                                        }
                                         Text(
                                             "Gesamtsumme: ${euro(gesamtbetrag(zahl(kvStunden), zahl(kvMaterial), zahl(kvFahrt), zahl(kvStundensatz, 42.0), zahl(kvErstellungskosten)))}",
                                             style = MaterialTheme.typography.titleLarge,
