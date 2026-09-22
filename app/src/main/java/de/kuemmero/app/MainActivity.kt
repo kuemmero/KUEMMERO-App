@@ -3302,6 +3302,9 @@ fun KuemmeroApp() {
                                     bearbeiteIndex?.let { auftraege.getOrNull(it)?.rechnungsnummer } ?: "",
                                     bearbeiteIndex?.let { auftraege.getOrNull(it)?.rechnungsdatum } ?: "",
                                     bearbeiteIndex?.let { auftraege.getOrNull(it)?.faelligAm } ?: "",
+                                    bearbeiteIndex?.let { auftraege.getOrNull(it)?.berichtigungsnummer } ?: "",
+                                    bearbeiteIndex?.let { auftraege.getOrNull(it)?.berichtigungsdatum } ?: "",
+                                    bearbeiteIndex?.let { auftraege.getOrNull(it)?.berichtigungsgrund } ?: "",
                                     bearbeiteIndex?.let { auftraege.getOrNull(it)?.mahnung1Datum } ?: "",
                                     bearbeiteIndex?.let { auftraege.getOrNull(it)?.mahnung1Frist } ?: "",
                                     bearbeiteIndex?.let { auftraege.getOrNull(it)?.mahnung1Gebuehr } ?: 0.0,
@@ -3315,6 +3318,7 @@ fun KuemmeroApp() {
                                     bearbeiteIndex?.let { auftraege.getOrNull(it)?.arbeitsStart } ?: 0L,
                                     bearbeiteIndex?.let { auftraege.getOrNull(it)?.arbeitsEnde } ?: 0L,
                                     bearbeiteIndex?.let { auftraege.getOrNull(it)?.arbeitsSekunden } ?: 0L,
+                                    bearbeiteIndex?.let { auftraege.getOrNull(it)?.arbeitszeitUebernommen } ?: false,
                                     erstellungskosten = bearbeiteIndex?.let { auftraege.getOrNull(it)?.erstellungskosten } ?: 0.0,
                                     leistungsdatum = leistungsdatum.trim().ifBlank { datum.trim() }
                                 )
