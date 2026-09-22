@@ -1292,7 +1292,7 @@ fun KuemmeroApp() {
                 android.widget.Toast.makeText(
                     context,
                     "Sicherung konnte nicht gespeichert werden.",
-                    android.widget.android.widget.Toast.LENGTH_LONG
+                    android.widget.Toast.LENGTH_LONG
                 ).show()
             }
         }
@@ -1349,7 +1349,7 @@ fun KuemmeroApp() {
                 kvBearbeiteIndex = null
                 timerIndex = null
                 timerSekunden = 0L
-                android.widget.Toast.makeText(context, "Daten wiederhergestellt. Sicherheitskopie des vorherigen Datenstands wurde erstellt.", android.widget.android.widget.Toast.LENGTH_LONG).show()
+                android.widget.Toast.makeText(context, "Daten wiederhergestellt. Sicherheitskopie des vorherigen Datenstands wurde erstellt.", android.widget.Toast.LENGTH_LONG).show()
             } catch (e: Exception) {
                 android.widget.Toast.makeText(context, "Wiederherstellung fehlgeschlagen", 1).show()
             }
@@ -1433,7 +1433,7 @@ fun KuemmeroApp() {
                 val rechnungsPlzOrt = rechnungsPrefs.getString(FIRMENPLZORT_KEY, "") ?: ""
                 val rechnungsSteuer = rechnungsPrefs.getString(STEUERNUMMER_KEY, "") ?: ""
                 if (rechnungsStrasse.isBlank() || rechnungsPlzOrt.isBlank() || rechnungsSteuer.isBlank()) {
-                    android.widget.Toast.makeText(context, "Bitte unter Mehr zuerst Straße, PLZ/Ort und Steuernummer eintragen.", android.widget.android.widget.Toast.LENGTH_LONG).show()
+                    android.widget.Toast.makeText(context, "Bitte unter Mehr zuerst Straße, PLZ/Ort und Steuernummer eintragen.", android.widget.Toast.LENGTH_LONG).show()
                     rechnungFuerIndex = null
                     return@rememberLauncherForActivityResult
                 }
@@ -1666,7 +1666,7 @@ fun KuemmeroApp() {
                     } else {
                         val doppelt = auftraege.withIndex().any { it.index != index && it.value.rechnungsnummer.equals(neu, ignoreCase = true) }
                         if (doppelt) {
-                            android.widget.Toast.makeText(context, "Diese Rechnungsnummer ist bereits vergeben.", android.widget.android.widget.Toast.LENGTH_LONG).show()
+                            android.widget.Toast.makeText(context, "Diese Rechnungsnummer ist bereits vergeben.", android.widget.Toast.LENGTH_LONG).show()
                         } else {
                             val alt = auftraege.getOrNull(index)
                             if (alt != null) {
@@ -1676,7 +1676,7 @@ fun KuemmeroApp() {
                                 speichereAuftraege(context, auftraege)
                                 synchronisiereRechnungsnummerCounter(context, neu)
                                 rechnungNummerEditIndex = null
-                                android.widget.Toast.makeText(context, "Rechnungsnummer geändert: $neu", android.widget.android.widget.Toast.LENGTH_LONG).show()
+                                android.widget.Toast.makeText(context, "Rechnungsnummer geändert: $neu", android.widget.Toast.LENGTH_LONG).show()
                             }
                         }
                     }
@@ -3166,7 +3166,7 @@ fun KuemmeroApp() {
                                             else -> ""
                                         }
                                         if (fehlend.isNotBlank()) {
-                                            android.widget.Toast.makeText(context, fehlend, android.widget.android.widget.Toast.LENGTH_LONG).show()
+                                            android.widget.Toast.makeText(context, fehlend, android.widget.Toast.LENGTH_LONG).show()
                                         } else {
                                             rechnungFuerIndex = index
                                             val name = a.kunde.ifBlank { "Kunde" }.replace("/", "-")
