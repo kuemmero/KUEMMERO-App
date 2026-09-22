@@ -534,6 +534,7 @@ private fun erstelleRechnungPdf(
     nummer: String,
     rechnungsdatum: String,
     faelligAm: String,
+    leistungsdatum: String,
     kunde: String,
     strasse: String,
     ort: String,
@@ -574,7 +575,7 @@ private fun erstelleRechnungPdf(
     c.drawText("Rechnungsdatum: $rechnungsdatum", 40f, 275f, p)
     c.drawText("Fällig am: $faelligAm", 40f, 295f, p)
     c.drawText("Steuernummer: ${steuernummer.ifBlank { "BITTE IN MEHR EINTRAGEN" }}", 40f, 315f, p)
-    c.drawText("Leistungsdatum: $rechnungsdatum", 40f, 335f, p)
+    c.drawText("Leistungsdatum: ${leistungsdatum.ifBlank { rechnungsdatum }}", 40f, 335f, p)
     c.drawText("Kunde: $kunde", 40f, 365f, p)
     c.drawText("Adresse: $strasse", 40f, 385f, p)
     c.drawText("PLZ und Ort: $ort", 40f, 405f, p)
@@ -664,6 +665,7 @@ private fun druckeRechnungPdf(context: Context, auftrag: Auftrag) {
             pdf = erstelleRechnungPdf(
                 context,
                 nummer, rechnungsdatum, faelligAm,
+                auftrag.terminDatum.ifBlank { auftrag.datum },
                 auftrag.kunde, auftrag.kundenStrasse, auftrag.kundenOrt, auftrag.leistung,
                 auftrag.stunden, auftrag.material, auftrag.fahrt, auftrag.stundensatz,
                 auftrag.unterschriftPfad, auftrag.unterschriftDatum, auftrag.fotosVorher, auftrag.fotosNachher, auftrag.erstellungskosten
@@ -1286,6 +1288,7 @@ fun KuemmeroApp() {
                         rechnungsnummer,
                         rechnungsdatum,
                         faelligAm,
+                        a.terminDatum.ifBlank { a.datum },
                         a.kunde,
                         a.kundenStrasse,
                         a.kundenOrt,
@@ -2870,9 +2873,27 @@ fun KuemmeroApp() {
                                 )
                                 Button(
                                     onClick = {
-                                        rechnungFuerIndex = index
-                                        val name = a.kunde.ifBlank { "Kunde" }
-                                        rechnungLauncher.launch("KÜMMERO-Rechnung-$name.pdf")
+                                        val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+                                        val firmenStrasse = prefs.getString(FIRMENSTRASSE_KEY, "")?.trim().orEmpty()
+                                        val firmenPlzOrt = prefs.getString(FIRMENPLZORT_KEY, "")?.trim().orEmpty()
+                                        val steuer = prefs.getString(STEUERNUMMER_KEY, "")?.trim().orEmpty()
+                                        val fehlend = when {
+                                            firmenStrasse.isBlank() -> "Bitte unter Mehr die Firmenstraße / Hausnummer eintragen."
+                                            firmenPlzOrt.isBlank() -> "Bitte unter Mehr PLZ / Ort eintragen."
+                                            steuer.isBlank() -> "Bitte unter Mehr Steuernummer / USt-ID / KU-IdNr. eintragen."
+                                            a.kunde.isBlank() -> "Für die Rechnung fehlt der Kundenname."
+                                            a.kundenStrasse.isBlank() -> "Für die Rechnung fehlt die Kundenstraße / Hausnummer."
+                                            a.kundenOrt.isBlank() -> "Für die Rechnung fehlt PLZ / Ort des Kunden."
+                                            a.leistung.isBlank() -> "Für die Rechnung fehlt die Leistungsbeschreibung."
+                                            else -> ""
+                                        }
+                                        if (fehlend.isNotBlank()) {
+                                            android.widget.Toast.makeText(context, fehlend, android.widget.Toast.LENGTH_LONG).show()
+                                        } else {
+                                            rechnungFuerIndex = index
+                                            val name = a.kunde.ifBlank { "Kunde" }.replace("/", "-")
+                                            rechnungLauncher.launch("KÜMMERO-Rechnung-$name.pdf")
+                                        }
                                     },
                                     modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp),
                                     shape = RoundedCornerShape(26.dp),
