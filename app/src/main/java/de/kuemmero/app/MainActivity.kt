@@ -945,6 +945,7 @@ fun KuemmeroApp() {
     var statusFilter by remember { mutableStateOf("Alle") }
     var zahlungsFilterOffen by remember { mutableStateOf(false) }
     var kundenAkteName by remember { mutableStateOf<String?>(null) }
+    var kundeLoeschenBestaetigung by remember { mutableStateOf<String?>(null) }
     var kalenderOffen by remember { mutableStateOf(false) }
     var terminBereichOffen by remember { mutableStateOf(false) }
     var notizBereichOffen by remember { mutableStateOf(false) }
@@ -1450,20 +1451,37 @@ fun KuemmeroApp() {
                     if (neuerKundenName.isBlank()) {
                         android.widget.Toast.makeText(context, "Bitte Kundennamen eingeben.", 0).show()
                     } else {
-                        val k = Kunde(
-                            neuerKundenName.trim(),
-                            neuerKundenAdresse.trim(),
-                            neuerKundenOrt.trim(),
-                            neuerKundenTelefon.trim(),
-                            neuerKundenEmail.trim()
-                        )
-                        speichereOderAktualisiereKunde(context, k)
-                        kunden = ladeKunden(context)
-                        kunde = k.name
-                        strasse = k.adresse
-                        ort = k.ort
-                        neuerKundeDialog = false
-                        android.widget.Toast.makeText(context, "Kunde gespeichert.", 0).show()
+                        val neuerName = neuerKundenName.trim()
+                        val neueAdresse = neuerKundenAdresse.trim()
+                        val neuerOrt = neuerKundenOrt.trim()
+                        val bereitsVorhanden = kunden.any {
+                            it.name.equals(neuerName, ignoreCase = true) &&
+                                it.adresse.equals(neueAdresse, ignoreCase = true) &&
+                                it.ort.equals(neuerOrt, ignoreCase = true)
+                        }
+                        if (bereitsVorhanden) {
+                            spieleBestaetigungston(context)
+                            android.widget.Toast.makeText(
+                                context,
+                                "Dieser Kunde ist bereits vorhanden.",
+                                0
+                            ).show()
+                        } else {
+                            val k = Kunde(
+                                neuerName,
+                                neueAdresse,
+                                neuerOrt,
+                                neuerKundenTelefon.trim(),
+                                neuerKundenEmail.trim()
+                            )
+                            speichereOderAktualisiereKunde(context, k)
+                            kunden = ladeKunden(context)
+                            kunde = k.name
+                            strasse = k.adresse
+                            ort = k.ort
+                            neuerKundeDialog = false
+                            android.widget.Toast.makeText(context, "Kunde gespeichert.", 0).show()
+                        }
                     }
                 }) { Text("Speichern") }
             },
@@ -1612,6 +1630,45 @@ fun KuemmeroApp() {
             },
             dismissButton = {
                 TextButton(onClick = { unterschriftLoeschenBestaetigung = false }) { Text("Abbrechen") }
+            }
+        )
+    }
+
+    kundeLoeschenBestaetigung?.let { name ->
+        val zuLoeschenderKunde = kunden.firstOrNull { it.name.equals(name, ignoreCase = true) }
+        AlertDialog(
+            onDismissRequest = { kundeLoeschenBestaetigung = null },
+            title = { Text("Kunde löschen?") },
+            text = {
+                Text(
+                    "Soll der Kunde \"$name\" aus der Kundenliste gelöscht werden?\n\n" +
+                        "Aufträge, Kostenvoranschläge, Rechnungen, Fotos und Unterschriften bleiben erhalten. " +
+                        "Nur der Eintrag in der Kundenliste wird gelöscht."
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    spieleBestaetigungston(context)
+                    val verbleibend = if (zuLoeschenderKunde != null) {
+                        kunden.filterNot { it == zuLoeschenderKunde }
+                    } else {
+                        kunden
+                    }
+                    speichereKunden(context, verbleibend)
+                    kunden = verbleibend
+                    if (kundenAkteName.equals(name, ignoreCase = true)) {
+                        kundenAkteName = null
+                    }
+                    kundeLoeschenBestaetigung = null
+                    android.widget.Toast.makeText(
+                        context,
+                        "Kunde gelöscht. Dokumente bleiben erhalten.",
+                        0
+                    ).show()
+                }) { Text("Löschen", color = KuemmeroError, fontWeight = FontWeight.Bold) }
+            },
+            dismissButton = {
+                TextButton(onClick = { kundeLoeschenBestaetigung = null }) { Text("Abbrechen") }
             }
         )
     }
@@ -2998,6 +3055,18 @@ fun KuemmeroApp() {
                                         if (k.email.isNotBlank()) Text("✉ ${k.email}", color = KuemmeroText)
                                         Text("Aufträge: ${auftraege.count { it.kunde == k.name }}", color = KuemmeroText)
                                         Text("Kundenakte öffnen →", color = KuemmeroGreen, fontWeight = FontWeight.Bold)
+                                        OutlinedButton(
+                                            onClick = {
+                                                spieleBestaetigungston(context)
+                                                kundeLoeschenBestaetigung = k.name
+                                            },
+                                            modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp),
+                                            shape = RoundedCornerShape(24.dp),
+                                            border = BorderStroke(2.dp, KuemmeroError),
+                                            colors = ButtonDefaults.outlinedButtonColors(contentColor = KuemmeroError)
+                                        ) {
+                                            Text("Kunde löschen", fontWeight = FontWeight.Bold)
+                                        }
                                     }
                                 }
                             }
