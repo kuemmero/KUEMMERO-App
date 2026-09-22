@@ -347,7 +347,8 @@ private fun ladeAuftraege(context: Context): List<Auftrag> {
             o.optLong("arbeitsEnde", 0L),
             o.optLong("arbeitsSekunden", 0L),
             o.optBoolean("arbeitszeitUebernommen", false),
-            o.optDouble("erstellungskosten", 0.0)
+            o.optDouble("erstellungskosten", 0.0),
+            o.optString("leistungsdatum", "")
         )
     }
 }
@@ -638,7 +639,10 @@ private fun erstellePdf(
     c.drawText("Gesamtsumme: ${euro(gesamt)}", 40f, if (erstellungskosten > 0.0) 573f else 548f, p)
     p.textSize = 11f
     val kvHinweisY = if (erstellungskosten > 0.0) 603f else 578f
-    c.drawText("Gemäß § 19 UStG wird keine Umsatzsteuer berechnet.", 40f, kvHinweisY, p)
+    val kleinunternehmer = prefs.getBoolean(KLEINUNTERNEHMER_KEY, true)
+    if (kleinunternehmer) {
+        c.drawText("Gemäß § 19 UStG wird keine Umsatzsteuer berechnet.", 40f, kvHinweisY, p)
+    }
     val unterschriftTitelY = if (dokumentTitel.contains("KOSTENVORANSCHLAG", ignoreCase = true) && erstellungskosten > 0.0) 650f else 628f
     if (dokumentTitel.contains("KOSTENVORANSCHLAG", ignoreCase = true) && erstellungskosten > 0.0) {
         p.textSize = 11f
@@ -723,7 +727,7 @@ private fun erstelleRechnungPdf(
     c.drawText("Rechnungsnummer: $nummer", 40f, 270f, p)
     c.drawText("Rechnungsdatum: $rechnungsdatum", 40f, 290f, p)
     c.drawText("Fällig am: $faelligAm", 40f, 310f, p)
-    c.drawText("Steuer-/USt-ID/KU-IdNr.: ${steuernummer.ifBlank { "BITTE IN MEHR EINTRAGEN" }}", 40f, 330f, p)
+    c.drawText("Steuer-/USt-ID/KU-IdNr.: ${steuernummer.ifBlank { "BITTE EINTRAGEN" }}", 40f, 330f, p)
     c.drawText("Leistungsdatum: ${leistungsdatum.ifBlank { rechnungsdatum }}", 40f, 350f, p)
     c.drawText("Kunde: $kunde", 40f, 380f, p)
     c.drawText("Adresse: $strasse", 40f, 400f, p)
@@ -753,8 +757,11 @@ private fun erstelleRechnungPdf(
     p.textSize = 18f
     c.drawText("Gesamtsumme: ${euro(gesamt)}", 40f, rechnungY + 40f, p)
     p.textSize = 11f
-    c.drawText("Steuerbefreiung für Kleinunternehmer gemäß § 19 UStG.", 40f, rechnungY + 68f, p)
-    c.drawText("Es wird keine Umsatzsteuer berechnet.", 40f, rechnungY + 83f, p)
+    val kleinunternehmer = prefs.getBoolean(KLEINUNTERNEHMER_KEY, true)
+    if (kleinunternehmer) {
+        c.drawText("Steuerbefreiung für Kleinunternehmer gemäß § 19 UStG.", 40f, rechnungY + 68f, p)
+        c.drawText("Es wird keine Umsatzsteuer berechnet.", 40f, rechnungY + 83f, p)
+    }
     c.drawText("Bitte überweisen Sie den Rechnungsbetrag bis zum $faelligAm.", 40f, rechnungY + 105f, p)
     c.drawText("Vielen Dank für Ihr Vertrauen.", 40f, rechnungY + 130f, p)
     pdf.finishPage(page)
@@ -1028,7 +1035,7 @@ private fun druckeRechnungPdf(context: Context, auftrag: Auftrag) {
             pdf = erstelleRechnungPdf(
                 context,
                 nummer, rechnungsdatum, faelligAm,
-                auftrag.terminDatum.ifBlank { auftrag.datum },
+                auftrag.leistungsdatum.ifBlank { auftrag.terminDatum.ifBlank { auftrag.datum } },
                 auftrag.kunde, auftrag.kundenStrasse, auftrag.kundenOrt, auftrag.leistung,
                 auftrag.stunden, auftrag.material, auftrag.fahrt, auftrag.stundensatz,
                 auftrag.unterschriftPfad, auftrag.unterschriftDatum, auftrag.fotosVorher, auftrag.fotosNachher, auftrag.erstellungskosten
@@ -1662,6 +1669,20 @@ fun KuemmeroApp() {
     var sicherungBestaetigung by remember { mutableStateOf(false) }
     var abschlusspruefungIndex by remember { mutableStateOf<Int?>(null) }
     val backupScope = rememberCoroutineScope()
+
+    // Wenn eine feste Backup-Datei eingerichtet wurde, werden Änderungen nach kurzer Ruhezeit
+    // automatisch in diese Datei gesichert. Dadurch bleibt das Backup aktuell, ohne dass
+    // der Benutzer nach jeder Änderung manuell sichern muss.
+    LaunchedEffect(
+        auftraege, kunden, kostenvoranschlaege, kleinunternehmer, stundensatz,
+        unternehmerName, unternehmerStrasse, unternehmerPlzOrt,
+        unternehmerTelefon, unternehmerEmail, steuernummer
+    ) {
+        delay(500)
+        withContext(Dispatchers.IO) {
+            sichereBackupAutomatisch(context)
+        }
+    }
 
     val createBackup = rememberLauncherForActivityResult(
         ActivityResultContracts.CreateDocument("application/json")
@@ -2388,6 +2409,12 @@ fun KuemmeroApp() {
                 TextButton(onClick = {
                     if (a == null) {
                         berichtigungFuerIndex = null
+                    } else if (a.berichtigungsnummer.isNotBlank()) {
+                        android.widget.Toast.makeText(
+                            context,
+                            "Für diese Rechnung existiert bereits die Berichtigungsrechnung ${a.berichtigungsnummer}.",
+                            android.widget.Toast.LENGTH_LONG
+                        ).show()
                     } else {
                         val pruefung = rechnungPruefung(context, a)
                         if (pruefung != null) {
