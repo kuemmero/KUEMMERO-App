@@ -168,6 +168,11 @@ data class Auftrag(
     val mahnung1Gebuehr: Double = 0.0,
     val mahnung1Text: String = "",
     val mahnung1Erstellt: Boolean = false,
+    val mahnung2Datum: String = "",
+    val mahnung2Frist: String = "",
+    val mahnung2Gebuehr: Double = 0.0,
+    val mahnung2Text: String = "",
+    val mahnung2Erstellt: Boolean = false,
     val arbeitsStart: Long = 0L,
     val arbeitsEnde: Long = 0L,
     val arbeitsSekunden: Long = 0L,
@@ -325,6 +330,11 @@ private fun ladeAuftraege(context: Context): List<Auftrag> {
             o.optDouble("mahnung1Gebuehr", 0.0),
             o.optString("mahnung1Text", ""),
             o.optBoolean("mahnung1Erstellt", false),
+            o.optString("mahnung2Datum", ""),
+            o.optString("mahnung2Frist", ""),
+            o.optDouble("mahnung2Gebuehr", 0.0),
+            o.optString("mahnung2Text", ""),
+            o.optBoolean("mahnung2Erstellt", false),
             o.optLong("arbeitsStart", 0L),
             o.optLong("arbeitsEnde", 0L),
             o.optLong("arbeitsSekunden", 0L),
@@ -407,6 +417,11 @@ private fun speichereAuftraege(context: Context, liste: List<Auftrag>) {
             put("mahnung1Gebuehr", a.mahnung1Gebuehr)
             put("mahnung1Text", a.mahnung1Text)
             put("mahnung1Erstellt", a.mahnung1Erstellt)
+            put("mahnung2Datum", a.mahnung2Datum)
+            put("mahnung2Frist", a.mahnung2Frist)
+            put("mahnung2Gebuehr", a.mahnung2Gebuehr)
+            put("mahnung2Text", a.mahnung2Text)
+            put("mahnung2Erstellt", a.mahnung2Erstellt)
             put("arbeitsStart", a.arbeitsStart)
             put("arbeitsEnde", a.arbeitsEnde)
             put("arbeitsSekunden", a.arbeitsSekunden)
@@ -843,6 +858,93 @@ private fun erstelleMahnung1Pdf(
     return pdf
 }
 
+private fun erstelleMahnung2Pdf(
+    context: Context,
+    auftrag: Auftrag,
+    mahnungDatum: String,
+    zahlungsfrist: String,
+    mahngebuehr: Double,
+    eigenerText: String
+): PdfDocument {
+    val pdf = PdfDocument()
+    val page = pdf.startPage(PdfDocument.PageInfo.Builder(595, 842, 1).create())
+    val c = page.canvas
+    val p = Paint(Paint.ANTI_ALIAS_FLAG)
+    val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+    val firmenName = prefs.getString(FIRMENNAME_KEY, "") ?: ""
+    val firmenStrasse = prefs.getString(FIRMENSTRASSE_KEY, "") ?: ""
+    val firmenPlzOrt = prefs.getString(FIRMENPLZORT_KEY, "") ?: ""
+    val firmenTelefon = prefs.getString(FIRMENTELEFON_KEY, "") ?: ""
+    val firmenEmail = prefs.getString(FIRMENEMAIL_KEY, "") ?: ""
+
+    p.textSize = 16f
+    p.isFakeBoldText = true
+    c.drawText(firmenName.ifBlank { "KÜMMERO" }, 40f, 55f, p)
+    p.isFakeBoldText = false
+    p.textSize = 10f
+    c.drawText(firmenStrasse, 40f, 75f, p)
+    c.drawText(firmenPlzOrt, 40f, 90f, p)
+    if (firmenTelefon.isNotBlank()) c.drawText("Telefon: $firmenTelefon", 40f, 105f, p)
+    if (firmenEmail.isNotBlank()) c.drawText("E-Mail: $firmenEmail", 40f, 120f, p)
+
+    p.textSize = 20f
+    p.isFakeBoldText = true
+    c.drawText("2. MAHNUNG", 40f, 170f, p)
+    p.isFakeBoldText = false
+    p.textSize = 11f
+    c.drawText("Mahndatum: $mahnungDatum", 40f, 195f, p)
+    c.drawText("Rechnungsnummer: ${auftrag.rechnungsnummer}", 40f, 215f, p)
+    c.drawText("Rechnungsdatum: ${auftrag.rechnungsdatum}", 40f, 235f, p)
+    c.drawText("Ursprünglich fällig am: ${auftrag.faelligAm}", 40f, 255f, p)
+    c.drawText("Kunde: ${auftrag.kunde}", 40f, 285f, p)
+    c.drawText("Adresse: ${auftrag.kundenStrasse}", 40f, 305f, p)
+    c.drawText("PLZ und Ort: ${auftrag.kundenOrt}", 40f, 325f, p)
+
+    val rechnungsbetrag = gesamtbetrag(auftrag.stunden, auftrag.material, auftrag.fahrt, auftrag.stundensatz, auftrag.erstellungskosten)
+    val gesamt = runde2(rechnungsbetrag + mahngebuehr)
+    p.textSize = 13f
+    p.isFakeBoldText = true
+    c.drawText("Offener Rechnungsbetrag: ${euro(rechnungsbetrag)}", 40f, 365f, p)
+    var y = 390f
+    if (mahngebuehr > 0.0) {
+        c.drawText("Mahngebühr: ${euro(mahngebuehr)}", 40f, y, p)
+        y += 25f
+        c.drawText("Gesamt zu zahlen: ${euro(gesamt)}", 40f, y, p)
+        y += 40f
+    } else {
+        c.drawText("Gesamt zu zahlen: ${euro(gesamt)}", 40f, y, p)
+        y += 40f
+    }
+    p.isFakeBoldText = false
+    p.textSize = 11f
+
+    val text = eigenerText.ifBlank {
+        "Zu unserer Rechnung ${auftrag.rechnungsnummer} ist bisher kein Zahlungseingang festgestellt worden. Bitte begleichen Sie den offenen Betrag spätestens bis zum $zahlungsfrist."
+    }
+    val words = text.split(Regex("\\s+"))
+    var line = ""
+    for (word in words) {
+        val test = if (line.isBlank()) word else "$line $word"
+        if (p.measureText(test) > 510f) {
+            c.drawText(line, 40f, y, p)
+            y += 17f
+            line = word
+        } else line = test
+    }
+    if (line.isNotBlank()) {
+        c.drawText(line, 40f, y, p)
+        y += 17f
+    }
+    y += 18f
+    c.drawText("Neue Zahlungsfrist: $zahlungsfrist", 40f, y, p)
+    y += 30f
+    c.drawText("Mit freundlichen Grüßen", 40f, y, p)
+    y += 18f
+    c.drawText(firmenName.ifBlank { "KÜMMERO" }, 40f, y, p)
+    pdf.finishPage(page)
+    return pdf
+}
+
 private fun druckeRechnungPdf(context: Context, auftrag: Auftrag) {
     val printManager = context.getSystemService(Context.PRINT_SERVICE) as PrintManager
     val nummer = auftrag.rechnungsnummer.ifBlank { naechsteRechnungsnummer(context) }
@@ -1015,6 +1117,16 @@ private fun rechnungIstUeberfaellig(auftrag: Auftrag, heute: String): Boolean {
         val faellig = format.parse(auftrag.faelligAm)?.time ?: return false
         val heuteZeit = format.parse(heute)?.time ?: return false
         faellig < heuteZeit
+    } catch (_: Exception) { false }
+}
+
+private fun mahnung1IstUeberfaellig(auftrag: Auftrag, heute: String): Boolean {
+    if (!auftrag.mahnung1Erstellt || auftrag.mahnung1Frist.isBlank()) return false
+    return try {
+        val format = SimpleDateFormat("dd.MM.yyyy", Locale.GERMANY)
+        val frist = format.parse(auftrag.mahnung1Frist)?.time ?: return false
+        val heuteZeit = format.parse(heute)?.time ?: return false
+        frist < heuteZeit
     } catch (_: Exception) { false }
 }
 
@@ -1285,6 +1397,11 @@ fun KuemmeroApp() {
     var mahnung1Frist by remember { mutableStateOf("") }
     var mahnung1Gebuehr by remember { mutableStateOf("") }
     var mahnung1Text by remember { mutableStateOf("") }
+    var mahnung2Index by remember { mutableStateOf<Int?>(null) }
+    var mahnung2Datum by remember { mutableStateOf("") }
+    var mahnung2Frist by remember { mutableStateOf("") }
+    var mahnung2Gebuehr by remember { mutableStateOf("") }
+    var mahnung2Text by remember { mutableStateOf("") }
 
     var mahnungEinstellungenOffen by remember { mutableStateOf(false) }
     val mahnungPrefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
@@ -1329,6 +1446,35 @@ fun KuemmeroApp() {
             }
         }
         mahnung1Index = null
+    }
+
+    val mahnung2Launcher = rememberLauncherForActivityResult(
+        ActivityResultContracts.CreateDocument("application/pdf")
+    ) { uri ->
+        uri?.let {
+            val index = mahnung2Index
+            val a = index?.let { i -> auftraege.getOrNull(i) }
+            if (a != null) {
+                try {
+                    val pdf = erstelleMahnung2Pdf(context, a, mahnung2Datum.trim(), mahnung2Frist.trim(), zahl(mahnung2Gebuehr), mahnung2Text.trim())
+                    context.contentResolver.openOutputStream(it)?.use { out -> pdf.writeTo(out) } ?: throw Exception("Datei konnte nicht geöffnet werden")
+                    pdf.close()
+                    val aktualisiert = a.copy(
+                        mahnung2Datum = mahnung2Datum.trim(),
+                        mahnung2Frist = mahnung2Frist.trim(),
+                        mahnung2Gebuehr = zahl(mahnung2Gebuehr),
+                        mahnung2Text = mahnung2Text.trim(),
+                        mahnung2Erstellt = true
+                    )
+                    auftraege = auftraege.toMutableList().apply { set(index, aktualisiert) }
+                    speichereAuftraege(context, auftraege)
+                    android.widget.Toast.makeText(context, "2. Mahnung gespeichert.", 0).show()
+                } catch (_: Exception) {
+                    android.widget.Toast.makeText(context, "2. Mahnung konnte nicht erstellt werden.", 1).show()
+                }
+            }
+        }
+        mahnung2Index = null
     }
 
     val rechnungScanLauncher = rememberLauncherForActivityResult(
@@ -1911,6 +2057,41 @@ fun KuemmeroApp() {
         )
     }
 
+    if (mahnung2Index != null) {
+        AlertDialog(
+            onDismissRequest = { mahnung2Index = null },
+            title = { Text("2. Mahnung erstellen") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    val index = mahnung2Index
+                    val a = index?.let { auftraege.getOrNull(it) }
+                    if (a != null) {
+                        Text("Kunde: ${a.kunde}", fontWeight = FontWeight.Bold, color = KuemmeroGreen)
+                        Text("Rechnung: ${a.rechnungsnummer}")
+                        OutlinedTextField(mahnung2Datum, { mahnung2Datum = it }, label = { Text("Mahndatum") }, singleLine = true, colors = feldFarben, modifier = Modifier.fillMaxWidth())
+                        OutlinedTextField(mahnung2Frist, { mahnung2Frist = it }, label = { Text("Neue Zahlungsfrist") }, singleLine = true, colors = feldFarben, modifier = Modifier.fillMaxWidth())
+                        OutlinedTextField(mahnung2Gebuehr, { mahnung2Gebuehr = it }, label = { Text("Mahngebühr (€)") }, singleLine = true, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal), colors = feldFarben, modifier = Modifier.fillMaxWidth())
+                        OutlinedTextField(mahnung2Text, { mahnung2Text = it }, label = { Text("Mahntext (änderbar)") }, minLines = 4, maxLines = 7, colors = feldFarben, modifier = Modifier.fillMaxWidth())
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    val index = mahnung2Index
+                    val a = index?.let { auftraege.getOrNull(it) }
+                    if (a == null) mahnung2Index = null
+                    else if (mahnung2Datum.isBlank() || mahnung2Frist.isBlank()) {
+                        android.widget.Toast.makeText(context, "Bitte Mahndatum und Zahlungsfrist eingeben.", 0).show()
+                    } else {
+                        val name = a.kunde.ifBlank { "Kunde" }.replace("/", "-")
+                        mahnung2Launcher.launch("KÜMMERO-2-Mahnung-${a.rechnungsnummer}-$name.pdf")
+                    }
+                }) { Text("PDF erstellen") }
+            },
+            dismissButton = { TextButton(onClick = { mahnung2Index = null }) { Text("Abbrechen") } }
+        )
+    }
+
     if (rechnungNummerEditIndex != null) {
         AlertDialog(
             onDismissRequest = { rechnungNummerEditIndex = null },
@@ -2229,11 +2410,26 @@ fun KuemmeroApp() {
                     val kundenKVs = kostenvoranschlaege.filter { it.kunde.equals(name, ignoreCase = true) }
                     Text("Kostenvoranschläge: ${kundenKVs.size}", fontWeight = FontWeight.Bold)
                     val rechnungen = kundenAuftraege.filter { it.rechnungsnummer.isNotBlank() }
+                    val mahnungen = rechnungen.filter { it.mahnung1Erstellt || it.mahnung2Erstellt }
                     Text("Rechnungen: ${rechnungen.size}", fontWeight = FontWeight.Bold)
+                    Text(
+                        when {
+                            mahnungen.any { it.mahnung2Erstellt } -> "Mahnung: 2. Mahnung vorhanden"
+                            mahnungen.any { it.mahnung1Erstellt } -> "Mahnung: 1. Mahnung vorhanden"
+                            else -> "Mahnung: keine"
+                        },
+                        color = if (mahnungen.any { it.mahnung1Erstellt || it.mahnung2Erstellt }) KuemmeroError else KuemmeroGreen,
+                        fontWeight = FontWeight.Bold
+                    )
                     rechnungen.takeLast(5).reversed().forEach { r ->
+                        val mahnstatus = when {
+                            r.mahnung2Erstellt -> "2. Mahnung"
+                            r.mahnung1Erstellt -> "1. Mahnung"
+                            else -> "keine Mahnung"
+                        }
                         Text(
-                            "${r.rechnungsnummer} · ${euro(gesamtbetrag(r.stunden, r.material, r.fahrt, r.stundensatz, r.erstellungskosten))} · ${if (r.zahlungsstatus == "Bezahlt") "Bezahlt" else "Offen"}",
-                            color = if (r.zahlungsstatus == "Bezahlt") KuemmeroGreen else KuemmeroError,
+                            "${r.rechnungsnummer} · ${euro(gesamtbetrag(r.stunden, r.material, r.fahrt, r.stundensatz, r.erstellungskosten))} · ${if (r.zahlungsstatus == "Bezahlt") "Bezahlt" else "Offen"} · $mahnstatus",
+                            color = if (r.zahlungsstatus == "Bezahlt") KuemmeroGreen else if (r.mahnung2Erstellt || r.mahnung1Erstellt) KuemmeroError else KuemmeroText,
                             style = MaterialTheme.typography.bodySmall
                         )
                     }
@@ -2791,6 +2987,11 @@ fun KuemmeroApp() {
                                     bearbeiteIndex?.let { auftraege.getOrNull(it)?.mahnung1Gebuehr } ?: 0.0,
                                     bearbeiteIndex?.let { auftraege.getOrNull(it)?.mahnung1Text } ?: "",
                                     bearbeiteIndex?.let { auftraege.getOrNull(it)?.mahnung1Erstellt } ?: false,
+                                    bearbeiteIndex?.let { auftraege.getOrNull(it)?.mahnung2Datum } ?: "",
+                                    bearbeiteIndex?.let { auftraege.getOrNull(it)?.mahnung2Frist } ?: "",
+                                    bearbeiteIndex?.let { auftraege.getOrNull(it)?.mahnung2Gebuehr } ?: 0.0,
+                                    bearbeiteIndex?.let { auftraege.getOrNull(it)?.mahnung2Text } ?: "",
+                                    bearbeiteIndex?.let { auftraege.getOrNull(it)?.mahnung2Erstellt } ?: false,
                                     bearbeiteIndex?.let { auftraege.getOrNull(it)?.arbeitsStart } ?: 0L,
                                     bearbeiteIndex?.let { auftraege.getOrNull(it)?.arbeitsEnde } ?: 0L,
                                     bearbeiteIndex?.let { auftraege.getOrNull(it)?.arbeitsSekunden } ?: 0L,
@@ -4097,7 +4298,7 @@ fun KuemmeroApp() {
                                         fontWeight = FontWeight.Bold
                                     )
                                     Text(
-                                        "Eine Mahnung wird niemals automatisch erstellt. Du entscheidest selbst, wann die 1. Mahnung erstellt wird.",
+                                        "Mahnungen werden niemals automatisch erstellt. Du entscheidest selbst, wann die 1. oder 2. Mahnung erstellt wird.",
                                         color = KuemmeroText,
                                         style = MaterialTheme.typography.bodySmall
                                     )
@@ -4136,30 +4337,72 @@ fun KuemmeroApp() {
 
                                             if (rechnungIstUeberfaellig(a, heuteText)) {
                                                 Text("⚠ Überfällig – Zahlung offen", color = KuemmeroError, fontWeight = FontWeight.Bold)
-                                                if (a.mahnung1Erstellt) {
+                                                if (!a.mahnung1Erstellt) {
+                                                    Text("Noch keine Mahnung erstellt.", color = KuemmeroText)
+                                                    Button(
+                                                        onClick = {
+                                                            mahnung1Index = index
+                                                            mahnung1Datum = heuteText
+                                                            mahnung1Frist = standardMahnung1Frist(context)
+                                                            mahnung1Gebuehr = mahnungEinstellungGebuehr
+                                                            mahnung1Text = mahnungEinstellungText
+                                                        },
+                                                        modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp),
+                                                        shape = RoundedCornerShape(26.dp),
+                                                        colors = ButtonDefaults.buttonColors(containerColor = KuemmeroError)
+                                                    ) { Text("1. Mahnung erstellen", fontWeight = FontWeight.Bold) }
+                                                } else {
                                                     Text(
-                                                        "1. Mahnung erstellt · Mahndatum: ${a.mahnung1Datum.ifBlank { "nicht angegeben" }} · neue Frist: ${a.mahnung1Frist.ifBlank { "nicht angegeben" }}",
-                                                        color = KuemmeroGreen,
-                                                        fontWeight = FontWeight.SemiBold
+                                                        "1. Mahnung erstellt · ${a.mahnung1Datum.ifBlank { "ohne Datum" }} · Frist: ${a.mahnung1Frist.ifBlank { "ohne Frist" }}",
+                                                        color = KuemmeroGreen, fontWeight = FontWeight.SemiBold
                                                     )
-                                                }
-                                                Button(
-                                                    onClick = {
-                                                        mahnung1Index = index
-                                                        mahnung1Datum = a.mahnung1Datum.ifBlank { heuteText }
-                                                        mahnung1Frist = a.mahnung1Frist.ifBlank { standardMahnung1Frist(context) }
-                                                        mahnung1Gebuehr = if (a.mahnung1Gebuehr > 0.0) {
-                                                            String.format(Locale.GERMANY, "%.2f", a.mahnung1Gebuehr)
-                                                        } else {
-                                                            mahnungEinstellungGebuehr
-                                                        }
-                                                        mahnung1Text = a.mahnung1Text.ifBlank { mahnungEinstellungText }
-                                                    },
-                                                    modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp),
-                                                    shape = RoundedCornerShape(26.dp),
-                                                    colors = ButtonDefaults.buttonColors(containerColor = KuemmeroError)
-                                                ) {
-                                                    Text(if (a.mahnung1Erstellt) "1. Mahnung bearbeiten / neu erstellen" else "1. Mahnung erstellen", fontWeight = FontWeight.Bold)
+                                                    Button(
+                                                        onClick = {
+                                                            mahnung1Index = index
+                                                            mahnung1Datum = a.mahnung1Datum.ifBlank { heuteText }
+                                                            mahnung1Frist = a.mahnung1Frist.ifBlank { standardMahnung1Frist(context) }
+                                                            mahnung1Gebuehr = if (a.mahnung1Gebuehr > 0.0) String.format(Locale.GERMANY, "%.2f", a.mahnung1Gebuehr) else mahnungEinstellungGebuehr
+                                                            mahnung1Text = a.mahnung1Text.ifBlank { mahnungEinstellungText }
+                                                        },
+                                                        modifier = Modifier.fillMaxWidth().heightIn(min = 50.dp),
+                                                        shape = RoundedCornerShape(25.dp),
+                                                        colors = ButtonDefaults.outlinedButtonColors(contentColor = KuemmeroGreen)
+                                                    ) { Text("1. Mahnung bearbeiten / neu erstellen") }
+                                                    if (a.mahnung2Erstellt) {
+                                                        Text(
+                                                            "2. Mahnung erstellt · ${a.mahnung2Datum.ifBlank { "ohne Datum" }} · Frist: ${a.mahnung2Frist.ifBlank { "ohne Frist" }}",
+                                                            color = KuemmeroError, fontWeight = FontWeight.Bold
+                                                        )
+                                                        OutlinedButton(
+                                                            onClick = {
+                                                                mahnung2Index = index
+                                                                mahnung2Datum = a.mahnung2Datum.ifBlank { heuteText }
+                                                                mahnung2Frist = a.mahnung2Frist.ifBlank { standardMahnung1Frist(context) }
+                                                                mahnung2Gebuehr = if (a.mahnung2Gebuehr > 0.0) String.format(Locale.GERMANY, "%.2f", a.mahnung2Gebuehr) else mahnungEinstellungGebuehr
+                                                                mahnung2Text = a.mahnung2Text.ifBlank { "Bitte begleichen Sie den weiterhin offenen Rechnungsbetrag innerhalb der angegebenen Zahlungsfrist." }
+                                                            },
+                                                            modifier = Modifier.fillMaxWidth().heightIn(min = 50.dp),
+                                                            shape = RoundedCornerShape(25.dp),
+                                                            border = BorderStroke(2.dp, KuemmeroError),
+                                                            colors = ButtonDefaults.outlinedButtonColors(contentColor = KuemmeroError)
+                                                        ) { Text("2. Mahnung bearbeiten / neu erstellen") }
+                                                    } else if (mahnung1IstUeberfaellig(a, heuteText)) {
+                                                        Text("Zahlungsfrist der 1. Mahnung abgelaufen – 2. Mahnung möglich.", color = KuemmeroError, fontWeight = FontWeight.SemiBold)
+                                                        Button(
+                                                            onClick = {
+                                                                mahnung2Index = index
+                                                                mahnung2Datum = heuteText
+                                                                mahnung2Frist = standardMahnung1Frist(context)
+                                                                mahnung2Gebuehr = mahnungEinstellungGebuehr
+                                                                mahnung2Text = "Bitte begleichen Sie den weiterhin offenen Rechnungsbetrag innerhalb der angegebenen Zahlungsfrist."
+                                                            },
+                                                            modifier = Modifier.fillMaxWidth().heightIn(min = 50.dp),
+                                                            shape = RoundedCornerShape(25.dp),
+                                                            colors = ButtonDefaults.buttonColors(containerColor = KuemmeroError)
+                                                        ) { Text("2. Mahnung erstellen", fontWeight = FontWeight.Bold) }
+                                                    } else {
+                                                        Text("1. Mahnung läuft noch bis ${a.mahnung1Frist}.", color = KuemmeroText)
+                                                    }
                                                 }
                                             } else {
                                                 Text("Noch nicht überfällig – keine Mahnung erforderlich.", color = KuemmeroGreen, fontWeight = FontWeight.SemiBold)
