@@ -1455,9 +1455,7 @@ fun KuemmeroApp() {
                         val neueAdresse = neuerKundenAdresse.trim()
                         val neuerOrt = neuerKundenOrt.trim()
                         val bereitsVorhanden = kunden.any {
-                            it.name.equals(neuerName, ignoreCase = true) &&
-                                it.adresse.equals(neueAdresse, ignoreCase = true) &&
-                                it.ort.equals(neuerOrt, ignoreCase = true)
+                            it.name.trim().equals(neuerName, ignoreCase = true)
                         }
                         if (bereitsVorhanden) {
                             spieleBestaetigungston(context)
