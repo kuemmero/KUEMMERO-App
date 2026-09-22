@@ -1286,12 +1286,25 @@ fun KuemmeroApp() {
     val offeneAuftraege = auftraege.count { it.status != "Abgerechnet" }
     val offeneZahlungen = auftraege.filter { it.zahlungsstatus != "Bezahlt" }
     val offeneZahlungSumme = offeneZahlungen.sumOf { gesamtbetrag(it.stunden, it.material, it.fahrt, it.stundensatz) }
-    val naechsteTermine = auftraege.filter { it.terminDatum.isNotBlank() }
+    val heuteStart = try {
+        datumFormat.parse(heuteText)?.time ?: 0L
+    } catch (_: Exception) {
+        0L
+    }
+    val naechsteTermine = auftraege
+        .filter { it.terminDatum.isNotBlank() }
+        .filter { termin ->
+            try {
+                (datumFormat.parse(termin.terminDatum)?.time ?: Long.MAX_VALUE) >= heuteStart
+            } catch (_: Exception) {
+                false
+            }
+        }
         .sortedWith(compareBy<Auftrag> {
             try { datumFormat.parse(it.terminDatum)?.time ?: Long.MAX_VALUE } catch (_: Exception) { Long.MAX_VALUE }
         }.thenBy { it.terminUhrzeit })
         .take(8)
-    val naechsterTermin = naechsteTermine.firstOrNull { it.terminDatum != heuteText }
+    val naechsterTermin = naechsteTermine.firstOrNull()
     val abgearbeiteteAuftraege = auftraege.count { it.status == "Erledigt" || it.status == "Abgerechnet" }
 
     if (sicherungBestaetigung) {
