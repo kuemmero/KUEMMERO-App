@@ -198,6 +198,7 @@ private const val STEUERNUMMER_KEY = "steuernummer"
 private const val MAHNUNG1_FRIST_TAGE_KEY = "mahnung1_frist_tage"
 private const val MAHNUNG1_GEBUEHR_KEY = "mahnung1_gebuehr"
 private const val MAHNUNG1_TEXT_KEY = "mahnung1_text"
+private const val MAHNUNG_TESTMODUS_KEY = "mahnung_testmodus"
 private fun standardMahnung1Frist(context: Context, basisDatum: Date = Date()): String {
     val tage = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
         .getInt(MAHNUNG1_FRIST_TAGE_KEY, 7)
@@ -1417,7 +1418,49 @@ fun KuemmeroApp() {
             )
         )
     }
+    val testHeuteText = SimpleDateFormat("dd.MM.yyyy", Locale.GERMANY).format(Date())
     var mahnungEinstellungText by remember { mutableStateOf(standardMahnung1Text(context)) }
+    var mahnungTestmodus by remember { mutableStateOf(mahnungPrefs.getBoolean(MAHNUNG_TESTMODUS_KEY, false)) }
+    var testMahnung1DialogOffen by remember { mutableStateOf(false) }
+    var testMahnungLoeschBestaetigung by remember { mutableStateOf(false) }
+    var testMahnung1Erstellt by remember { mutableStateOf(false) }
+    var testMahnung1Datum by remember { mutableStateOf(testHeuteText) }
+    var testMahnung1Frist by remember { mutableStateOf(standardMahnung1Frist(context)) }
+    var testMahnung1Gebuehr by remember { mutableStateOf(mahnungEinstellungGebuehr) }
+    var testMahnung1Text by remember { mutableStateOf(mahnungEinstellungText) }
+
+    val testMahnungAuftrag = Auftrag(
+        nummer = "TEST-AUFTRAG",
+        datum = testHeuteText,
+        kunde = "TESTKUNDE – NICHT ECHT",
+        kundenStrasse = "Teststraße 1",
+        kundenOrt = "58675 Hemer",
+        leistung = "Testleistung Mahnung",
+        stunden = 10.0,
+        material = 0.0,
+        fahrt = 0.0,
+        stundensatz = 42.0,
+        rechnungsnummer = "TEST-RECHNUNG",
+        rechnungsdatum = testHeuteText,
+        faelligAm = testHeuteText
+    )
+
+    val testMahnungLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.CreateDocument("application/pdf")
+    ) { uri ->
+        uri?.let {
+            try {
+                val pdf = erstelleMahnung1Pdf(context, testMahnungAuftrag, testMahnung1Datum.trim(), testMahnung1Frist.trim(), zahl(testMahnung1Gebuehr), testMahnung1Text.trim())
+                context.contentResolver.openOutputStream(it)?.use { out -> pdf.writeTo(out) } ?: throw Exception("Datei konnte nicht geöffnet werden")
+                pdf.close()
+                testMahnung1Erstellt = true
+                testMahnung1DialogOffen = false
+                android.widget.Toast.makeText(context, "Test-Mahnung erstellt – echte Rechnungsdaten wurden nicht verändert.", android.widget.Toast.LENGTH_LONG).show()
+            } catch (_: Exception) {
+                android.widget.Toast.makeText(context, "Test-Mahnung konnte nicht erstellt werden.", android.widget.Toast.LENGTH_LONG).show()
+            }
+        }
+    }
 
     val mahnung1Launcher = rememberLauncherForActivityResult(
         ActivityResultContracts.CreateDocument("application/pdf")
@@ -1971,6 +2014,43 @@ fun KuemmeroApp() {
                         "Diese Werte sind nur Voreinstellungen. Bei jeder einzelnen Mahnung kannst du sie trotzdem ändern.",
                         color = KuemmeroText
                     )
+                    if (mahnungEinstellungFristTage.toIntOrNull()?.coerceAtLeast(0) == 0) {
+                        Card(
+                            modifier = Modifier.fillMaxWidth(),
+                            colors = CardDefaults.cardColors(containerColor = KuemmeroMint),
+                            border = BorderStroke(2.dp, KuemmeroGreen),
+                            shape = RoundedCornerShape(14.dp)
+                        ) {
+                            Text(
+                                "0 Tage eingestellt – die neue Zahlungsfrist endet am Mahntag.",
+                                modifier = Modifier.padding(12.dp),
+                                color = KuemmeroGreen,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+                    }
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Column(Modifier.weight(1f)) {
+                            Text("Testmodus für Mahnungen", fontWeight = FontWeight.Bold, color = KuemmeroGreen)
+                            Text(
+                                "Nur aktivieren, wenn du Erstellen → Ändern → Löschen testen möchtest. Testdaten verändern keine echte Rechnung.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = KuemmeroText
+                            )
+                        }
+                        Switch(
+                            checked = mahnungTestmodus,
+                            onCheckedChange = {
+                                mahnungTestmodus = it
+                                mahnungPrefs.edit().putBoolean(MAHNUNG_TESTMODUS_KEY, it).apply()
+                                if (!it) testMahnung1Erstellt = false
+                            }
+                        )
+                    }
                     OutlinedTextField(
                         value = mahnungEinstellungFristTage,
                         onValueChange = { mahnungEinstellungFristTage = it },
@@ -2010,6 +2090,7 @@ fun KuemmeroApp() {
                         .putInt(MAHNUNG1_FRIST_TAGE_KEY, tage)
                         .putFloat(MAHNUNG1_GEBUEHR_KEY, gebuehr.toFloat())
                         .putString(MAHNUNG1_TEXT_KEY, text)
+                        .putBoolean(MAHNUNG_TESTMODUS_KEY, mahnungTestmodus)
                         .apply()
                     mahnungEinstellungFristTage = tage.toString()
                     mahnungEinstellungGebuehr = String.format(Locale.GERMANY, "%.2f", gebuehr)
@@ -2021,6 +2102,56 @@ fun KuemmeroApp() {
             dismissButton = {
                 TextButton(onClick = { mahnungEinstellungenOffen = false }) { Text("Abbrechen") }
             }
+        )
+    }
+
+    if (testMahnung1DialogOffen && mahnungTestmodus) {
+        AlertDialog(
+            onDismissRequest = { testMahnung1DialogOffen = false },
+            title = { Text("Test-Mahnung erstellen / ändern") },
+            text = {
+                Column(
+                    modifier = Modifier.fillMaxWidth().heightIn(max = 520.dp),
+                    verticalArrangement = Arrangement.spacedBy(9.dp)
+                ) {
+                    Text("TESTDATEN – keine echte Rechnung wird verändert.", color = KuemmeroGreen, fontWeight = FontWeight.Bold)
+                    Text("Rechnung: TEST-RECHNUNG · Kunde: TESTKUNDE – NICHT ECHT")
+                    OutlinedTextField(testMahnung1Datum, { testMahnung1Datum = it }, label = { Text("Mahndatum") }, singleLine = true, colors = feldFarben, modifier = Modifier.fillMaxWidth())
+                    OutlinedTextField(testMahnung1Frist, { testMahnung1Frist = it }, label = { Text("Neue Zahlungsfrist") }, singleLine = true, colors = feldFarben, modifier = Modifier.fillMaxWidth())
+                    OutlinedTextField(testMahnung1Gebuehr, { testMahnung1Gebuehr = it }, label = { Text("Mahngebühr (€)") }, singleLine = true, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal), colors = feldFarben, modifier = Modifier.fillMaxWidth())
+                    OutlinedTextField(testMahnung1Text, { testMahnung1Text = it }, label = { Text("Mahntext (änderbar)") }, minLines = 4, maxLines = 7, colors = feldFarben, modifier = Modifier.fillMaxWidth())
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    if (testMahnung1Datum.isBlank() || testMahnung1Frist.isBlank()) {
+                        android.widget.Toast.makeText(context, "Bitte Mahndatum und Zahlungsfrist eingeben.", android.widget.Toast.LENGTH_SHORT).show()
+                    } else {
+                        testMahnungLauncher.launch("KÜMMERO-TEST-Mahnung-${testMahnung1Datum.replace('.', '-')}.pdf")
+                    }
+                }) { Text(if (testMahnung1Erstellt) "Test-PDF neu erstellen" else "Test-PDF erstellen") }
+            },
+            dismissButton = { TextButton(onClick = { testMahnung1DialogOffen = false }) { Text("Abbrechen") } }
+        )
+    }
+
+    if (testMahnungLoeschBestaetigung && mahnungTestmodus) {
+        AlertDialog(
+            onDismissRequest = { testMahnungLoeschBestaetigung = false },
+            title = { Text("Test-Mahnung löschen?") },
+            text = { Text("Nur die Test-Mahnung wird entfernt. Echte Rechnungsdaten bleiben unverändert.") },
+            confirmButton = {
+                TextButton(onClick = {
+                    testMahnung1Erstellt = false
+                    testMahnungLoeschBestaetigung = false
+                    testMahnung1Datum = testHeuteText
+                    testMahnung1Frist = standardMahnung1Frist(context)
+                    testMahnung1Gebuehr = mahnungEinstellungGebuehr
+                    testMahnung1Text = mahnungEinstellungText
+                    android.widget.Toast.makeText(context, "Test-Mahnung gelöscht.", android.widget.Toast.LENGTH_SHORT).show()
+                }, colors = ButtonDefaults.textButtonColors(contentColor = KuemmeroError)) { Text("Löschen") }
+            },
+            dismissButton = { TextButton(onClick = { testMahnungLoeschBestaetigung = false }) { Text("Abbrechen") } }
         )
     }
 
@@ -2037,6 +2168,22 @@ fun KuemmeroApp() {
                     OutlinedTextField(mahnung1Datum, { mahnung1Datum = it }, label = { Text("Mahndatum") }, singleLine = true, colors = feldFarben, modifier = Modifier.fillMaxWidth())
                     OutlinedTextField(mahnung1Frist, { mahnung1Frist = it }, label = { Text("Neue Zahlungsfrist") }, singleLine = true, colors = feldFarben, modifier = Modifier.fillMaxWidth())
                     OutlinedTextField(mahnung1Gebuehr, { mahnung1Gebuehr = it }, label = { Text("Mahngebühr (€)") }, singleLine = true, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal), colors = feldFarben, modifier = Modifier.fillMaxWidth())
+                    if (mahnungEinstellungFristTage.toIntOrNull()?.coerceAtLeast(0) == 0) {
+                        Card(
+                            modifier = Modifier.fillMaxWidth(),
+                            colors = CardDefaults.cardColors(containerColor = KuemmeroMint),
+                            border = BorderStroke(1.dp, KuemmeroGreen),
+                            shape = RoundedCornerShape(12.dp)
+                        ) {
+                            Text(
+                                "0 Tage eingestellt – die neue Zahlungsfrist endet am Mahntag.",
+                                modifier = Modifier.padding(10.dp),
+                                color = KuemmeroGreen,
+                                fontWeight = FontWeight.Bold,
+                                style = MaterialTheme.typography.bodySmall
+                            )
+                        }
+                    }
                     OutlinedTextField(mahnung1Text, { mahnung1Text = it }, label = { Text("Mahntext (änderbar)") }, minLines = 4, maxLines = 7, colors = feldFarben, modifier = Modifier.fillMaxWidth())
                 }
             },
@@ -2589,7 +2736,16 @@ fun KuemmeroApp() {
                     ).forEach { (label, iconText, page) ->
                         NavigationBarItem(
                             selected = hauptseite == page,
-                            onClick = { hauptseite = page },
+                            onClick = {
+                                hauptseite = page
+                                if (page == "Aufträge") {
+                                    // Beim Öffnen von „Aufträge“ immer die Übersicht zeigen.
+                                    auftragDetailIndex = null
+                                    auftragFormOffen = false
+                                    bearbeiteIndex = null
+                                    loeschIndex = null
+                                }
+                            },
                             icon = { Text(iconText, fontSize = 20.sp) },
                             label = { Text(label) },
                             colors = NavigationBarItemDefaults.colors(
@@ -3289,7 +3445,11 @@ fun KuemmeroApp() {
                     val index = pair.first
                     val a = pair.second
                     Card(
-                        modifier = Modifier.fillMaxWidth().clickable { auftragDetailIndex = index },
+                        modifier = Modifier.fillMaxWidth().clickable {
+                            auftragFormOffen = false
+                            bearbeiteIndex = null
+                            auftragDetailIndex = index
+                        },
                         colors = CardDefaults.cardColors(containerColor = KuemmeroSurface),
                         shape = RoundedCornerShape(22.dp)
                     ) {
@@ -3360,12 +3520,19 @@ fun KuemmeroApp() {
                                 ) { Text("← Zurück zur Auftragsübersicht", fontWeight = FontWeight.Bold) }
 
                             } else {
-                                Text(
-                                    "Tippen, um den Auftrag zu öffnen →",
-                                    color = KuemmeroGreen,
-                                    fontWeight = FontWeight.SemiBold,
-                                    modifier = Modifier.padding(top = 6.dp)
-                                )
+                                OutlinedButton(
+                                    onClick = {
+                                        auftragFormOffen = false
+                                        bearbeiteIndex = null
+                                        auftragDetailIndex = index
+                                    },
+                                    modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp),
+                                    shape = RoundedCornerShape(24.dp),
+                                    border = BorderStroke(2.dp, KuemmeroGreen),
+                                    colors = ButtonDefaults.outlinedButtonColors(contentColor = KuemmeroGreen)
+                                ) {
+                                    Text("ℹ Auftrag öffnen / Info", fontWeight = FontWeight.Bold)
+                                }
                             }
 
                             if (auftragDetailIndex == index) {
@@ -4302,6 +4469,53 @@ fun KuemmeroApp() {
                                         color = KuemmeroText,
                                         style = MaterialTheme.typography.bodySmall
                                     )
+                                }
+                            }
+                        }
+
+                        if (mahnungTestmodus) {
+                            item {
+                                Card(
+                                    Modifier.fillMaxWidth(),
+                                    colors = CardDefaults.cardColors(containerColor = KuemmeroMint),
+                                    border = BorderStroke(2.dp, KuemmeroGreen),
+                                    shape = RoundedCornerShape(18.dp)
+                                ) {
+                                    Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                        Text("🧪 TEST-MODUS", color = KuemmeroGreen, fontWeight = FontWeight.Bold)
+                                        Text("Diese Mahnung ist eine reine Testrechnung. Echte Rechnungsdaten werden nicht verändert.", color = KuemmeroText)
+                                        Text("Rechnung: TEST-RECHNUNG · Betrag: ${euro(420.0)}", color = KuemmeroText)
+                                        if (!testMahnung1Erstellt) {
+                                            Button(
+                                                onClick = {
+                                                    testMahnung1Datum = heuteText
+                                                    testMahnung1Frist = standardMahnung1Frist(context)
+                                                    testMahnung1Gebuehr = mahnungEinstellungGebuehr
+                                                    testMahnung1Text = mahnungEinstellungText
+                                                    testMahnung1DialogOffen = true
+                                                },
+                                                modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp),
+                                                shape = RoundedCornerShape(26.dp),
+                                                colors = ButtonDefaults.buttonColors(containerColor = KuemmeroGreen)
+                                            ) { Text("Test-Mahnung erstellen", fontWeight = FontWeight.Bold) }
+                                        } else {
+                                            Text("1. Test-Mahnung erstellt · ${testMahnung1Datum.ifBlank { "ohne Datum" }} · Frist: ${testMahnung1Frist.ifBlank { "ohne Frist" }}", color = KuemmeroGreen, fontWeight = FontWeight.Bold)
+                                            OutlinedButton(
+                                                onClick = { testMahnung1DialogOffen = true },
+                                                modifier = Modifier.fillMaxWidth().heightIn(min = 50.dp),
+                                                shape = RoundedCornerShape(25.dp),
+                                                border = BorderStroke(2.dp, KuemmeroGreen),
+                                                colors = ButtonDefaults.outlinedButtonColors(contentColor = KuemmeroGreen)
+                                            ) { Text("Test-Mahnung ändern") }
+                                            OutlinedButton(
+                                                onClick = { testMahnungLoeschBestaetigung = true },
+                                                modifier = Modifier.fillMaxWidth().heightIn(min = 50.dp),
+                                                shape = RoundedCornerShape(25.dp),
+                                                border = BorderStroke(2.dp, KuemmeroError),
+                                                colors = ButtonDefaults.outlinedButtonColors(contentColor = KuemmeroError)
+                                            ) { Text("Test-Mahnung löschen") }
+                                        }
+                                    }
                                 }
                             }
                         }
