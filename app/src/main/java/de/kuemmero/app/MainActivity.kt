@@ -1014,7 +1014,7 @@ fun KuemmeroApp() {
     var zahlungsFilterOffen by remember { mutableStateOf(false) }
     var kundenAkteName by remember { mutableStateOf<String?>(null) }
     var kalenderOffen by remember { mutableStateOf(false) }
-    var kalenderHeuteNur by remember { mutableStateOf(false) }
+    var kalenderNurHeute by remember { mutableStateOf(false) }
     var terminBereichOffen by remember { mutableStateOf(false) }
     var notizBereichOffen by remember { mutableStateOf(false) }
     var fotosBereichOffen by remember { mutableStateOf(false) }
@@ -1778,19 +1778,15 @@ fun KuemmeroApp() {
     }
 
     if (kalenderOffen) {
-        val angezeigteTermine = if (kalenderHeuteNur) termineHeute else naechsteTermine
         AlertDialog(
-            onDismissRequest = {
-                kalenderOffen = false
-                kalenderHeuteNur = false
-            },
-            title = { Text(if (kalenderHeuteNur) "📅 Heutige Termine" else "📅 Termine") },
+            onDismissRequest = { kalenderOffen = false },
+            title = { Text("📅 Termine") },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    if (angezeigteTermine.isEmpty()) {
-                        Text(if (kalenderHeuteNur) "Heute keine Termine." else "Noch keine Termine eingetragen.")
+                    if (naechsteTermine.isEmpty()) {
+                        Text("Noch keine Termine eingetragen.")
                     } else {
-                        angezeigteTermine.forEach { a ->
+                        naechsteTermine.forEach { a ->
                             Card(
                                 modifier = Modifier.fillMaxWidth(),
                                 colors = CardDefaults.cardColors(containerColor = KuemmeroMint),
@@ -1807,12 +1803,7 @@ fun KuemmeroApp() {
                     }
                 }
             },
-            confirmButton = {
-                TextButton(onClick = {
-                    kalenderOffen = false
-                    kalenderHeuteNur = false
-                }) { Text("Schließen") }
-            }
+            confirmButton = { TextButton(onClick = { kalenderOffen = false }) { Text("Schließen") } }
         )
     }
 
@@ -1959,9 +1950,9 @@ fun KuemmeroApp() {
                 ).any { it.lowercase(Locale.GERMANY).contains(suche) }
                 val passtStatus = when (statusFilter) {
                     "Alle" -> true
-                    // Dashboard "Offene Aufträge" umfasst alle noch nicht abgerechneten Aufträge.
+                    // Dashboard: „Offene Aufträge“ umfasst offene und laufende Aufträge.
                     "Offen" -> a.status == "Offen" || a.status == "In Bearbeitung"
-                    // Dashboard "Abgearbeitet" umfasst erledigte und bereits abgerechnete Aufträge.
+                    // Dashboard: „Abgearbeitet“ umfasst erledigte und bereits abgerechnete Aufträge.
                     "Erledigt" -> a.status == "Erledigt" || a.status == "Abgerechnet"
                     else -> a.status == statusFilter
                 }
@@ -3081,8 +3072,8 @@ fun KuemmeroApp() {
                                     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                                         Column(
                                             Modifier.weight(1f).clickable {
-                                                kalenderHeuteNur = true
-                                                kalenderOffen = true
+                                                hauptseite = "Kalender"
+                                                kalenderNurHeute = true
                                                 auftragFormOffen = false
                                                 auftragDetailIndex = null
                                                 bearbeiteIndex = null
@@ -3097,6 +3088,7 @@ fun KuemmeroApp() {
                                         Column(
                                             Modifier.weight(1f).clickable {
                                                 hauptseite = "Aufträge"
+                                                kalenderNurHeute = false
                                                 auftragFormOffen = false
                                                 auftragDetailIndex = null
                                                 bearbeiteIndex = null
@@ -3111,6 +3103,7 @@ fun KuemmeroApp() {
                                         Column(
                                             Modifier.weight(1f).clickable {
                                                 hauptseite = "Aufträge"
+                                                kalenderNurHeute = false
                                                 auftragFormOffen = false
                                                 auftragDetailIndex = null
                                                 bearbeiteIndex = null
@@ -3127,6 +3120,7 @@ fun KuemmeroApp() {
                                         Column(
                                             Modifier.weight(1f).clickable {
                                                 hauptseite = "Aufträge"
+                                                kalenderNurHeute = false
                                                 auftragFormOffen = false
                                                 auftragDetailIndex = null
                                                 bearbeiteIndex = null
@@ -3244,18 +3238,74 @@ fun KuemmeroApp() {
                         }
                     }
                     "Kalender" -> {
-                        item { Text("Kalender", style = MaterialTheme.typography.headlineSmall, color = KuemmeroGreen, fontWeight = FontWeight.Bold) }
-                        val geplante = auftraege.filter { it.terminDatum.isNotBlank() }.sortedWith(compareBy({ it.terminDatum }, { it.terminUhrzeit }))
+                        val geplante = if (kalenderNurHeute) {
+                            termineHeute
+                        } else {
+                            auftraege.filter { it.terminDatum.isNotBlank() }
+                                .sortedWith(compareBy({ it.terminDatum }, { it.terminUhrzeit }))
+                        }
+                        item {
+                            Row(
+                                Modifier.fillMaxWidth(),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                Text(
+                                    if (kalenderNurHeute) "Heutige Termine" else "Kalender",
+                                    style = MaterialTheme.typography.headlineSmall,
+                                    color = KuemmeroGreen,
+                                    fontWeight = FontWeight.Bold
+                                )
+                                if (kalenderNurHeute) {
+                                    TextButton(onClick = { kalenderNurHeute = false }) {
+                                        Text("Alle Termine")
+                                    }
+                                }
+                            }
+                        }
                         if (geplante.isEmpty()) {
-                            item { Text("Keine Termine gespeichert.", color = KuemmeroText) }
+                            item {
+                                Card(
+                                    Modifier.fillMaxWidth(),
+                                    colors = CardDefaults.cardColors(containerColor = KuemmeroSurface),
+                                    shape = RoundedCornerShape(18.dp)
+                                ) {
+                                    Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                                        Text(
+                                            if (kalenderNurHeute) "Heute keine Termine." else "Keine Termine gespeichert.",
+                                            color = KuemmeroText,
+                                            fontWeight = FontWeight.SemiBold
+                                        )
+                                        if (kalenderNurHeute) {
+                                            Text("Das Ergebnis für den heutigen Tag: 0 Termine.", color = KuemmeroText)
+                                        }
+                                    }
+                                }
+                            }
                         } else {
                             itemsIndexed(geplante) { _, a ->
-                                Card(Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = KuemmeroSurface), shape = RoundedCornerShape(18.dp), border = BorderStroke(1.5.dp, KuemmeroGreenLight)) {
+                                val index = auftraege.indexOfFirst { it.nummer == a.nummer && it.kunde == a.kunde && it.terminDatum == a.terminDatum }
+                                Card(
+                                    Modifier.fillMaxWidth().clickable {
+                                        if (index >= 0) {
+                                            hauptseite = "Aufträge"
+                                            kalenderNurHeute = false
+                                            auftragDetailIndex = index
+                                            statusFilter = "Alle"
+                                            zahlungsFilterOffen = false
+                                            auftragsSuche = ""
+                                        }
+                                    },
+                                    colors = CardDefaults.cardColors(containerColor = KuemmeroSurface),
+                                    shape = RoundedCornerShape(18.dp),
+                                    border = BorderStroke(1.5.dp, KuemmeroGreenLight)
+                                ) {
                                     Column(Modifier.padding(16.dp)) {
                                         Text(a.terminDatum, color = KuemmeroGreen, fontWeight = FontWeight.Bold)
                                         Text(a.terminUhrzeit.ifBlank { "Ohne Uhrzeit" }, color = KuemmeroText)
                                         Text(a.kunde, style = MaterialTheme.typography.titleMedium, color = KuemmeroText, fontWeight = FontWeight.Bold)
-                                        Text(a.leistung, color = KuemmeroText)
+                                        if (a.leistung.isNotBlank()) Text(a.leistung, color = KuemmeroText)
+                                        Text("Auftrag öffnen →", color = KuemmeroGreen, fontWeight = FontWeight.Bold)
                                     }
                                 }
                             }
@@ -3571,10 +3621,7 @@ fun KuemmeroApp() {
                         item { Text("Mehr", style = MaterialTheme.typography.headlineSmall, color = KuemmeroGreen, fontWeight = FontWeight.Bold) }
                         item {
                             OutlinedButton(
-                                onClick = {
-                                    kalenderHeuteNur = false
-                                    kalenderOffen = true
-                                },
+                                onClick = { kalenderNurHeute = false; hauptseite = "Kalender" },
                                 modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp),
                                 shape = RoundedCornerShape(26.dp),
                                 border = BorderStroke(2.dp, KuemmeroGreen),
