@@ -979,8 +979,6 @@ fun KuemmeroApp() {
 
     var auftragFuerPdf by remember { mutableStateOf<Auftrag?>(null) }
     var rechnungFuerIndex by remember { mutableStateOf<Int?>(null) }
-    var sicherungBestaetigung by remember { mutableStateOf(false) }
-
     val createBackup = rememberLauncherForActivityResult(
         ActivityResultContracts.CreateDocument("application/json")
     ) { uri ->
@@ -1206,49 +1204,6 @@ fun KuemmeroApp() {
         }.thenBy { it.terminUhrzeit })
         .take(8)
     val naechsterTermin = naechsteTermine.firstOrNull()
-
-    if (sicherungBestaetigung) {
-        val vorhandeneSicherung = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-            .getString(BACKUP_URI_KEY, null)
-            ?.isNotBlank() == true
-        AlertDialog(
-            onDismissRequest = { sicherungBestaetigung = false },
-            title = { Text("Sicherung bestätigen") },
-            text = {
-                Text(
-                    if (vorhandeneSicherung)
-                        "Soll die bestehende KÜMMERO-Sicherung jetzt aktualisiert werden?"
-                    else
-                        "Soll jetzt eine KÜMMERO-Sicherung gespeichert werden?"
-                )
-            },
-            confirmButton = {
-                TextButton(onClick = {
-                    sicherungBestaetigung = false
-                    if (vorhandeneSicherung) {
-                        val ok = sichereBackupAutomatisch(context)
-                        if (ok) {
-                            android.widget.Toast.makeText(context, "Sicherung aktualisiert.", 0).show()
-                        } else {
-                            context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-                                .edit().remove(BACKUP_URI_KEY).apply()
-                            android.widget.Toast.makeText(
-                                context,
-                                "Sicherungsdatei nicht erreichbar. Bitte die vorhandene kuemmero-backup.json auswählen.",
-                                android.widget.Toast.LENGTH_LONG
-                            ).show()
-                            backupDateiAuswaehlen.launch(arrayOf("application/json", "text/plain", "application/octet-stream"))
-                        }
-                    } else {
-                        createBackup.launch("kuemmero-backup.json")
-                    }
-                }) { Text("Ja, sichern") }
-            },
-            dismissButton = {
-                TextButton(onClick = { sicherungBestaetigung = false }) { Text("Abbrechen") }
-            }
-        )
-    }
 
     if (kundenDialog) {
         AlertDialog(
@@ -3125,9 +3080,20 @@ fun KuemmeroApp() {
                             Card(Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = KuemmeroSurface), shape = RoundedCornerShape(18.dp)) {
                                 Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                                     Text("Sicherung & Daten", style = MaterialTheme.typography.titleMedium, color = KuemmeroGreen, fontWeight = FontWeight.Bold)
-                                    OutlinedButton(onClick = { sicherungBestaetigung = true }, modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp), shape = RoundedCornerShape(26.dp), border = BorderStroke(2.dp, KuemmeroGreen), colors = ButtonDefaults.outlinedButtonColors(contentColor = KuemmeroGreen)) { Text("Sicherung speichern / aktualisieren") }
+                                    OutlinedButton(
+                                        onClick = {
+                                            backupDateiAuswaehlen.launch(
+                                                arrayOf("application/json", "text/plain", "application/octet-stream")
+                                            )
+                                        },
+                                        modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp),
+                                        shape = RoundedCornerShape(26.dp),
+                                        border = BorderStroke(2.dp, KuemmeroGreen),
+                                        colors = ButtonDefaults.outlinedButtonColors(contentColor = KuemmeroGreen)
+                                    ) {
+                                        Text("Sicherung speichern / aktualisieren")
+                                    }
                                     Button(onClick = { restoreBackup.launch(arrayOf("application/json", "text/plain", "application/octet-stream")) }, modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp), shape = RoundedCornerShape(26.dp), colors = ButtonDefaults.buttonColors(containerColor = KuemmeroGreenLight)) { Text("Daten wiederherstellen", fontWeight = FontWeight.Bold) }
-                                    OutlinedButton(onClick = { sicherungBestaetigung = true }, modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp), shape = RoundedCornerShape(26.dp), border = BorderStroke(2.dp, KuemmeroGreen), colors = ButtonDefaults.outlinedButtonColors(contentColor = KuemmeroGreen)) { Text("Sicherung jetzt aktualisieren") }
                                 }
                             }
                         }
