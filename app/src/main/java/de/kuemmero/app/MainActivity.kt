@@ -3105,7 +3105,20 @@ fun KuemmeroApp() {
                                         }
                                     }
                                     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                        Column(Modifier.weight(1f)) { Text("Offen €", color = Color.White); Text(euro(offeneZahlungSumme), color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.Bold) }
+                                        Column(
+                                            Modifier.weight(1f).clickable {
+                                                hauptseite = "Aufträge"
+                                                auftragFormOffen = false
+                                                auftragDetailIndex = null
+                                                bearbeiteIndex = null
+                                                statusFilter = "Alle"
+                                                zahlungsFilterOffen = true
+                                                auftragsSuche = ""
+                                            }
+                                        ) {
+                                            Text("Offen €", color = Color.White)
+                                            Text(euro(offeneZahlungSumme), color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.Bold)
+                                        }
                                         Spacer(Modifier.weight(2f))
                                     }
                                 }
