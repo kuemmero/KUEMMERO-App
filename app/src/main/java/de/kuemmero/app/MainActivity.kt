@@ -63,6 +63,9 @@ import java.util.Calendar
 import java.util.Date
 import java.util.Locale
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
+import kotlinx.coroutines.launch
 
 private const val RECHNUNG_SCAN_PREFIX = "rechnung_scan_"
 private const val RECHNUNGSNUMMER_COUNTER_KEY = "rechnungsnummer_counter"
@@ -172,6 +175,8 @@ private const val AUFTRAEGE_KEY = "auftraege"
 private const val KUNDEN_KEY = "kunden"
 private const val STUNDENSATZ_KEY = "stundensatz"
 private const val BACKUP_URI_KEY = "backup_uri"
+private const val BACKUP_LAST_SUCCESS_KEY = "backup_last_success"
+private const val BACKUP_PRE_RESTORE_FILE = "kuemmero_vor_restore_backup.json"
 private const val KOSTENVORANSCHLAEGE_KEY = "kostenvoranschlaege"
 private const val FIRMENNAME_KEY = "firmen_name"
 private const val FIRMENSTRASSE_KEY = "firmen_strasse"
@@ -405,6 +410,8 @@ private fun sichereBackupAutomatisch(context: Context): Boolean {
         } ?: false
         if (!ok) {
             prefs.edit().remove(BACKUP_URI_KEY).apply()
+        } else {
+            prefs.edit().putLong(BACKUP_LAST_SUCCESS_KEY, System.currentTimeMillis()).apply()
         }
         ok
     } catch (_: Exception) {
@@ -1104,7 +1111,7 @@ fun KuemmeroApp() {
     var timerSekunden by remember { mutableStateOf(0L) }
 
     // Laufende Arbeitszeit nach App-Neustart automatisch wieder aufnehmen
-    LaunchedEffect(auftraege) {
+    LaunchedEffect(Unit) {
         if (timerIndex == null) {
             val laufenderIndex = auftraege.indexOfFirst { it.arbeitsStart > 0L }
             if (laufenderIndex >= 0) {
@@ -1198,21 +1205,34 @@ fun KuemmeroApp() {
     }
 
     var sicherungBestaetigung by remember { mutableStateOf(false) }
+    var abschlusspruefungIndex by remember { mutableStateOf<Int?>(null) }
+    val backupScope = rememberCoroutineScope()
 
     val createBackup = rememberLauncherForActivityResult(
         ActivityResultContracts.CreateDocument("application/json")
     ) { uri ->
-        uri?.let {
+        uri?.let { selectedUri ->
             context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE).edit()
-                .putString(BACKUP_URI_KEY, it.toString()).apply()
-            try {
-                context.contentResolver.openOutputStream(it, "wt")?.use { out ->
-                    out.write(backupText(context).toByteArray(Charsets.UTF_8))
-                    out.flush()
+                .putString(BACKUP_URI_KEY, selectedUri.toString()).apply()
+            backupScope.launch {
+                val result = withContext(Dispatchers.IO) {
+                    try {
+                        context.contentResolver.openOutputStream(selectedUri, "wt")?.use { out ->
+                            out.write(backupText(context).toByteArray(Charsets.UTF_8))
+                            out.flush()
+                        } ?: throw Exception("Datei konnte nicht geöffnet werden")
+                        true
+                    } catch (_: Exception) {
+                        false
+                    }
                 }
-                android.widget.Toast.makeText(context, "Sicherung gespeichert. Diese Datei wird künftig aktualisiert.", 0).show()
-            } catch (e: Exception) {
-                android.widget.Toast.makeText(context, "Sicherung fehlgeschlagen", 1).show()
+                if (result) {
+                    context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE).edit()
+                        .putLong(BACKUP_LAST_SUCCESS_KEY, System.currentTimeMillis()).apply()
+                    android.widget.Toast.makeText(context, "Sicherung gespeichert. Diese Datei wird künftig aktualisiert.", 0).show()
+                } else {
+                    android.widget.Toast.makeText(context, "Sicherung fehlgeschlagen", 1).show()
+                }
             }
         }
     }
@@ -1236,23 +1256,43 @@ fun KuemmeroApp() {
                     .putString(BACKUP_URI_KEY, it.toString())
                     .apply()
 
-                context.contentResolver.openOutputStream(it, "wt")?.use { out ->
-                    out.write(backupText(context).toByteArray(Charsets.UTF_8))
-                    out.flush()
-                } ?: throw Exception("Datei konnte nicht zum Schreiben geöffnet werden")
-
-                android.widget.Toast.makeText(
-                    context,
-                    "Sicherung gespeichert. Diese Datei wird künftig aktualisiert.",
-                    android.widget.Toast.LENGTH_LONG
-                ).show()
+                backupScope.launch {
+                    val result = withContext(Dispatchers.IO) {
+                        try {
+                            context.contentResolver.openOutputStream(it, "wt")?.use { out ->
+                                out.write(backupText(context).toByteArray(Charsets.UTF_8))
+                                out.flush()
+                            } ?: throw Exception("Datei konnte nicht zum Schreiben geöffnet werden")
+                            true
+                        } catch (_: Exception) {
+                            false
+                        }
+                    }
+                    if (result) {
+                        context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE).edit()
+                            .putLong(BACKUP_LAST_SUCCESS_KEY, System.currentTimeMillis()).apply()
+                        android.widget.Toast.makeText(
+                            context,
+                            "Sicherung gespeichert. Diese Datei wird künftig aktualisiert.",
+                            android.widget.Toast.LENGTH_LONG
+                        ).show()
+                    } else {
+                        context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+                            .edit().remove(BACKUP_URI_KEY).apply()
+                        android.widget.Toast.makeText(
+                            context,
+                            "Sicherung konnte nicht gespeichert werden.",
+                            android.widget.Toast.LENGTH_LONG
+                        ).show()
+                    }
+                }
             } catch (e: Exception) {
                 context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
                     .edit().remove(BACKUP_URI_KEY).apply()
                 android.widget.Toast.makeText(
                     context,
                     "Sicherung konnte nicht gespeichert werden.",
-                    android.widget.Toast.LENGTH_LONG
+                    android.widget.android.widget.Toast.LENGTH_LONG
                 ).show()
             }
         }
@@ -1264,6 +1304,10 @@ fun KuemmeroApp() {
     ) { uri ->
         uri?.let {
             try {
+                context.openFileOutput(BACKUP_PRE_RESTORE_FILE, Context.MODE_PRIVATE).use { out ->
+                    out.write(backupText(context).toByteArray(Charsets.UTF_8))
+                    out.flush()
+                }
                 val text = context.contentResolver.openInputStream(it)?.bufferedReader()?.use { r -> r.readText() }
                     ?: throw Exception("Datei konnte nicht gelesen werden")
                 val obj = JSONObject(text)
@@ -1305,7 +1349,7 @@ fun KuemmeroApp() {
                 kvBearbeiteIndex = null
                 timerIndex = null
                 timerSekunden = 0L
-                android.widget.Toast.makeText(context, "Daten wiederhergestellt", 0).show()
+                android.widget.Toast.makeText(context, "Daten wiederhergestellt. Sicherheitskopie des vorherigen Datenstands wurde erstellt.", android.widget.android.widget.Toast.LENGTH_LONG).show()
             } catch (e: Exception) {
                 android.widget.Toast.makeText(context, "Wiederherstellung fehlgeschlagen", 1).show()
             }
@@ -1389,7 +1433,7 @@ fun KuemmeroApp() {
                 val rechnungsPlzOrt = rechnungsPrefs.getString(FIRMENPLZORT_KEY, "") ?: ""
                 val rechnungsSteuer = rechnungsPrefs.getString(STEUERNUMMER_KEY, "") ?: ""
                 if (rechnungsStrasse.isBlank() || rechnungsPlzOrt.isBlank() || rechnungsSteuer.isBlank()) {
-                    android.widget.Toast.makeText(context, "Bitte unter Mehr zuerst Straße, PLZ/Ort und Steuernummer eintragen.", android.widget.Toast.LENGTH_LONG).show()
+                    android.widget.Toast.makeText(context, "Bitte unter Mehr zuerst Straße, PLZ/Ort und Steuernummer eintragen.", android.widget.android.widget.Toast.LENGTH_LONG).show()
                     rechnungFuerIndex = null
                     return@rememberLauncherForActivityResult
                 }
@@ -1490,6 +1534,49 @@ fun KuemmeroApp() {
         )
     }
 
+    if (abschlusspruefungIndex != null) {
+        val idx = abschlusspruefungIndex
+        val a = idx?.let { auftraege.getOrNull(it) }
+        if (a != null) {
+            val arbeitszeitOk = a.stunden > 0.0 || a.arbeitsSekunden > 0L
+            val kundeOk = a.kunde.isNotBlank() && a.kundenStrasse.isNotBlank() && a.kundenOrt.isNotBlank()
+            val leistungOk = a.leistung.isNotBlank()
+            val betragOk = gesamtbetrag(a.stunden, a.material, a.fahrt, a.stundensatz, a.erstellungskosten) > 0.0
+            val leistungsdatumOk = a.leistungsdatum.isNotBlank() || a.terminDatum.isNotBlank() || a.datum.isNotBlank()
+
+            AlertDialog(
+                onDismissRequest = { abschlusspruefungIndex = null },
+                title = { Text("Auftrag abschließen") },
+                text = {
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Text("Bitte kurz prüfen, bevor der Auftrag als erledigt markiert wird.", fontWeight = FontWeight.SemiBold)
+                        Text(if (kundeOk) "✓ Kundendaten vollständig" else "⚠ Kundendaten prüfen", color = if (kundeOk) KuemmeroGreen else KuemmeroError)
+                        Text(if (leistungOk) "✓ Leistungsbeschreibung vorhanden" else "⚠ Leistungsbeschreibung fehlt", color = if (leistungOk) KuemmeroGreen else KuemmeroError)
+                        Text(if (arbeitszeitOk) "✓ Arbeitszeit erfasst" else "⚠ Keine Arbeitszeit erfasst", color = if (arbeitszeitOk) KuemmeroGreen else KuemmeroError)
+                        Text(if (betragOk) "✓ Rechnungsbetrag vorhanden" else "⚠ Rechnungsbetrag ist 0,00 €", color = if (betragOk) KuemmeroGreen else KuemmeroError)
+                        Text(if (leistungsdatumOk) "✓ Leistungsdatum vorhanden" else "⚠ Leistungsdatum fehlt", color = if (leistungsdatumOk) KuemmeroGreen else KuemmeroError)
+                        Text("Fotos und Unterschrift sind optional und können je nach Auftrag ergänzt werden.", style = MaterialTheme.typography.bodySmall, color = KuemmeroText)
+                    }
+                },
+                confirmButton = {
+                    TextButton(onClick = {
+                        auftraege = auftraege.toMutableList().apply {
+                            set(idx, a.copy(status = "Erledigt"))
+                        }
+                        speichereAuftraege(context, auftraege)
+                        abschlusspruefungIndex = null
+                        android.widget.Toast.makeText(context, "Auftrag als erledigt markiert.", android.widget.Toast.LENGTH_SHORT).show()
+                    }) { Text("Trotzdem abschließen") }
+                },
+                dismissButton = {
+                    TextButton(onClick = { abschlusspruefungIndex = null }) { Text("Zurück") }
+                }
+            )
+        } else {
+            abschlusspruefungIndex = null
+        }
+    }
+
     if (arbeitszeitAendernIndex != null) {
         AlertDialog(
             onDismissRequest = { arbeitszeitAendernIndex = null },
@@ -1579,7 +1666,7 @@ fun KuemmeroApp() {
                     } else {
                         val doppelt = auftraege.withIndex().any { it.index != index && it.value.rechnungsnummer.equals(neu, ignoreCase = true) }
                         if (doppelt) {
-                            android.widget.Toast.makeText(context, "Diese Rechnungsnummer ist bereits vergeben.", android.widget.Toast.LENGTH_LONG).show()
+                            android.widget.Toast.makeText(context, "Diese Rechnungsnummer ist bereits vergeben.", android.widget.android.widget.Toast.LENGTH_LONG).show()
                         } else {
                             val alt = auftraege.getOrNull(index)
                             if (alt != null) {
@@ -1589,7 +1676,7 @@ fun KuemmeroApp() {
                                 speichereAuftraege(context, auftraege)
                                 synchronisiereRechnungsnummerCounter(context, neu)
                                 rechnungNummerEditIndex = null
-                                android.widget.Toast.makeText(context, "Rechnungsnummer geändert: $neu", android.widget.Toast.LENGTH_LONG).show()
+                                android.widget.Toast.makeText(context, "Rechnungsnummer geändert: $neu", android.widget.android.widget.Toast.LENGTH_LONG).show()
                             }
                         }
                     }
@@ -3026,16 +3113,16 @@ fun KuemmeroApp() {
 
                             OutlinedButton(
                                 onClick = {
-                                    val nextStatus = when (a.status) {
-                                        "Offen" -> "In Bearbeitung"
-                                        "In Bearbeitung" -> "Erledigt"
-                                        else -> a.status
-                                    }
-                                    if (nextStatus != a.status) {
-                                        auftraege = auftraege.toMutableList().apply {
-                                            set(index, a.copy(status = nextStatus))
+                                    when (a.status) {
+                                        "Offen" -> {
+                                            auftraege = auftraege.toMutableList().apply {
+                                                set(index, a.copy(status = "In Bearbeitung"))
+                                            }
+                                            speichereAuftraege(context, auftraege)
                                         }
-                                        speichereAuftraege(context, auftraege)
+                                        "In Bearbeitung" -> {
+                                            abschlusspruefungIndex = index
+                                        }
                                     }
                                 },
                                 enabled = a.status == "Offen" || a.status == "In Bearbeitung",
@@ -3079,7 +3166,7 @@ fun KuemmeroApp() {
                                             else -> ""
                                         }
                                         if (fehlend.isNotBlank()) {
-                                            android.widget.Toast.makeText(context, fehlend, android.widget.Toast.LENGTH_LONG).show()
+                                            android.widget.Toast.makeText(context, fehlend, android.widget.android.widget.Toast.LENGTH_LONG).show()
                                         } else {
                                             rechnungFuerIndex = index
                                             val name = a.kunde.ifBlank { "Kunde" }.replace("/", "-")
@@ -3678,6 +3765,18 @@ fun KuemmeroApp() {
                             Card(Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = KuemmeroSurface), shape = RoundedCornerShape(18.dp)) {
                                 Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                                     Text("Sicherung & Daten", style = MaterialTheme.typography.titleMedium, color = KuemmeroGreen, fontWeight = FontWeight.Bold)
+                                    val backupPrefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+                                    val backupUriVorhanden = backupPrefs.getString(BACKUP_URI_KEY, null)?.isNotBlank() == true
+                                    val backupZeit = backupPrefs.getLong(BACKUP_LAST_SUCCESS_KEY, 0L)
+                                    Text(
+                                        when {
+                                            backupZeit > 0L -> "Letzte erfolgreiche Sicherung: ${SimpleDateFormat("dd.MM.yyyy HH:mm", Locale.GERMANY).format(Date(backupZeit))}"
+                                            backupUriVorhanden -> "Sicherungsdatei hinterlegt – noch kein erfolgreicher Sicherungslauf gespeichert."
+                                            else -> "Noch keine Sicherungsdatei hinterlegt."
+                                        },
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = if (backupZeit > 0L) KuemmeroGreen else KuemmeroText
+                                    )
                                     OutlinedButton(onClick = { sicherungBestaetigung = true }, modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp), shape = RoundedCornerShape(26.dp), border = BorderStroke(2.dp, KuemmeroGreen), colors = ButtonDefaults.outlinedButtonColors(contentColor = KuemmeroGreen)) { Text("Sicherung speichern / aktualisieren") }
                                     Button(onClick = { restoreBackup.launch(arrayOf("application/json", "text/plain", "application/octet-stream")) }, modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp), shape = RoundedCornerShape(26.dp), colors = ButtonDefaults.buttonColors(containerColor = KuemmeroGreenLight)) { Text("Daten wiederherstellen", fontWeight = FontWeight.Bold) }
                                 }
