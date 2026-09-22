@@ -76,6 +76,18 @@ private fun naechsteRechnungsnummer(context: Context): String {
     return "RE-$jahr-" + naechste.toString().padStart(4, '0')
 }
 
+private fun synchronisiereRechnungsnummerCounter(context: Context, nummer: String) {
+    val match = Regex("^RE-(\\d{4})-(\\d+)$").matchEntire(nummer.trim()) ?: return
+    val jahr = match.groupValues[1]
+    val nummerWert = match.groupValues[2].toIntOrNull() ?: return
+    val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+    val key = RECHNUNGSNUMMER_COUNTER_KEY + "_" + jahr
+    val bisher = prefs.getInt(key, 0)
+    if (nummerWert > bisher) {
+        prefs.edit().putInt(key, nummerWert).commit()
+    }
+}
+
 private fun rechnungScanKey(auftrag: Auftrag): String =
     RECHNUNG_SCAN_PREFIX + auftrag.nummer
 
@@ -636,9 +648,10 @@ private fun erstelleRechnungPdf(
     p.textSize = 18f
     c.drawText("Gesamtsumme: ${euro(gesamt)}", 40f, rechnungY + 40f, p)
     p.textSize = 11f
-    c.drawText("Steuerbefreiung für Kleinunternehmer gemäß § 19 UStG.\nEs wird keine Umsatzsteuer berechnet.", 40f, rechnungY + 68f, p)
-    c.drawText("Bitte überweisen Sie den Rechnungsbetrag bis zum $faelligAm.", 40f, rechnungY + 90f, p)
-    c.drawText("Vielen Dank für Ihr Vertrauen.", 40f, rechnungY + 115f, p)
+    c.drawText("Steuerbefreiung für Kleinunternehmer gemäß § 19 UStG.", 40f, rechnungY + 68f, p)
+    c.drawText("Es wird keine Umsatzsteuer berechnet.", 40f, rechnungY + 83f, p)
+    c.drawText("Bitte überweisen Sie den Rechnungsbetrag bis zum $faelligAm.", 40f, rechnungY + 105f, p)
+    c.drawText("Vielen Dank für Ihr Vertrauen.", 40f, rechnungY + 130f, p)
     pdf.finishPage(page)
 
     if (unterschriftPfad.isNotBlank()) {
@@ -676,7 +689,7 @@ private fun erstelleRechnungPdf(
 
 private fun druckeRechnungPdf(context: Context, auftrag: Auftrag) {
     val printManager = context.getSystemService(Context.PRINT_SERVICE) as PrintManager
-    val nummer = auftrag.rechnungsnummer.ifBlank { "RE-${SimpleDateFormat("yyyyMMdd-HHmmss", Locale.GERMANY).format(Date())}" }
+    val nummer = auftrag.rechnungsnummer.ifBlank { naechsteRechnungsnummer(context) }
     val rechnungsdatum = auftrag.rechnungsdatum.ifBlank { SimpleDateFormat("dd.MM.yyyy", Locale.GERMANY).format(Date()) }
     val faelligAm = auftrag.faelligAm.ifBlank {
         val cal = Calendar.getInstance().apply { add(Calendar.DAY_OF_YEAR, 14) }
@@ -1107,6 +1120,8 @@ fun KuemmeroApp() {
 
     var auftragFuerPdf by remember { mutableStateOf<Auftrag?>(null) }
     var rechnungFuerIndex by remember { mutableStateOf<Int?>(null) }
+    var rechnungNummerEditIndex by remember { mutableStateOf<Int?>(null) }
+    var rechnungNummerEditText by remember { mutableStateOf("") }
     var rechnungScanIndex by remember { mutableStateOf<Int?>(null) }
     var rechnungScanUri by remember { mutableStateOf<Uri?>(null) }
 
@@ -1504,6 +1519,59 @@ fun KuemmeroApp() {
                 }, colors = ButtonDefaults.textButtonColors(contentColor = KuemmeroError)) { Text("Löschen") }
             },
             dismissButton = { TextButton(onClick = { kvLoeschIndex = null }) { Text("Abbrechen") } }
+        )
+    }
+
+    if (rechnungNummerEditIndex != null) {
+        AlertDialog(
+            onDismissRequest = { rechnungNummerEditIndex = null },
+            title = { Text("Rechnungsnummer korrigieren") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Text("Hier kann eine falsch vergebene Rechnungsnummer korrigiert werden.")
+                    Text(
+                        "Wichtig: Eine bereits an den Kunden ausgegebene Rechnung nicht einfach überschreiben. In diesem Fall eine berichtigte Rechnung erstellen und die ursprüngliche Rechnung nachvollziehbar aufbewahren.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = KuemmeroText
+                    )
+                    OutlinedTextField(
+                        value = rechnungNummerEditText,
+                        onValueChange = { rechnungNummerEditText = it },
+                        label = { Text("Rechnungsnummer") },
+                        singleLine = true,
+                        colors = feldFarben,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    val index = rechnungNummerEditIndex
+                    val neu = rechnungNummerEditText.trim()
+                    if (index == null || neu.isBlank()) {
+                        android.widget.Toast.makeText(context, "Bitte eine Rechnungsnummer eingeben.", android.widget.Toast.LENGTH_SHORT).show()
+                    } else {
+                        val doppelt = auftraege.withIndex().any { it.index != index && it.value.rechnungsnummer.equals(neu, ignoreCase = true) }
+                        if (doppelt) {
+                            android.widget.Toast.makeText(context, "Diese Rechnungsnummer ist bereits vergeben.", android.widget.Toast.LENGTH_LONG).show()
+                        } else {
+                            val alt = auftraege.getOrNull(index)
+                            if (alt != null) {
+                                auftraege = auftraege.toMutableList().apply {
+                                    set(index, alt.copy(rechnungsnummer = neu))
+                                }
+                                speichereAuftraege(context, auftraege)
+                                synchronisiereRechnungsnummerCounter(context, neu)
+                                rechnungNummerEditIndex = null
+                                android.widget.Toast.makeText(context, "Rechnungsnummer geändert: $neu", android.widget.Toast.LENGTH_LONG).show()
+                            }
+                        }
+                    }
+                }) { Text("Speichern") }
+            },
+            dismissButton = {
+                TextButton(onClick = { rechnungNummerEditIndex = null }) { Text("Abbrechen") }
+            }
         )
     }
 
@@ -3001,6 +3069,17 @@ fun KuemmeroApp() {
                             }
 
                             if (a.status == "Abgerechnet" && a.rechnungsnummer.isNotBlank()) {
+                                OutlinedButton(
+                                    onClick = {
+                                        rechnungNummerEditIndex = index
+                                        rechnungNummerEditText = a.rechnungsnummer
+                                    },
+                                    modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp),
+                                    shape = RoundedCornerShape(26.dp),
+                                    border = BorderStroke(2.dp, KuemmeroGreen),
+                                    colors = ButtonDefaults.outlinedButtonColors(contentColor = KuemmeroGreen)
+                                ) { Text("✏ Rechnungsnummer korrigieren", fontWeight = FontWeight.Bold) }
+
                                 Button(
                                     onClick = { druckeRechnungPdf(context, a) },
                                     modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp),
