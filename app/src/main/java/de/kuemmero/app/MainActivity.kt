@@ -2338,7 +2338,17 @@ fun KuemmeroApp() {
                     }
                 }
                 if (!auftragFormOffen) {
-                itemsIndexed(if (auftragDetailIndex == null) gefilterteAuftraege else gefilterteAuftraege.filter { it.first == auftragDetailIndex }) { _, pair ->
+                // Detailansicht immer direkt aus der vollständigen Auftragsliste holen.
+                // Dadurch bleibt der Auftrag auch nach dem Bearbeiten sichtbar,
+                // selbst wenn Such-/Statusfilter aktiv sind.
+                val auftragsAnzeige = if (auftragDetailIndex == null) {
+                    gefilterteAuftraege
+                } else {
+                    auftragDetailIndex?.let { idx ->
+                        auftraege.getOrNull(idx)?.let { idx to it }
+                    }?.let { listOf(it) } ?: emptyList()
+                }
+                itemsIndexed(auftragsAnzeige) { _, pair ->
                     val index = pair.first
                     val a = pair.second
                     Card(
@@ -2746,18 +2756,7 @@ fun KuemmeroApp() {
                         }
                         item {
                             Card(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .clickable {
-                                        val index = naechsterTermin?.let { termin ->
-                                            auftraege.indexOfFirst { it === termin }
-                                        } ?: -1
-                                        if (index >= 0) {
-                                            hauptseite = "Aufträge"
-                                            auftragFormOffen = false
-                                            auftragDetailIndex = index
-                                        }
-                                    },
+                                Modifier.fillMaxWidth(),
                                 colors = CardDefaults.cardColors(containerColor = KuemmeroSurface),
                                 shape = RoundedCornerShape(18.dp),
                                 border = BorderStroke(1.5.dp, KuemmeroGreenLight)
@@ -2773,12 +2772,6 @@ fun KuemmeroApp() {
                                         )
                                         Text(naechsterTermin.kunde, color = KuemmeroText, style = MaterialTheme.typography.titleMedium)
                                         if (naechsterTermin.leistung.isNotBlank()) Text(naechsterTermin.leistung, color = KuemmeroText)
-                                        Text(
-                                            "Tippen, um den Auftrag zu öffnen →",
-                                            color = KuemmeroGreen,
-                                            fontWeight = FontWeight.Bold,
-                                            modifier = Modifier.padding(top = 6.dp)
-                                        )
                                     }
                                 }
                             }
