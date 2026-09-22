@@ -72,8 +72,33 @@ private fun naechsteRechnungsnummer(context: Context): String {
     val jahr = SimpleDateFormat("yyyy", Locale.GERMANY).format(Date())
     val key = RECHNUNGSNUMMER_COUNTER_KEY + "_" + jahr
     val naechste = prefs.getInt(key, 0) + 1
-    prefs.edit().putInt(key, naechste).commit()
     return "RE-$jahr-" + naechste.toString().padStart(4, '0')
+}
+
+private fun speichereRechnungsnummer(
+    context: Context,
+    nummer: String
+) {
+    val match = Regex("^RE-(\\d{4})-(\\d+)$").matchEntire(nummer.trim())
+        ?: return
+
+    val jahr = match.groupValues[1]
+    val nummerWert = match.groupValues[2].toIntOrNull()
+        ?: return
+
+    val prefs = context.getSharedPreferences(
+        PREFS_NAME,
+        Context.MODE_PRIVATE
+    )
+
+    val key = RECHNUNGSNUMMER_COUNTER_KEY + "_" + jahr
+    val bisher = prefs.getInt(key, 0)
+
+    if (nummerWert > bisher) {
+        prefs.edit()
+            .putInt(key, nummerWert)
+            .commit()
+    }
 }
 
 private fun synchronisiereRechnungsnummerCounter(context: Context, nummer: String) {
@@ -1393,6 +1418,7 @@ fun KuemmeroApp() {
                     )
                     context.contentResolver.openOutputStream(it)?.use { out -> pdf.writeTo(out) }
                     pdf.close()
+                    speichereRechnungsnummer(context, rechnungsnummer)
                     auftraege = auftraege.toMutableList().apply {
                         set(
                             index,
