@@ -4257,6 +4257,43 @@ fun KuemmeroApp() {
                                 Text("PDF drucken", fontWeight = FontWeight.Bold)
                             }
 
+                            OutlinedButton(
+                                onClick = {
+                                    bearbeiteIndex = index
+                                    auftragDetailIndex = index
+                                    auftragFormOffen = true
+                                    nummer = a.nummer.ifBlank { nummer }
+                                    datum = a.datum.ifBlank { datum }
+                                    leistungsdatum = a.leistungsdatum.ifBlank { a.terminDatum.ifBlank { a.datum.ifBlank { datum } } }
+                                    gueltigBis = a.gueltigBis.ifBlank { gueltigBis }
+                                    kunde = a.kunde
+                                    strasse = a.kundenStrasse
+                                    ort = a.kundenOrt
+                                    leistung = a.leistung
+                                    stunden = a.stunden.toString().replace(".", ",")
+                                    material = a.material.toString().replace(".", ",")
+                                    materialBonUri = a.materialBonUri
+                                    fahrt = a.fahrt.toString().replace(".", ",")
+                                    stundensatz = a.stundensatz.toString().replace(".", ",")
+                                    status = a.status
+                                    zahlungsstatus = a.zahlungsstatus
+                                    bezahltAm = a.bezahltAm
+                                    terminDatum = a.terminDatum
+                                    terminUhrzeit = a.terminUhrzeit
+                                    notiz = a.notiz
+                                    fotosVorher = a.fotosVorher
+                                    fotosNachher = a.fotosNachher
+                                    unterschriftPfad = a.unterschriftPfad
+                                    unterschriftDatum = a.unterschriftDatum
+                                },
+                                modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp),
+                                shape = RoundedCornerShape(26.dp),
+                                border = BorderStroke(2.dp, KuemmeroGreen),
+                                colors = ButtonDefaults.outlinedButtonColors(contentColor = KuemmeroGreen)
+                            ) {
+                                Text("✏ Korrigieren & neu drucken", fontWeight = FontWeight.Bold)
+                            }
+
                             Text(
                                 when (a.status) {
                                     "Offen" -> "Ablauf: Angebot → Auftrag annehmen"
