@@ -5213,6 +5213,26 @@ fun KuemmeroApp() {
                                 }
                             }
                         }
+                        item {
+                            Spacer(Modifier.height(4.dp))
+                            OutlinedButton(
+                                onClick = {
+                                    leistungspositionBearbeiteIndex = null
+                                    leistungspositionName = ""
+                                    leistungspositionBeschreibung = ""
+                                    leistungspositionEinheit = "Pauschale"
+                                    leistungspositionPreis = ""
+                                    leistungspositionAktiv = true
+                                    leistungspositionDialog = true
+                                },
+                                modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp),
+                                shape = RoundedCornerShape(26.dp),
+                                border = BorderStroke(1.5.dp, KuemmeroGreen),
+                                colors = ButtonDefaults.outlinedButtonColors(contentColor = KuemmeroGreen)
+                            ) {
+                                Text("+ Weitere Leistung hinzufügen", fontWeight = FontWeight.Bold)
+                            }
+                        }
                     }
                     "Rechnungsarchiv" -> {
                         item { Text("Rechnungsarchiv", style = MaterialTheme.typography.headlineSmall, color = KuemmeroGreen, fontWeight = FontWeight.Bold) }
@@ -5351,20 +5371,42 @@ fun KuemmeroApp() {
                 }
             },
             confirmButton = {
-                TextButton(onClick = {
-                    val name = leistungspositionName.trim()
-                    if (name.isBlank()) {
-                        android.widget.Toast.makeText(context, "Bitte eine Bezeichnung eingeben.", 0).show()
-                    } else {
-                        val neu = Leistungsposition(name, leistungspositionBeschreibung.trim(), leistungspositionEinheit.trim().ifBlank { "Pauschale" }, zahl(leistungspositionPreis), leistungspositionAktiv)
-                        val list = leistungspositionen.toMutableList()
-                        val idx = leistungspositionBearbeiteIndex
-                        if (idx != null && idx in list.indices) list[idx] = neu else list.add(neu)
-                        leistungspositionen = list
-                        speichereLeistungspositionen(context, list)
-                        leistungspositionDialog = false
-                    }
-                }) { Text("Speichern", color = KuemmeroGreen, fontWeight = FontWeight.Bold) }
+                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    TextButton(onClick = {
+                        val name = leistungspositionName.trim()
+                        if (name.isBlank()) {
+                            android.widget.Toast.makeText(context, "Bitte eine Bezeichnung eingeben.", 0).show()
+                        } else {
+                            val neu = Leistungsposition(name, leistungspositionBeschreibung.trim(), leistungspositionEinheit.trim().ifBlank { "Pauschale" }, zahl(leistungspositionPreis), leistungspositionAktiv)
+                            val list = leistungspositionen.toMutableList()
+                            val idx = leistungspositionBearbeiteIndex
+                            if (idx != null && idx in list.indices) list[idx] = neu else list.add(neu)
+                            leistungspositionen = list
+                            speichereLeistungspositionen(context, list)
+                            leistungspositionDialog = false
+                        }
+                    }) { Text("Speichern", color = KuemmeroGreen, fontWeight = FontWeight.Bold) }
+                    TextButton(onClick = {
+                        val name = leistungspositionName.trim()
+                        if (name.isBlank()) {
+                            android.widget.Toast.makeText(context, "Bitte eine Bezeichnung eingeben.", 0).show()
+                        } else {
+                            val neu = Leistungsposition(name, leistungspositionBeschreibung.trim(), leistungspositionEinheit.trim().ifBlank { "Pauschale" }, zahl(leistungspositionPreis), leistungspositionAktiv)
+                            val list = leistungspositionen.toMutableList()
+                            val idx = leistungspositionBearbeiteIndex
+                            if (idx != null && idx in list.indices) list[idx] = neu else list.add(neu)
+                            leistungspositionen = list
+                            speichereLeistungspositionen(context, list)
+                            leistungspositionBearbeiteIndex = null
+                            leistungspositionName = ""
+                            leistungspositionBeschreibung = ""
+                            leistungspositionEinheit = "Pauschale"
+                            leistungspositionPreis = ""
+                            leistungspositionAktiv = true
+                            // Dialog bleibt offen: direkt die nächste Leistung anlegen.
+                        }
+                    }) { Text("+ Weitere", color = KuemmeroGreen, fontWeight = FontWeight.Bold) }
+                }
             },
             dismissButton = { TextButton(onClick = { leistungspositionDialog = false }) { Text("Abbrechen") } }
         )
