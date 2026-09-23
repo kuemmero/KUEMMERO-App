@@ -1199,18 +1199,29 @@ data class Leistungsposition(
 private const val LEISTUNGSPOSITIONEN_KEY = "leistungspositionen"
 
 private val KUEMMERO_STANDARD_LEISTUNGEN = listOf(
-    Leistungsposition("Allgemeine Kleinreparatur"),
-    Leistungsposition("Möbelaufbau"),
-    Leistungsposition("Tapezieren"),
-    Leistungsposition("Rasen mähen"),
-    Leistungsposition("Haushalts- / Alltagshilfe"),
-    Leistungsposition("Schimmelbehandlung"),
-    Leistungsposition("Smart Home / Computer / Router"),
-    Leistungsposition("Elektro-/Strom-Kleinaufgabe"),
+    Leistungsposition(
+        "Einfache Kleinreparaturen / Ausbesserungen",
+        "Nur einfache, nicht wesentliche Ausbesserungsarbeiten im zulässigen Umfang."
+    ),
+    Leistungsposition("Möbel- und Regalmontage", "Montage von Möbeln und Regalen im zulässigen Umfang; keine Tischlerarbeiten."),
+    Leistungsposition(
+        "Kleine Tapezier-/Ausbesserungsarbeiten",
+        "Nur geringfügige Tapezier- oder Ausbesserungsarbeiten im zulässigen Umfang."
+    ),
+    Leistungsposition("Rasen mähen", "Gartenpflege / Rasenmähen."),
+    Leistungsposition("Haushalts- / Alltagshilfe", "Unterstützung im Haushalt und Alltag; keine Pflege- oder medizinischen Leistungen."),
+    Leistungsposition(
+        "Schimmel – Reinigung / oberflächliche Stellen",
+        "Nur einfache Reinigung bzw. oberflächliche Behandlung im zulässigen Umfang; keine umfassende Schimmel- oder Bauschadensanierung."
+    ),
+    Leistungsposition(
+        "Computer / Router / Smart Home – ohne Elektroarbeiten",
+        "Einrichtung und Konfiguration; keine Arbeiten an elektrischen Anlagen, Leitungen, Steckdosen oder Schaltern."
+    ),
     Leistungsposition("Anfahrt"),
     Leistungsposition("Arbeitszeit", einheit = "Stunde", preis = 42.0),
     Leistungsposition("Material"),
-    Leistungsposition("Eigene Position")
+    Leistungsposition("Eigene Position", "Nur für Tätigkeiten verwenden, die im eigenen Gewerbe tatsächlich zulässig sind.")
 )
 
 private fun ladeLeistungspositionen(context: Context): List<Leistungsposition> {
@@ -1233,6 +1244,32 @@ private fun ladeLeistungspositionen(context: Context): List<Leistungsposition> {
                 aktiv = o.optBoolean("aktiv", true)
             )
         }.filter { it.name.isNotBlank() }
+            .filterNot { it.name.equals("Elektro-/Strom-Kleinaufgabe", ignoreCase = true) }
+            .map { position ->
+                when {
+                    position.name.equals("Allgemeine Kleinreparatur", ignoreCase = true) -> position.copy(
+                        name = "Einfache Kleinreparaturen / Ausbesserungen",
+                        beschreibung = position.beschreibung.ifBlank { "Nur einfache, nicht wesentliche Ausbesserungsarbeiten im zulässigen Umfang." }
+                    )
+                    position.name.equals("Tapezieren", ignoreCase = true) -> position.copy(
+                        name = "Kleine Tapezier-/Ausbesserungsarbeiten",
+                        beschreibung = position.beschreibung.ifBlank { "Nur geringfügige Tapezier- oder Ausbesserungsarbeiten im zulässigen Umfang." }
+                    )
+                    position.name.equals("Schimmelbehandlung", ignoreCase = true) -> position.copy(
+                        name = "Schimmel – Reinigung / oberflächliche Stellen",
+                        beschreibung = position.beschreibung.ifBlank { "Nur einfache Reinigung bzw. oberflächliche Behandlung im zulässigen Umfang; keine umfassende Schimmel- oder Bauschadensanierung." }
+                    )
+                    position.name.equals("Smart Home / Computer / Router", ignoreCase = true) -> position.copy(
+                        name = "Computer / Router / Smart Home – ohne Elektroarbeiten",
+                        beschreibung = position.beschreibung.ifBlank { "Einrichtung und Konfiguration; keine Arbeiten an elektrischen Anlagen, Leitungen, Steckdosen oder Schaltern." }
+                    )
+                    position.name.equals("Eigene Position", ignoreCase = true) -> position.copy(
+                        beschreibung = position.beschreibung.ifBlank { "Nur für Tätigkeiten verwenden, die im eigenen Gewerbe tatsächlich zulässig sind." }
+                    )
+                    else -> position
+                }
+            }
+            .also { speichereLeistungspositionen(context, it) }
     } catch (_: Exception) {
         KUEMMERO_STANDARD_LEISTUNGEN
     }
@@ -1258,16 +1295,15 @@ private fun leistungsumfangHinweis(leistung: String): String? {
     val text = leistung.lowercase(Locale.GERMANY)
     val elektro = listOf(
         "elektroinstallation", "elektroinstall", "steckdose", "lichtschalter",
-        "sicherungskasten", "unterverteilung", "stromleitung", "stromanschluss",
+        "sicherungskasten", "sicherung", "unterverteilung", "stromleitung", "stromanschluss",
         "kabel verlegen", "elektrische installation"
     ).any { text.contains(it) }
-    val schimmel = listOf(
-        "schimmelsanierung", "schimmelsanieren", "professionelle schimmel",
-        "schimmelbeseitigung", "schimmel sanierung"
-    ).any { text.contains(it) }
+    val schimmel = text.contains("schimmel")
+    val tapezieren = text.contains("tapezier")
     return when {
-        elektro -> "Hinweis: Diese Leistungsbeschreibung kann in den Bereich des zulassungspflichtigen Elektrotechniker-Handwerks fallen. Nur Leistungen anbieten/ausführen, für die eine entsprechende Berechtigung besteht."
-        schimmel -> "Hinweis: Professionelle Schimmel-Sanierungsarbeiten können besondere fachliche und rechtliche Anforderungen haben. Nur den tatsächlich zulässigen Leistungsumfang anbieten."
+        elektro -> "Hinweis: Arbeiten an elektrischen Anlagen/Installationen können zum zulassungspflichtigen Elektrotechniker-Handwerk gehören. Nur entsprechend zulässige Tätigkeiten anbieten/ausführen."
+        schimmel -> "Hinweis: Keine umfassende Schimmel-Sanierung anbieten. Nur den tatsächlich zulässigen Reinigungs-/oberflächlichen Leistungsumfang ausführen."
+        tapezieren -> "Hinweis: Tapezierarbeiten nur in dem geringfügigen bzw. sonst rechtlich zulässigen Umfang anbieten."
         else -> null
     }
 }
@@ -5051,6 +5087,12 @@ fun KuemmeroApp() {
                         item {
                             Text("Meine Leistungen", style = MaterialTheme.typography.headlineSmall, color = KuemmeroGreen, fontWeight = FontWeight.Bold)
                             Text("Hier kannst du deine Auswahl selbst erweitern, ändern und deaktivieren.", color = KuemmeroText)
+                            Text(
+                                "⚠ Die Liste ist keine rechtliche Freigabe. Nur Tätigkeiten anbieten, die dein Gewerbe und deine Qualifikation tatsächlich abdecken.",
+                                color = KuemmeroError,
+                                fontWeight = FontWeight.SemiBold,
+                                fontSize = 12.sp
+                            )
                         }
                         item {
                             Button(
