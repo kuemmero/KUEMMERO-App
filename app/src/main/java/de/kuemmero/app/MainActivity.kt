@@ -1472,6 +1472,11 @@ private fun FotoVorschau(
 @Composable
 fun KuemmeroApp() {
     val context = LocalContext.current
+    val appVersion = remember {
+        runCatching {
+            context.packageManager.getPackageInfo(context.packageName, 0).versionName
+        }.getOrNull()?.takeIf { it.isNotBlank() } ?: "unbekannt"
+    }
     val heute = remember { Date() }
     val datumFormat = remember { SimpleDateFormat("dd.MM.yyyy", Locale.GERMANY) }
     var kunde by remember { mutableStateOf("") }
@@ -3250,6 +3255,11 @@ fun KuemmeroApp() {
                                 Text(
                                     "Haus & Alltag – wir kümmern uns.",
                                     style = MaterialTheme.typography.labelMedium,
+                                    color = Color(0xFFD9F2E3)
+                                )
+                                Text(
+                                    "Version $appVersion",
+                                    style = MaterialTheme.typography.labelSmall,
                                     color = Color(0xFFD9F2E3)
                                 )
                             }
