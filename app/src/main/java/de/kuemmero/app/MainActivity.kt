@@ -8,7 +8,6 @@ import android.graphics.BitmapFactory
 import android.graphics.pdf.PdfDocument
 import android.net.Uri
 import android.provider.MediaStore
-import android.provider.DocumentsContract
 import android.content.Intent
 import android.os.Bundle
 import android.os.CancellationSignal
@@ -58,7 +57,6 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.ui.text.input.KeyboardType
-import androidx.compose.ui.text.style.TextAlign
 import org.json.JSONArray
 import org.json.JSONObject
 import java.text.SimpleDateFormat
@@ -190,7 +188,6 @@ private const val STUNDENSATZ_KEY = "stundensatz"
 private const val BACKUP_URI_KEY = "backup_uri"
 private const val BACKUP_LAST_SUCCESS_KEY = "backup_last_success"
 private const val BACKUP_PRE_RESTORE_FILE = "kuemmero_vor_restore_backup.json"
-private const val DROPBOX_PACKAGE = "com.dropbox.android"
 private const val KOSTENVORANSCHLAEGE_KEY = "kostenvoranschlaege"
 private const val FIRMENNAME_KEY = "firmen_name"
 private const val FIRMENSTRASSE_KEY = "firmen_strasse"
@@ -201,9 +198,6 @@ private const val STEUERNUMMER_KEY = "steuernummer"
 private const val MAHNUNG1_FRIST_TAGE_KEY = "mahnung1_frist_tage"
 private const val MAHNUNG1_GEBUEHR_KEY = "mahnung1_gebuehr"
 private const val MAHNUNG1_TEXT_KEY = "mahnung1_text"
-private const val MAHNUNG_TESTMODUS_KEY = "mahnung_testmodus"
-private const val MAHNUNG_SPEICHERORDNER_URI_KEY = "mahnung_speicherordner_uri"
-private const val DOKUMENTE_SPEICHERORDNER_URI_KEY = "dokumente_speicherordner_uri"
 private fun standardMahnung1Frist(context: Context, basisDatum: Date = Date()): String {
     val tage = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
         .getInt(MAHNUNG1_FRIST_TAGE_KEY, 7)
@@ -221,9 +215,6 @@ private fun standardMahnung1Text(context: Context): String =
             MAHNUNG1_TEXT_KEY,
             "Bitte begleichen Sie den offenen Rechnungsbetrag innerhalb der angegebenen Zahlungsfrist."
         ) ?: "Bitte begleichen Sie den offenen Rechnungsbetrag innerhalb der angegebenen Zahlungsfrist."
-
-private fun csvFeld(wert: String): String =
-    "\"" + wert.replace("\"", "\"\"").replace("\n", " ").replace("\r", " ") + "\""
 
 
 data class Kostenvoranschlag(
@@ -456,7 +447,6 @@ private fun backupText(context: Context): String {
         put("auftraege", JSONArray(p.getString(AUFTRAEGE_KEY, "[]") ?: "[]"))
         put("kunden", JSONArray(p.getString(KUNDEN_KEY, "[]") ?: "[]"))
         put("kostenvoranschlaege", JSONArray(p.getString(KOSTENVORANSCHLAEGE_KEY, "[]") ?: "[]"))
-        put("leistungspositionen", JSONArray(p.getString(LEISTUNGSPOSITIONEN_KEY, "[]") ?: "[]"))
     }.toString(2)
 }
 
@@ -480,45 +470,6 @@ private fun sichereBackupAutomatisch(context: Context): Boolean {
         // Die bisher gewählte Datei wurde z. B. gelöscht oder verschoben.
         // Die alte URI darf danach nicht weiter verwendet werden.
         prefs.edit().remove(BACKUP_URI_KEY).apply()
-        false
-    }
-}
-
-
-private fun teileBackupMitDropbox(context: Context): Boolean {
-    return try {
-        val dateiname = "KÜMMERO-Cloud-Sicherung-${SimpleDateFormat("yyyyMMdd-HHmm", Locale.GERMANY).format(Date())}.json"
-        val datei = java.io.File(context.cacheDir, dateiname)
-        datei.writeText(backupText(context), Charsets.UTF_8)
-
-        val uri = androidx.core.content.FileProvider.getUriForFile(
-            context,
-            context.packageName + ".fileprovider",
-            datei
-        )
-
-        val intent = Intent(Intent.ACTION_SEND).apply {
-            type = "application/json"
-            putExtra(Intent.EXTRA_STREAM, uri)
-            putExtra(Intent.EXTRA_SUBJECT, "KÜMMERO Cloud-Sicherung")
-            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-            setPackage(DROPBOX_PACKAGE)
-        }
-        context.startActivity(intent)
-        true
-    } catch (_: android.content.ActivityNotFoundException) {
-        android.widget.Toast.makeText(
-            context,
-            "Dropbox ist nicht installiert oder nicht verfügbar.",
-            android.widget.Toast.LENGTH_LONG
-        ).show()
-        false
-    } catch (_: Exception) {
-        android.widget.Toast.makeText(
-            context,
-            "Dropbox-Sicherung konnte nicht vorbereitet werden.",
-            android.widget.Toast.LENGTH_LONG
-        ).show()
         false
     }
 }
@@ -1231,122 +1182,20 @@ private fun KlappBereich(
     }
 }
 
-data class Leistungsposition(
-    val name: String,
-    val beschreibung: String = "",
-    val einheit: String = "Pauschale",
-    val preis: Double = 0.0,
-    val aktiv: Boolean = true
-)
-
-private const val LEISTUNGSPOSITIONEN_KEY = "leistungspositionen"
-
-private val KUEMMERO_STANDARD_LEISTUNGEN = listOf(
-    Leistungsposition(
-        "Einfache Kleinreparaturen / Ausbesserungen",
-        "Nur einfache, nicht wesentliche Ausbesserungsarbeiten im zulässigen Umfang."
-    ),
-    Leistungsposition("Möbel- und Regalmontage", "Montage von Möbeln und Regalen im zulässigen Umfang; keine Tischlerarbeiten."),
-    Leistungsposition(
-        "Kleine Tapezier-/Ausbesserungsarbeiten",
-        "Nur geringfügige Tapezier- oder Ausbesserungsarbeiten im zulässigen Umfang."
-    ),
-    Leistungsposition("Rasen mähen", "Gartenpflege / Rasenmähen."),
-    Leistungsposition("Haushalts- / Alltagshilfe", "Unterstützung im Haushalt und Alltag; keine Pflege- oder medizinischen Leistungen."),
-    Leistungsposition(
-        "Schimmel – Reinigung / oberflächliche Stellen",
-        "Nur einfache Reinigung bzw. oberflächliche Behandlung im zulässigen Umfang; keine umfassende Schimmel- oder Bauschadensanierung."
-    ),
-    Leistungsposition(
-        "Computer / Router / Smart Home – ohne Elektroarbeiten",
-        "Einrichtung und Konfiguration; keine Arbeiten an elektrischen Anlagen, Leitungen, Steckdosen oder Schaltern."
-    ),
-    Leistungsposition("Anfahrt"),
-    Leistungsposition("Arbeitszeit", einheit = "Stunde", preis = 42.0),
-    Leistungsposition("Material"),
-    Leistungsposition("Eigene Position", "Nur für Tätigkeiten verwenden, die im eigenen Gewerbe tatsächlich zulässig sind.")
-)
-
-private fun ladeLeistungspositionen(context: Context): List<Leistungsposition> {
-    val p = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-    val raw = p.getString(LEISTUNGSPOSITIONEN_KEY, null)
-    if (raw.isNullOrBlank()) {
-        val defaults = KUEMMERO_STANDARD_LEISTUNGEN
-        speichereLeistungspositionen(context, defaults)
-        return defaults
-    }
-    return try {
-        val arr = JSONArray(raw)
-        List(arr.length()) { i ->
-            val o = arr.optJSONObject(i) ?: JSONObject()
-            Leistungsposition(
-                name = o.optString("name"),
-                beschreibung = o.optString("beschreibung"),
-                einheit = o.optString("einheit", "Pauschale"),
-                preis = o.optDouble("preis", 0.0),
-                aktiv = o.optBoolean("aktiv", true)
-            )
-        }.filter { it.name.isNotBlank() }
-            .filterNot { it.name.equals("Elektro-/Strom-Kleinaufgabe", ignoreCase = true) }
-            .map { position ->
-                when {
-                    position.name.equals("Allgemeine Kleinreparatur", ignoreCase = true) -> position.copy(
-                        name = "Einfache Kleinreparaturen / Ausbesserungen",
-                        beschreibung = position.beschreibung.ifBlank { "Nur einfache, nicht wesentliche Ausbesserungsarbeiten im zulässigen Umfang." }
-                    )
-                    position.name.equals("Tapezieren", ignoreCase = true) -> position.copy(
-                        name = "Kleine Tapezier-/Ausbesserungsarbeiten",
-                        beschreibung = position.beschreibung.ifBlank { "Nur geringfügige Tapezier- oder Ausbesserungsarbeiten im zulässigen Umfang." }
-                    )
-                    position.name.equals("Schimmelbehandlung", ignoreCase = true) -> position.copy(
-                        name = "Schimmel – Reinigung / oberflächliche Stellen",
-                        beschreibung = position.beschreibung.ifBlank { "Nur einfache Reinigung bzw. oberflächliche Behandlung im zulässigen Umfang; keine umfassende Schimmel- oder Bauschadensanierung." }
-                    )
-                    position.name.equals("Smart Home / Computer / Router", ignoreCase = true) -> position.copy(
-                        name = "Computer / Router / Smart Home – ohne Elektroarbeiten",
-                        beschreibung = position.beschreibung.ifBlank { "Einrichtung und Konfiguration; keine Arbeiten an elektrischen Anlagen, Leitungen, Steckdosen oder Schaltern." }
-                    )
-                    position.name.equals("Eigene Position", ignoreCase = true) -> position.copy(
-                        beschreibung = position.beschreibung.ifBlank { "Nur für Tätigkeiten verwenden, die im eigenen Gewerbe tatsächlich zulässig sind." }
-                    )
-                    else -> position
-                }
-            }
-            .also { speichereLeistungspositionen(context, it) }
-    } catch (_: Exception) {
-        KUEMMERO_STANDARD_LEISTUNGEN
-    }
-}
-
-private fun speichereLeistungspositionen(context: Context, liste: List<Leistungsposition>) {
-    val arr = JSONArray()
-    liste.forEach { l ->
-        arr.put(JSONObject().apply {
-            put("name", l.name)
-            put("beschreibung", l.beschreibung)
-            put("einheit", l.einheit)
-            put("preis", l.preis)
-            put("aktiv", l.aktiv)
-        })
-    }
-    context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-        .edit().putString(LEISTUNGSPOSITIONEN_KEY, arr.toString()).commit()
-}
-
-
 private fun leistungsumfangHinweis(leistung: String): String? {
     val text = leistung.lowercase(Locale.GERMANY)
     val elektro = listOf(
         "elektroinstallation", "elektroinstall", "steckdose", "lichtschalter",
-        "sicherungskasten", "sicherung", "unterverteilung", "stromleitung", "stromanschluss",
+        "sicherungskasten", "unterverteilung", "stromleitung", "stromanschluss",
         "kabel verlegen", "elektrische installation"
     ).any { text.contains(it) }
-    val schimmel = text.contains("schimmel")
-    val tapezieren = text.contains("tapezier")
+    val schimmel = listOf(
+        "schimmelsanierung", "schimmelsanieren", "professionelle schimmel",
+        "schimmelbeseitigung", "schimmel sanierung"
+    ).any { text.contains(it) }
     return when {
-        elektro -> "Hinweis: Arbeiten an elektrischen Anlagen/Installationen können zum zulassungspflichtigen Elektrotechniker-Handwerk gehören. Nur entsprechend zulässige Tätigkeiten anbieten/ausführen."
-        schimmel -> "Hinweis: Keine umfassende Schimmel-Sanierung anbieten. Nur den tatsächlich zulässigen Reinigungs-/oberflächlichen Leistungsumfang ausführen."
-        tapezieren -> "Hinweis: Tapezierarbeiten nur in dem geringfügigen bzw. sonst rechtlich zulässigen Umfang anbieten."
+        elektro -> "Hinweis: Diese Leistungsbeschreibung kann in den Bereich des zulassungspflichtigen Elektrotechniker-Handwerks fallen. Nur Leistungen anbieten/ausführen, für die eine entsprechende Berechtigung besteht."
+        schimmel -> "Hinweis: Professionelle Schimmel-Sanierungsarbeiten können besondere fachliche und rechtliche Anforderungen haben. Nur den tatsächlich zulässigen Leistungsumfang anbieten."
         else -> null
     }
 }
@@ -1462,21 +1311,7 @@ fun KuemmeroApp() {
     var unterschriftBereichOffen by remember { mutableStateOf(false) }
     var sicherungBereichOffen by remember { mutableStateOf(false) }
     var hauptseite by remember { mutableStateOf("Heute") }
-    var globaleSuche by remember { mutableStateOf("") }
-    var rechnungArchivSuche by remember { mutableStateOf("") }
-    var rechnungArchivJahr by remember { mutableStateOf("Alle") }
     var kostenvoranschlaege by remember { mutableStateOf(ladeKostenvoranschlaege(context)) }
-    var leistungspositionen by remember { mutableStateOf(ladeLeistungspositionen(context)) }
-    var leistungspositionDialog by remember { mutableStateOf(false) }
-    var leistungspositionBearbeiteIndex by remember { mutableStateOf<Int?>(null) }
-    var leistungspositionLoeschIndex by remember { mutableStateOf<Int?>(null) }
-    var leistungspositionName by remember { mutableStateOf("") }
-    var leistungspositionBeschreibung by remember { mutableStateOf("") }
-    var leistungspositionEinheit by remember { mutableStateOf("Pauschale") }
-    var leistungspositionPreis by remember { mutableStateOf("") }
-    var leistungspositionAktiv by remember { mutableStateOf(true) }
-    var leistungsPreisIndex by remember { mutableStateOf<Int?>(null) }
-    var leistungsPreisEingabe by remember { mutableStateOf("") }
     var kvFormOffen by remember { mutableStateOf(false) }
     var kvBearbeiteIndex by remember { mutableStateOf<Int?>(null) }
     var kvNummer by remember { mutableStateOf("KV-" + SimpleDateFormat("yyyyMMdd-HHmmss", Locale.GERMANY).format(heute)) }
@@ -1486,11 +1321,6 @@ fun KuemmeroApp() {
     var kvStrasse by remember { mutableStateOf("") }
     var kvOrt by remember { mutableStateOf("") }
     var kvLeistung by remember { mutableStateOf("") }
-    var leistungsAuswahlZiel by remember { mutableStateOf<String?>(null) }
-    var leistungsPreisDialog by remember { mutableStateOf(false) }
-    var leistungsPreisName by remember { mutableStateOf("") }
-    var leistungsPreisEinheit by remember { mutableStateOf("Pauschale") }
-    var leistungsPreisVorschlag by remember { mutableStateOf("") }
     var kvStunden by remember { mutableStateOf("") }
     var kvMaterial by remember { mutableStateOf("") }
     var kvMaterialBonUri by remember { mutableStateOf("") }
@@ -1558,6 +1388,7 @@ fun KuemmeroApp() {
 
     var auftragFuerPdf by remember { mutableStateOf<Auftrag?>(null) }
     var rechnungFuerIndex by remember { mutableStateOf<Int?>(null) }
+    var rechnungDetailIndex by remember { mutableStateOf<Int?>(null) }
     var rechnungNummerEditIndex by remember { mutableStateOf<Int?>(null) }
     var rechnungNummerEditText by remember { mutableStateOf("") }
     var rechnungScanIndex by remember { mutableStateOf<Int?>(null) }
@@ -1574,10 +1405,6 @@ fun KuemmeroApp() {
     var mahnung2Text by remember { mutableStateOf("") }
 
     var mahnungEinstellungenOffen by remember { mutableStateOf(false) }
-    var mahnungSpeicherBestaetigungOffen by remember { mutableStateOf(false) }
-    var ausstehendeMahnungDateiName by remember { mutableStateOf("") }
-    var ausstehendeMahnungTyp by remember { mutableStateOf(0) }
-    var ausstehendeMahnungIndex by remember { mutableStateOf<Int?>(null) }
     val mahnungPrefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
     var mahnungEinstellungFristTage by remember {
         mutableStateOf(mahnungPrefs.getInt(MAHNUNG1_FRIST_TAGE_KEY, 7).toString())
@@ -1591,159 +1418,18 @@ fun KuemmeroApp() {
             )
         )
     }
-    val testHeuteText = SimpleDateFormat("dd.MM.yyyy", Locale.GERMANY).format(Date())
     var mahnungEinstellungText by remember { mutableStateOf(standardMahnung1Text(context)) }
-    var mahnungTestmodus by remember { mutableStateOf(mahnungPrefs.getBoolean(MAHNUNG_TESTMODUS_KEY, false)) }
-    var testMahnung1DialogOffen by remember { mutableStateOf(false) }
-    var testMahnungLoeschBestaetigung by remember { mutableStateOf(false) }
-    var testMahnung1Erstellt by remember { mutableStateOf(false) }
-    var testMahnung1Datum by remember { mutableStateOf(testHeuteText) }
-    var testMahnung1Frist by remember { mutableStateOf(standardMahnung1Frist(context)) }
-    var testMahnung1Gebuehr by remember { mutableStateOf(mahnungEinstellungGebuehr) }
-    var testMahnung1Text by remember { mutableStateOf(mahnungEinstellungText) }
-
-    val testMahnungAuftrag = Auftrag(
-        nummer = "TEST-AUFTRAG",
-        datum = testHeuteText,
-        kunde = "TESTKUNDE – NICHT ECHT",
-        kundenStrasse = "Teststraße 1",
-        kundenOrt = "58675 Hemer",
-        leistung = "Testleistung Mahnung",
-        stunden = 10.0,
-        material = 0.0,
-        fahrt = 0.0,
-        stundensatz = 42.0,
-        rechnungsnummer = "TEST-RECHNUNG",
-        rechnungsdatum = testHeuteText,
-        faelligAm = testHeuteText
-    )
-
-    var mahnungSpeicherOrdnerUri by remember { mutableStateOf(mahnungPrefs.getString(MAHNUNG_SPEICHERORDNER_URI_KEY, "") ?: "") }
-
-    // Zentraler Ordner für alle von KÜMMERO erzeugten/gespeicherten Dokumente.
-    // Die Auswahl gilt für PDFs (Angebote, Rechnungen, Mahnungen, Test-PDFs) und CSV/JSON-Exporte.
-    val dokumentePrefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-    var dokumenteSpeicherOrdnerUri by remember {
-        mutableStateOf(dokumentePrefs.getString(DOKUMENTE_SPEICHERORDNER_URI_KEY, "") ?: "")
-    }
-    val dokumenteOrdnerLauncher = rememberLauncherForActivityResult(
-        ActivityResultContracts.OpenDocumentTree()
-    ) { uri ->
-        if (uri != null) {
-            try {
-                context.contentResolver.takePersistableUriPermission(
-                    uri,
-                    Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION
-                )
-            } catch (_: Exception) { }
-            dokumentePrefs.edit().putString(DOKUMENTE_SPEICHERORDNER_URI_KEY, uri.toString()).apply()
-            dokumenteSpeicherOrdnerUri = uri.toString()
-            android.widget.Toast.makeText(context, "Dokumentenordner ausgewählt.", android.widget.Toast.LENGTH_SHORT).show()
-        }
-    }
-
-    fun dokumentSpeicherIntent(mimeType: String, dateiname: String): Intent = Intent(Intent.ACTION_CREATE_DOCUMENT).apply {
-        addCategory(Intent.CATEGORY_OPENABLE)
-        type = mimeType
-        putExtra(Intent.EXTRA_TITLE, dateiname)
-        if (dokumenteSpeicherOrdnerUri.isNotBlank()) {
-            putExtra(DocumentsContract.EXTRA_INITIAL_URI, Uri.parse(dokumenteSpeicherOrdnerUri))
-        }
-    }
-
-    val mahnungOrdnerLauncher = rememberLauncherForActivityResult(
-        ActivityResultContracts.OpenDocumentTree()
-    ) { uri ->
-        if (uri != null) {
-            try {
-                context.contentResolver.takePersistableUriPermission(
-                    uri,
-                    Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION
-                )
-            } catch (_: Exception) {
-                // Manche Anbieter erlauben keine dauerhafte Berechtigung; die aktuelle Auswahl bleibt trotzdem gültig.
-            }
-            mahnungPrefs.edit().putString(MAHNUNG_SPEICHERORDNER_URI_KEY, uri.toString()).apply()
-            mahnungSpeicherOrdnerUri = uri.toString()
-            android.widget.Toast.makeText(context, "Mahnung-Ordner ausgewählt.", android.widget.Toast.LENGTH_SHORT).show()
-        }
-    }
-
-
-    fun speichereMahnungInAusgewaehltenOrdner(typ: Int, index: Int, dateiname: String): Boolean {
-        if (mahnungSpeicherOrdnerUri.isBlank()) return false
-        val a = auftraege.getOrNull(index) ?: return false
-        return try {
-            val treeUri = Uri.parse(mahnungSpeicherOrdnerUri)
-            val mime = "application/pdf"
-            val zielUri = DocumentsContract.createDocument(
-                context.contentResolver,
-                treeUri,
-                mime,
-                dateiname
-            ) ?: throw Exception("Datei konnte nicht angelegt werden")
-            val pdf = if (typ == 1) {
-                erstelleMahnung1Pdf(context, a, mahnung1Datum.trim(), mahnung1Frist.trim(), zahl(mahnung1Gebuehr), mahnung1Text.trim())
-            } else {
-                erstelleMahnung2Pdf(context, a, mahnung2Datum.trim(), mahnung2Frist.trim(), zahl(mahnung2Gebuehr), mahnung2Text.trim())
-            }
-            context.contentResolver.openOutputStream(zielUri)?.use { out -> pdf.writeTo(out) } ?: throw Exception("Datei konnte nicht geöffnet werden")
-            pdf.close()
-            val aktualisiert = if (typ == 1) {
-                a.copy(
-                    mahnung1Datum = mahnung1Datum.trim(),
-                    mahnung1Frist = mahnung1Frist.trim(),
-                    mahnung1Gebuehr = zahl(mahnung1Gebuehr),
-                    mahnung1Text = mahnung1Text.trim(),
-                    mahnung1Erstellt = true
-                )
-            } else {
-                a.copy(
-                    mahnung2Datum = mahnung2Datum.trim(),
-                    mahnung2Frist = mahnung2Frist.trim(),
-                    mahnung2Gebuehr = zahl(mahnung2Gebuehr),
-                    mahnung2Text = mahnung2Text.trim(),
-                    mahnung2Erstellt = true
-                )
-            }
-            auftraege = auftraege.toMutableList().apply { set(index, aktualisiert) }
-            speichereAuftraege(context, auftraege)
-            if (typ == 1) mahnung1Index = null else mahnung2Index = null
-            android.widget.Toast.makeText(context, "Mahnung gespeichert.", android.widget.Toast.LENGTH_SHORT).show()
-            true
-        } catch (_: Exception) {
-            android.widget.Toast.makeText(context, "Mahnung konnte nicht gespeichert werden.", android.widget.Toast.LENGTH_LONG).show()
-            false
-        }
-    }
-
-    val testMahnungLauncher = rememberLauncherForActivityResult(
-        ActivityResultContracts.StartActivityForResult()
-    ) { result ->
-        result.data?.data?.let { uri ->
-            try {
-                val pdf = erstelleMahnung1Pdf(context, testMahnungAuftrag, testMahnung1Datum.trim(), testMahnung1Frist.trim(), zahl(testMahnung1Gebuehr), testMahnung1Text.trim())
-                context.contentResolver.openOutputStream(uri)?.use { out -> pdf.writeTo(out) } ?: throw Exception("Datei konnte nicht geöffnet werden")
-                pdf.close()
-                testMahnung1Erstellt = true
-                testMahnung1DialogOffen = false
-                android.widget.Toast.makeText(context, "Test-Mahnung erstellt – echte Rechnungsdaten wurden nicht verändert.", android.widget.Toast.LENGTH_LONG).show()
-            } catch (_: Exception) {
-                android.widget.Toast.makeText(context, "Test-Mahnung konnte nicht erstellt werden.", android.widget.Toast.LENGTH_LONG).show()
-            }
-        }
-    }
 
     val mahnung1Launcher = rememberLauncherForActivityResult(
-        ActivityResultContracts.StartActivityForResult()
-    ) { result ->
-        result.data?.data?.let { uri ->
+        ActivityResultContracts.CreateDocument("application/pdf")
+    ) { uri ->
+        uri?.let {
             val index = mahnung1Index
             val a = index?.let { i -> auftraege.getOrNull(i) }
             if (a != null) {
                 try {
                     val pdf = erstelleMahnung1Pdf(context, a, mahnung1Datum.trim(), mahnung1Frist.trim(), zahl(mahnung1Gebuehr), mahnung1Text.trim())
-                    context.contentResolver.openOutputStream(uri)?.use { out -> pdf.writeTo(out) } ?: throw Exception("Datei konnte nicht geöffnet werden")
+                    context.contentResolver.openOutputStream(it)?.use { out -> pdf.writeTo(out) } ?: throw Exception("Datei konnte nicht geöffnet werden")
                     pdf.close()
                     val aktualisiert = a.copy(
                         mahnung1Datum = mahnung1Datum.trim(),
@@ -1764,15 +1450,15 @@ fun KuemmeroApp() {
     }
 
     val mahnung2Launcher = rememberLauncherForActivityResult(
-        ActivityResultContracts.StartActivityForResult()
-    ) { result ->
-        result.data?.data?.let { uri ->
+        ActivityResultContracts.CreateDocument("application/pdf")
+    ) { uri ->
+        uri?.let {
             val index = mahnung2Index
             val a = index?.let { i -> auftraege.getOrNull(i) }
             if (a != null) {
                 try {
                     val pdf = erstelleMahnung2Pdf(context, a, mahnung2Datum.trim(), mahnung2Frist.trim(), zahl(mahnung2Gebuehr), mahnung2Text.trim())
-                    context.contentResolver.openOutputStream(uri)?.use { out -> pdf.writeTo(out) } ?: throw Exception("Datei konnte nicht geöffnet werden")
+                    context.contentResolver.openOutputStream(it)?.use { out -> pdf.writeTo(out) } ?: throw Exception("Datei konnte nicht geöffnet werden")
                     pdf.close()
                     val aktualisiert = a.copy(
                         mahnung2Datum = mahnung2Datum.trim(),
@@ -1840,14 +1526,13 @@ fun KuemmeroApp() {
     }
 
     var sicherungBestaetigung by remember { mutableStateOf(false) }
-    var dropboxBestaetigung by remember { mutableStateOf(false) }
     var abschlusspruefungIndex by remember { mutableStateOf<Int?>(null) }
     val backupScope = rememberCoroutineScope()
 
     val createBackup = rememberLauncherForActivityResult(
-        ActivityResultContracts.StartActivityForResult()
-    ) { result ->
-        result.data?.data?.let { selectedUri ->
+        ActivityResultContracts.CreateDocument("application/json")
+    ) { uri ->
+        uri?.let { selectedUri ->
             context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE).edit()
                 .putString(BACKUP_URI_KEY, selectedUri.toString()).apply()
             backupScope.launch {
@@ -1872,51 +1557,6 @@ fun KuemmeroApp() {
             }
         }
     }
-    val createDataExport = rememberLauncherForActivityResult(
-        ActivityResultContracts.StartActivityForResult()
-    ) { result ->
-        result.data?.data?.let { selectedUri ->
-            backupScope.launch {
-                val csv = buildString {
-                    append("KÜMMERO Datenexport\n")
-                    append("Aufträge\n")
-                    append(listOf("Nummer", "Datum", "Leistungsdatum", "Kunde", "Adresse", "Ort", "Leistung", "Stunden", "Material", "Fahrt", "Stundensatz", "Betrag", "Status", "Zahlungsstatus", "Rechnungsnummer", "Rechnungsdatum", "Fällig am").joinToString(";") { csvFeld(it) })
-                    append("\n")
-                    auftraege.forEach { a ->
-                        append(listOf(
-                            a.nummer, a.datum, a.leistungsdatum, a.kunde, a.kundenStrasse, a.kundenOrt,
-                            a.leistung, a.stunden.toString(), a.material.toString(), a.fahrt.toString(), a.stundensatz.toString(),
-                            gesamtbetrag(a.stunden, a.material, a.fahrt, a.stundensatz, a.erstellungskosten).toString(),
-                            a.status, a.zahlungsstatus, a.rechnungsnummer, a.rechnungsdatum, a.faelligAm
-                        ).joinToString(";") { csvFeld(it) })
-                        append("\n")
-                    }
-                    append("\nKunden\n")
-                    append(listOf("Name", "Adresse", "Ort", "Telefon", "E-Mail").joinToString(";") { csvFeld(it) })
-                    append("\n")
-                    kunden.forEach { k ->
-                        append(listOf(k.name, k.adresse, k.ort, k.telefon, k.email).joinToString(";") { csvFeld(it) })
-                        append("\n")
-                    }
-                }
-                val ok = withContext(Dispatchers.IO) {
-                    try {
-                        context.contentResolver.openOutputStream(selectedUri, "wt")?.use { out ->
-                            out.write(csv.toByteArray(Charsets.UTF_8))
-                            out.flush()
-                        } ?: throw Exception("Datei konnte nicht geöffnet werden")
-                        true
-                    } catch (_: Exception) { false }
-                }
-                android.widget.Toast.makeText(
-                    context,
-                    if (ok) "Datenexport gespeichert." else "Datenexport fehlgeschlagen.",
-                    if (ok) 0 else 1
-                ).show()
-            }
-        }
-    }
-
     // Vorhandene Backup-Datei auswählen und als feste KÜMMERO-Sicherung hinterlegen.
     // Dadurch wird bei einem gelöschten/ungültigen URI keine neue Datei mit (1), (2) usw. erzeugt.
     val backupDateiAuswaehlen = rememberLauncherForActivityResult(
@@ -2002,7 +1642,6 @@ fun KuemmeroApp() {
                 val arr = obj.optJSONArray("auftraege") ?: JSONArray()
                 val kundenArr = obj.optJSONArray("kunden") ?: JSONArray()
                 val kvArr = obj.optJSONArray("kostenvoranschlaege") ?: JSONArray()
-                val leistungsArr = obj.optJSONArray("leistungspositionen")
                 context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE).edit()
                     .putString(STUNDENSATZ_KEY, rate)
                     .putString(FIRMENNAME_KEY, firmenNameBackup)
@@ -2013,9 +1652,7 @@ fun KuemmeroApp() {
                     .putString(STEUERNUMMER_KEY, steuernummerBackup)
                     .putString(AUFTRAEGE_KEY, arr.toString())
                     .putString(KUNDEN_KEY, kundenArr.toString())
-                    .putString(KOSTENVORANSCHLAEGE_KEY, kvArr.toString())
-                    .apply { if (leistungsArr != null) putString(LEISTUNGSPOSITIONEN_KEY, leistungsArr.toString()) }
-                    .commit()
+                    .putString(KOSTENVORANSCHLAEGE_KEY, kvArr.toString()).commit()
                 stundensatz = rate
                 unternehmerName = firmenNameBackup
                 unternehmerStrasse = firmenStrasseBackup
@@ -2026,7 +1663,6 @@ fun KuemmeroApp() {
                 auftraege = ladeAuftraege(context)
                 kunden = ladeKunden(context)
                 kostenvoranschlaege = ladeKostenvoranschlaege(context)
-                leistungspositionen = ladeLeistungspositionen(context)
                 auftragDetailIndex = null
                 auftragFormOffen = false
                 bearbeiteIndex = null
@@ -2081,9 +1717,9 @@ fun KuemmeroApp() {
     val datumJetzt = datumFormat.format(Date())
 
     val pdfLauncher = rememberLauncherForActivityResult(
-        ActivityResultContracts.StartActivityForResult()
-    ) { result ->
-        result.data?.data?.let { uri ->
+        ActivityResultContracts.CreateDocument("application/pdf")
+    ) { uri ->
+        uri?.let {
             val a = auftragFuerPdf
             val pdf = if (a != null) {
                 erstellePdf(
@@ -2099,7 +1735,7 @@ fun KuemmeroApp() {
                     fotosVorher, fotosNachher
                 )
             }
-            context.contentResolver.openOutputStream(uri)?.use { out -> pdf.writeTo(out) }
+            context.contentResolver.openOutputStream(it)?.use { out -> pdf.writeTo(out) }
             pdf.close()
             auftragFuerPdf = null
         }
@@ -2107,9 +1743,9 @@ fun KuemmeroApp() {
 
 
     val rechnungLauncher = rememberLauncherForActivityResult(
-        ActivityResultContracts.StartActivityForResult()
-    ) { result ->
-        result.data?.data?.let { uri ->
+        ActivityResultContracts.CreateDocument("application/pdf")
+    ) { uri ->
+        uri?.let {
             val index = rechnungFuerIndex
             val a = index?.let { i -> auftraege.getOrNull(i) }
             if (a != null) {
@@ -2145,7 +1781,7 @@ fun KuemmeroApp() {
                         a.unterschriftDatum,
                         a.fotosVorher, a.fotosNachher, a.erstellungskosten
                     )
-                    context.contentResolver.openOutputStream(uri)?.use { out -> pdf.writeTo(out) }
+                    context.contentResolver.openOutputStream(it)?.use { out -> pdf.writeTo(out) }
                     pdf.close()
                     speichereRechnungsnummer(context, rechnungsnummer)
                     auftraege = auftraege.toMutableList().apply {
@@ -2190,12 +1826,6 @@ fun KuemmeroApp() {
         .take(8)
     val naechsterTermin = naechsteTermine.firstOrNull { it.terminDatum != heuteText }
     val abgearbeiteteAuftraege = auftraege.count { it.status == "Erledigt" || it.status == "Abgerechnet" }
-    val heuteZuErledigen = auftraege.filter { a ->
-        a.terminDatum == heuteText ||
-        rechnungIstUeberfaellig(a, heuteText) ||
-        (a.status == "Erledigt" && a.rechnungsnummer.isBlank()) ||
-        a.status == "In Bearbeitung"
-    }.distinctBy { it.nummer.ifBlank { "${it.kunde}|${it.datum}|${it.leistung}" } }
 
     if (sicherungBestaetigung) {
         val vorhandeneSicherung = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
@@ -2222,26 +1852,6 @@ fun KuemmeroApp() {
             },
             dismissButton = {
                 TextButton(onClick = { sicherungBestaetigung = false }) { Text("Abbrechen") }
-            }
-        )
-    }
-
-
-    if (dropboxBestaetigung) {
-        AlertDialog(
-            onDismissRequest = { dropboxBestaetigung = false },
-            title = { Text("Dropbox-Sicherung bestätigen") },
-            text = {
-                Text("Soll jetzt eine aktuelle KÜMMERO-Datensicherung an Dropbox übergeben werden? Es wird erst nach deiner Bestätigung die Dropbox-App geöffnet.")
-            },
-            confirmButton = {
-                TextButton(onClick = {
-                    dropboxBestaetigung = false
-                    teileBackupMitDropbox(context)
-                }) { Text("Ja, an Dropbox") }
-            },
-            dismissButton = {
-                TextButton(onClick = { dropboxBestaetigung = false }) { Text("Abbrechen") }
             }
         )
     }
@@ -2362,82 +1972,6 @@ fun KuemmeroApp() {
                         "Diese Werte sind nur Voreinstellungen. Bei jeder einzelnen Mahnung kannst du sie trotzdem ändern.",
                         color = KuemmeroText
                     )
-                    Card(
-                        modifier = Modifier.fillMaxWidth(),
-                        colors = CardDefaults.cardColors(containerColor = KuemmeroMint),
-                        border = BorderStroke(1.dp, KuemmeroGreen),
-                        shape = RoundedCornerShape(14.dp)
-                    ) {
-                        Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                            Text("📁 Mahnung-Speicherordner", fontWeight = FontWeight.Bold, color = KuemmeroGreen)
-                            Text(
-                                if (mahnungSpeicherOrdnerUri.isBlank())
-                                    "Kein Ordner ausgewählt. Beim Speichern fragt Android nach dem Ziel."
-                                else
-                                    "Ein Ordner ist ausgewählt. Vor jeder Speicherung wird trotzdem nochmals gefragt." ,
-                                style = MaterialTheme.typography.bodySmall,
-                                color = KuemmeroText
-                            )
-                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
-                                OutlinedButton(
-                                    onClick = { mahnungOrdnerLauncher.launch(null) },
-                                    modifier = Modifier.weight(1f),
-                                    shape = RoundedCornerShape(22.dp),
-                                    border = BorderStroke(2.dp, KuemmeroGreen),
-                                    colors = ButtonDefaults.outlinedButtonColors(contentColor = KuemmeroGreen)
-                                ) { Text(if (mahnungSpeicherOrdnerUri.isBlank()) "Ordner auswählen" else "Ordner ändern") }
-                                if (mahnungSpeicherOrdnerUri.isNotBlank()) {
-                                    OutlinedButton(
-                                        onClick = {
-                                            mahnungPrefs.edit().remove(MAHNUNG_SPEICHERORDNER_URI_KEY).apply()
-                                            mahnungSpeicherOrdnerUri = ""
-                                            android.widget.Toast.makeText(context, "Mahnung-Ordner entfernt.", android.widget.Toast.LENGTH_SHORT).show()
-                                        },
-                                        shape = RoundedCornerShape(22.dp),
-                                        border = BorderStroke(1.dp, KuemmeroError),
-                                        colors = ButtonDefaults.outlinedButtonColors(contentColor = KuemmeroError)
-                                    ) { Text("Entfernen") }
-                                }
-                            }
-                        }
-                    }
-                    if (mahnungEinstellungFristTage.toIntOrNull()?.coerceAtLeast(0) == 0) {
-                        Card(
-                            modifier = Modifier.fillMaxWidth(),
-                            colors = CardDefaults.cardColors(containerColor = KuemmeroMint),
-                            border = BorderStroke(2.dp, KuemmeroGreen),
-                            shape = RoundedCornerShape(14.dp)
-                        ) {
-                            Text(
-                                "0 Tage eingestellt – die neue Zahlungsfrist endet am Mahntag.",
-                                modifier = Modifier.padding(12.dp),
-                                color = KuemmeroGreen,
-                                fontWeight = FontWeight.Bold
-                            )
-                        }
-                    }
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.SpaceBetween
-                    ) {
-                        Column(Modifier.weight(1f)) {
-                            Text("Testmodus für Mahnungen", fontWeight = FontWeight.Bold, color = KuemmeroGreen)
-                            Text(
-                                "Nur aktivieren, wenn du Erstellen → Ändern → Löschen testen möchtest. Testdaten verändern keine echte Rechnung.",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = KuemmeroText
-                            )
-                        }
-                        Switch(
-                            checked = mahnungTestmodus,
-                            onCheckedChange = {
-                                mahnungTestmodus = it
-                                mahnungPrefs.edit().putBoolean(MAHNUNG_TESTMODUS_KEY, it).apply()
-                                if (!it) testMahnung1Erstellt = false
-                            }
-                        )
-                    }
                     OutlinedTextField(
                         value = mahnungEinstellungFristTage,
                         onValueChange = { mahnungEinstellungFristTage = it },
@@ -2477,7 +2011,6 @@ fun KuemmeroApp() {
                         .putInt(MAHNUNG1_FRIST_TAGE_KEY, tage)
                         .putFloat(MAHNUNG1_GEBUEHR_KEY, gebuehr.toFloat())
                         .putString(MAHNUNG1_TEXT_KEY, text)
-                        .putBoolean(MAHNUNG_TESTMODUS_KEY, mahnungTestmodus)
                         .apply()
                     mahnungEinstellungFristTage = tage.toString()
                     mahnungEinstellungGebuehr = String.format(Locale.GERMANY, "%.2f", gebuehr)
@@ -2489,88 +2022,6 @@ fun KuemmeroApp() {
             dismissButton = {
                 TextButton(onClick = { mahnungEinstellungenOffen = false }) { Text("Abbrechen") }
             }
-        )
-    }
-
-    if (mahnungSpeicherBestaetigungOffen) {
-        AlertDialog(
-            onDismissRequest = { mahnungSpeicherBestaetigungOffen = false },
-            title = { Text("Mahnung wirklich speichern?") },
-            text = {
-                Text(
-                    "Die PDF wird jetzt nur nach deiner Bestätigung im ausgewählten Mahnung-Ordner gespeichert.\n\nDatei: $ausstehendeMahnungDateiName\n\nOhne Bestätigung wird nichts gespeichert.",
-                    color = KuemmeroText
-                )
-            },
-            confirmButton = {
-                TextButton(onClick = {
-                    val ok = ausstehendeMahnungIndex?.let {
-                        speichereMahnungInAusgewaehltenOrdner(ausstehendeMahnungTyp, it, ausstehendeMahnungDateiName)
-                    } ?: false
-                    if (ok) {
-                        mahnungSpeicherBestaetigungOffen = false
-                        ausstehendeMahnungIndex = null
-                        ausstehendeMahnungDateiName = ""
-                        ausstehendeMahnungTyp = 0
-                    }
-                }) { Text("Jetzt speichern") }
-            },
-            dismissButton = { TextButton(onClick = {
-                mahnungSpeicherBestaetigungOffen = false
-                ausstehendeMahnungIndex = null
-                ausstehendeMahnungDateiName = ""
-                ausstehendeMahnungTyp = 0
-            }) { Text("Nicht speichern") } }
-        )
-    }
-
-    if (testMahnung1DialogOffen && mahnungTestmodus) {
-        AlertDialog(
-            onDismissRequest = { testMahnung1DialogOffen = false },
-            title = { Text("Test-Mahnung erstellen / ändern") },
-            text = {
-                Column(
-                    modifier = Modifier.fillMaxWidth().heightIn(max = 520.dp),
-                    verticalArrangement = Arrangement.spacedBy(9.dp)
-                ) {
-                    Text("TESTDATEN – keine echte Rechnung wird verändert.", color = KuemmeroGreen, fontWeight = FontWeight.Bold)
-                    Text("Rechnung: TEST-RECHNUNG · Kunde: TESTKUNDE – NICHT ECHT")
-                    OutlinedTextField(testMahnung1Datum, { testMahnung1Datum = it }, label = { Text("Mahndatum") }, singleLine = true, colors = feldFarben, modifier = Modifier.fillMaxWidth())
-                    OutlinedTextField(testMahnung1Frist, { testMahnung1Frist = it }, label = { Text("Neue Zahlungsfrist") }, singleLine = true, colors = feldFarben, modifier = Modifier.fillMaxWidth())
-                    OutlinedTextField(testMahnung1Gebuehr, { testMahnung1Gebuehr = it }, label = { Text("Mahngebühr (€)") }, singleLine = true, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal), colors = feldFarben, modifier = Modifier.fillMaxWidth())
-                    OutlinedTextField(testMahnung1Text, { testMahnung1Text = it }, label = { Text("Mahntext (änderbar)") }, minLines = 4, maxLines = 7, colors = feldFarben, modifier = Modifier.fillMaxWidth())
-                }
-            },
-            confirmButton = {
-                TextButton(onClick = {
-                    if (testMahnung1Datum.isBlank() || testMahnung1Frist.isBlank()) {
-                        android.widget.Toast.makeText(context, "Bitte Mahndatum und Zahlungsfrist eingeben.", android.widget.Toast.LENGTH_SHORT).show()
-                    } else {
-                        testMahnungLauncher.launch(dokumentSpeicherIntent("application/pdf", "KÜMMERO-TEST-Mahnung-${testMahnung1Datum.replace('.', '-')}.pdf"))
-                    }
-                }) { Text(if (testMahnung1Erstellt) "Test-PDF neu erstellen" else "Test-PDF erstellen") }
-            },
-            dismissButton = { TextButton(onClick = { testMahnung1DialogOffen = false }) { Text("Abbrechen") } }
-        )
-    }
-
-    if (testMahnungLoeschBestaetigung && mahnungTestmodus) {
-        AlertDialog(
-            onDismissRequest = { testMahnungLoeschBestaetigung = false },
-            title = { Text("Test-Mahnung löschen?") },
-            text = { Text("Nur die Test-Mahnung wird entfernt. Echte Rechnungsdaten bleiben unverändert.") },
-            confirmButton = {
-                TextButton(onClick = {
-                    testMahnung1Erstellt = false
-                    testMahnungLoeschBestaetigung = false
-                    testMahnung1Datum = testHeuteText
-                    testMahnung1Frist = standardMahnung1Frist(context)
-                    testMahnung1Gebuehr = mahnungEinstellungGebuehr
-                    testMahnung1Text = mahnungEinstellungText
-                    android.widget.Toast.makeText(context, "Test-Mahnung gelöscht.", android.widget.Toast.LENGTH_SHORT).show()
-                }, colors = ButtonDefaults.textButtonColors(contentColor = KuemmeroError)) { Text("Löschen") }
-            },
-            dismissButton = { TextButton(onClick = { testMahnungLoeschBestaetigung = false }) { Text("Abbrechen") } }
         )
     }
 
@@ -2587,22 +2038,6 @@ fun KuemmeroApp() {
                     OutlinedTextField(mahnung1Datum, { mahnung1Datum = it }, label = { Text("Mahndatum") }, singleLine = true, colors = feldFarben, modifier = Modifier.fillMaxWidth())
                     OutlinedTextField(mahnung1Frist, { mahnung1Frist = it }, label = { Text("Neue Zahlungsfrist") }, singleLine = true, colors = feldFarben, modifier = Modifier.fillMaxWidth())
                     OutlinedTextField(mahnung1Gebuehr, { mahnung1Gebuehr = it }, label = { Text("Mahngebühr (€)") }, singleLine = true, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal), colors = feldFarben, modifier = Modifier.fillMaxWidth())
-                    if (mahnungEinstellungFristTage.toIntOrNull()?.coerceAtLeast(0) == 0) {
-                        Card(
-                            modifier = Modifier.fillMaxWidth(),
-                            colors = CardDefaults.cardColors(containerColor = KuemmeroMint),
-                            border = BorderStroke(1.dp, KuemmeroGreen),
-                            shape = RoundedCornerShape(12.dp)
-                        ) {
-                            Text(
-                                "0 Tage eingestellt – die neue Zahlungsfrist endet am Mahntag.",
-                                modifier = Modifier.padding(10.dp),
-                                color = KuemmeroGreen,
-                                fontWeight = FontWeight.Bold,
-                                style = MaterialTheme.typography.bodySmall
-                            )
-                        }
-                    }
                     OutlinedTextField(mahnung1Text, { mahnung1Text = it }, label = { Text("Mahntext (änderbar)") }, minLines = 4, maxLines = 7, colors = feldFarben, modifier = Modifier.fillMaxWidth())
                 }
             },
@@ -2615,15 +2050,7 @@ fun KuemmeroApp() {
                         android.widget.Toast.makeText(context, "Bitte Mahndatum und Zahlungsfrist eingeben.", 0).show()
                     } else {
                         val name = a.kunde.ifBlank { "Kunde" }.replace("/", "-")
-                        val dateiname = "KÜMMERO-1-Mahnung-${a.rechnungsnummer}-$name.pdf"
-                        if (mahnungSpeicherOrdnerUri.isNotBlank()) {
-                            ausstehendeMahnungTyp = 1
-                            ausstehendeMahnungIndex = index
-                            ausstehendeMahnungDateiName = dateiname
-                            mahnungSpeicherBestaetigungOffen = true
-                        } else {
-                            mahnung1Launcher.launch(dokumentSpeicherIntent("application/pdf", dateiname))
-                        }
+                        mahnung1Launcher.launch("KÜMMERO-1-Mahnung-${a.rechnungsnummer}-$name.pdf")
                     }
                 }) { Text("PDF erstellen") }
             },
@@ -2658,15 +2085,7 @@ fun KuemmeroApp() {
                         android.widget.Toast.makeText(context, "Bitte Mahndatum und Zahlungsfrist eingeben.", 0).show()
                     } else {
                         val name = a.kunde.ifBlank { "Kunde" }.replace("/", "-")
-                        val dateiname = "KÜMMERO-2-Mahnung-${a.rechnungsnummer}-$name.pdf"
-                        if (mahnungSpeicherOrdnerUri.isNotBlank()) {
-                            ausstehendeMahnungTyp = 2
-                            ausstehendeMahnungIndex = index
-                            ausstehendeMahnungDateiName = dateiname
-                            mahnungSpeicherBestaetigungOffen = true
-                        } else {
-                            mahnung2Launcher.launch(dokumentSpeicherIntent("application/pdf", dateiname))
-                        }
+                        mahnung2Launcher.launch("KÜMMERO-2-Mahnung-${a.rechnungsnummer}-$name.pdf")
                     }
                 }) { Text("PDF erstellen") }
             },
@@ -2971,6 +2390,50 @@ fun KuemmeroApp() {
         )
     }
 
+    rechnungDetailIndex?.let { index ->
+        val a = auftraege.getOrNull(index)
+        if (a != null) {
+            AlertDialog(
+                onDismissRequest = { rechnungDetailIndex = null },
+                title = { Text("Rechnungsdetails") },
+                text = {
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Text("Rechnungsnummer: ${a.rechnungsnummer}", fontWeight = FontWeight.Bold, color = KuemmeroGreen)
+                        Text("Kunde: ${a.kunde.ifBlank { "Kunde" }}")
+                        Text("Rechnungsdatum: ${a.rechnungsdatum.ifBlank { "nicht angegeben" }}")
+                        Text("Fällig am: ${a.faelligAm.ifBlank { "nicht angegeben" }}")
+                        Text("Betrag: ${euro(gesamtbetrag(a.stunden, a.material, a.fahrt, a.stundensatz, a.erstellungskosten))}")
+                        Text(
+                            if (a.zahlungsstatus == "Bezahlt")
+                                "Zahlung: Bezahlt${if (a.bezahltAm.isNotBlank()) " – ${a.bezahltAm}" else ""}"
+                            else
+                                "Zahlung: Offen",
+                            color = if (a.zahlungsstatus == "Bezahlt") KuemmeroGreen else KuemmeroError,
+                            fontWeight = FontWeight.Bold
+                        )
+                        if (a.leistung.isNotBlank()) {
+                            Text("Leistung: ${a.leistung}")
+                        }
+                    }
+                },
+                confirmButton = {
+                    TextButton(onClick = {
+                        rechnungDetailIndex = null
+                        hauptseite = "Aufträge"
+                        auftragDetailIndex = index
+                        auftragFormOffen = false
+                        bearbeiteIndex = null
+                    }) { Text("Auftrag öffnen") }
+                },
+                dismissButton = {
+                    TextButton(onClick = { rechnungDetailIndex = null }) { Text("Schließen") }
+                }
+            )
+        } else {
+            rechnungDetailIndex = null
+        }
+    }
+
     kundenAkteName?.let { name ->
         val kundeAkte = kunden.firstOrNull { it.name.equals(name, ignoreCase = true) }
         val kundenAuftraege = auftraege.filter { it.kunde.equals(name, ignoreCase = true) }
@@ -3164,25 +2627,16 @@ fun KuemmeroApp() {
                     listOf(
                         Triple("Heute", "⌂", "Heute"),
                         Triple("Aufträge", "▤", "Aufträge"),
-                        Triple("KV", "€", "Kostenvoranschläge"),
+                        Triple("Kostenvoranschläge", "€", "Kostenvoranschläge"),
                         Triple("Kunden", "♙", "Kunden"),
                         Triple("Mahnungen", "!", "Mahnungen"),
                         Triple("Mehr", "⋯", "Mehr")
                     ).forEach { (label, iconText, page) ->
                         NavigationBarItem(
                             selected = hauptseite == page,
-                            onClick = {
-                                hauptseite = page
-                                if (page == "Aufträge") {
-                                    // Beim Öffnen von „Aufträge“ immer die Übersicht zeigen.
-                                    auftragDetailIndex = null
-                                    auftragFormOffen = false
-                                    bearbeiteIndex = null
-                                    loeschIndex = null
-                                }
-                            },
+                            onClick = { hauptseite = page },
                             icon = { Text(iconText, fontSize = 20.sp) },
-                            label = { Text(label, fontSize = 10.sp, maxLines = 2, textAlign = TextAlign.Center) },
+                            label = { Text(label) },
                             colors = NavigationBarItemDefaults.colors(
                                 selectedIconColor = KuemmeroGreen,
                                 selectedTextColor = KuemmeroGreen,
@@ -3374,24 +2828,12 @@ fun KuemmeroApp() {
                     )
                 }
                 item {
-                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Text("Leistungsposition", color = KuemmeroGreen, fontWeight = FontWeight.Bold)
-                        OutlinedButton(
-                            onClick = { leistungsAuswahlZiel = "auftrag" },
-                            modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp),
-                            shape = RoundedCornerShape(26.dp),
-                            border = BorderStroke(2.dp, KuemmeroGreen),
-                            colors = ButtonDefaults.outlinedButtonColors(contentColor = KuemmeroGreen)
-                        ) {
-                            Text(if (leistung.isBlank()) "Position auswählen" else "Ausgewählt: $leistung", fontWeight = FontWeight.Bold)
-                        }
-                        OutlinedTextField(
-                            leistung, { leistung = it },
-                            label = { Text("Leistung / eigene Beschreibung") },
-                            colors = feldFarben,
-                            modifier = Modifier.fillMaxWidth()
-                        )
-                    }
+                    OutlinedTextField(
+                        leistung, { leistung = it },
+                        label = { Text("Leistung") },
+                        colors = feldFarben,
+                        modifier = Modifier.fillMaxWidth()
+                    )
                     leistungsumfangHinweis(leistung)?.let { hinweis ->
                         Text(
                             "⚠ $hinweis",
@@ -3677,7 +3119,7 @@ fun KuemmeroApp() {
                             if (kunde.isBlank()) {
                                 android.widget.Toast.makeText(context, "Bitte Kundennamen eingeben.", 0).show()
                             } else {
-                                pdfLauncher.launch(dokumentSpeicherIntent("application/pdf", "KÜMMERO-Angebot-$nummer.pdf"))
+                                pdfLauncher.launch("KÜMMERO-Angebot-$nummer.pdf")
                             }
                         },
                         modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp),
@@ -3695,7 +3137,6 @@ fun KuemmeroApp() {
                         { sicherungBereichOffen = !sicherungBereichOffen },
                     ) {
                         OutlinedButton(onClick = { sicherungBestaetigung = true }, modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp), shape = RoundedCornerShape(28.dp), border = BorderStroke(2.dp, KuemmeroGreen), colors = ButtonDefaults.outlinedButtonColors(contentColor = KuemmeroGreen)) { Text("Sicherung speichern / aktualisieren", fontWeight = FontWeight.SemiBold) }
-                        OutlinedButton(onClick = { dropboxBestaetigung = true }, modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp), shape = RoundedCornerShape(28.dp), border = BorderStroke(2.dp, KuemmeroGreen), colors = ButtonDefaults.outlinedButtonColors(contentColor = KuemmeroGreen)) { Text("☁️ Jetzt in Dropbox sichern", fontWeight = FontWeight.SemiBold) }
                         Button(onClick = { restoreBackup.launch(arrayOf("application/json", "text/plain", "application/octet-stream")) }, modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp), shape = RoundedCornerShape(28.dp), colors = ButtonDefaults.buttonColors(containerColor = KuemmeroGreenLight)) { Text("Daten wiederherstellen", fontWeight = FontWeight.Bold) }
                         OutlinedButton(onClick = { sicherungBestaetigung = true }, modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp), shape = RoundedCornerShape(26.dp), border = BorderStroke(2.dp, KuemmeroGreen), colors = ButtonDefaults.outlinedButtonColors(contentColor = KuemmeroGreen)) { Text("Sicherung jetzt aktualisieren", fontWeight = FontWeight.SemiBold) }
                     }
@@ -3893,11 +3334,7 @@ fun KuemmeroApp() {
                     val index = pair.first
                     val a = pair.second
                     Card(
-                        modifier = Modifier.fillMaxWidth().clickable {
-                            auftragFormOffen = false
-                            bearbeiteIndex = null
-                            auftragDetailIndex = index
-                        },
+                        modifier = Modifier.fillMaxWidth().clickable { auftragDetailIndex = index },
                         colors = CardDefaults.cardColors(containerColor = KuemmeroSurface),
                         shape = RoundedCornerShape(22.dp)
                     ) {
@@ -3968,19 +3405,12 @@ fun KuemmeroApp() {
                                 ) { Text("← Zurück zur Auftragsübersicht", fontWeight = FontWeight.Bold) }
 
                             } else {
-                                OutlinedButton(
-                                    onClick = {
-                                        auftragFormOffen = false
-                                        bearbeiteIndex = null
-                                        auftragDetailIndex = index
-                                    },
-                                    modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp),
-                                    shape = RoundedCornerShape(24.dp),
-                                    border = BorderStroke(2.dp, KuemmeroGreen),
-                                    colors = ButtonDefaults.outlinedButtonColors(contentColor = KuemmeroGreen)
-                                ) {
-                                    Text("ℹ Auftrag öffnen / Info", fontWeight = FontWeight.Bold)
-                                }
+                                Text(
+                                    "Tippen, um den Auftrag zu öffnen →",
+                                    color = KuemmeroGreen,
+                                    fontWeight = FontWeight.SemiBold,
+                                    modifier = Modifier.padding(top = 6.dp)
+                                )
                             }
 
                             if (auftragDetailIndex == index) {
@@ -4289,7 +3719,7 @@ fun KuemmeroApp() {
                                         } else {
                                             rechnungFuerIndex = index
                                             val name = a.kunde.ifBlank { "Kunde" }.replace("/", "-")
-                                            rechnungLauncher.launch(dokumentSpeicherIntent("application/pdf", "KÜMMERO-Rechnung-$name.pdf"))
+                                            rechnungLauncher.launch("KÜMMERO-Rechnung-$name.pdf")
                                         }
                                     },
                                     modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp),
@@ -4443,115 +3873,6 @@ fun KuemmeroApp() {
                                         Spacer(Modifier.weight(2f))
                                     }
                                 }
-                            }
-                        }
-                        item {
-                            Text("Heute erledigen", style = MaterialTheme.typography.titleLarge, color = KuemmeroGreen, fontWeight = FontWeight.Bold)
-                        }
-                        if (heuteZuErledigen.isEmpty()) {
-                            item {
-                                Card(Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = KuemmeroSurface), shape = RoundedCornerShape(18.dp)) {
-                                    Text("Heute ist alles erledigt. ✓", Modifier.padding(18.dp), color = KuemmeroGreen, fontWeight = FontWeight.Bold)
-                                }
-                            }
-                        } else {
-                            itemsIndexed(heuteZuErledigen.take(6)) { _, a ->
-                                val index = auftraege.indexOfFirst { it.nummer == a.nummer && it.kunde == a.kunde && it.datum == a.datum }
-                                val rechnungOffen = a.status == "Erledigt" && a.rechnungsnummer.isBlank()
-                                val ueberfaellig = rechnungIstUeberfaellig(a, heuteText)
-                                val heuteTermin = a.terminDatum == heuteText
-                                val titel = when {
-                                    ueberfaellig -> "🔴 Rechnung überfällig"
-                                    rechnungOffen -> "🧾 Rechnung noch nicht erstellt"
-                                    heuteTermin -> "📅 Termin heute"
-                                    else -> "🟢 Auftrag bearbeiten"
-                                }
-                                Card(
-                                    Modifier.fillMaxWidth().clickable {
-                                        if (index >= 0) {
-                                            hauptseite = "Aufträge"
-                                            auftragFormOffen = false
-                                            auftragDetailIndex = index
-                                            bearbeiteIndex = null
-                                        }
-                                    },
-                                    colors = CardDefaults.cardColors(containerColor = KuemmeroSurface),
-                                    shape = RoundedCornerShape(16.dp),
-                                    border = BorderStroke(1.5.dp, if (ueberfaellig) KuemmeroError else KuemmeroGreenLight)
-                                ) {
-                                    Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(3.dp)) {
-                                        Text(titel, color = if (ueberfaellig) KuemmeroError else KuemmeroGreen, fontWeight = FontWeight.Bold)
-                                        Text(a.kunde.ifBlank { "Kunde" }, color = KuemmeroText, fontWeight = FontWeight.SemiBold)
-                                        if (a.leistung.isNotBlank()) Text(a.leistung, color = KuemmeroText, maxLines = 2)
-                                        Text("Auftrag öffnen →", color = KuemmeroGreen, fontWeight = FontWeight.Bold)
-                                    }
-                                }
-                            }
-                        }
-                        item {
-                            Text("Schnellaktionen", style = MaterialTheme.typography.titleLarge, color = KuemmeroGreen, fontWeight = FontWeight.Bold)
-                        }
-                        item {
-                            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                                Button(
-                                    onClick = {
-                                        hauptseite = "Aufträge"
-                                        auftragDetailIndex = null
-                                        bearbeiteIndex = null
-                                        nummer = ""
-                                        datum = datumJetzt
-                                        leistungsdatum = datumJetzt
-                                        gueltigBis = ""
-                                        kunde = ""; strasse = ""; ort = ""; leistung = ""
-                                        stunden = ""; material = ""; materialBonUri = ""; fahrt = ""
-                                        status = "Offen"; zahlungsstatus = "Offen"; bezahltAm = ""
-                                        terminDatum = ""; terminUhrzeit = ""; notiz = ""
-                                        fotosVorher = emptyList(); fotosNachher = emptyList()
-                                        unterschriftPfad = ""; unterschriftDatum = ""
-                                        auftragFormOffen = true
-                                    },
-                                    modifier = Modifier.weight(1f).heightIn(min = 56.dp),
-                                    shape = RoundedCornerShape(18.dp),
-                                    colors = ButtonDefaults.buttonColors(containerColor = KuemmeroGreen)
-                                ) { Text("➕ Neuer Auftrag", fontWeight = FontWeight.Bold) }
-                                Button(
-                                    onClick = { neuerKundeDialog = true },
-                                    modifier = Modifier.weight(1f).heightIn(min = 56.dp),
-                                    shape = RoundedCornerShape(18.dp),
-                                    colors = ButtonDefaults.buttonColors(containerColor = KuemmeroGreen)
-                                ) { Text("👤 Neuer Kunde", fontWeight = FontWeight.Bold) }
-                            }
-                        }
-                        item {
-                            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                                Button(
-                                    onClick = {
-                                        hauptseite = "Aufträge"
-                                        auftragFormOffen = false
-                                        auftragDetailIndex = null
-                                        bearbeiteIndex = null
-                                        statusFilter = "Erledigt"
-                                        zahlungsFilterOffen = false
-                                        auftragsSuche = ""
-                                    },
-                                    modifier = Modifier.weight(1f).heightIn(min = 56.dp),
-                                    shape = RoundedCornerShape(18.dp),
-                                    colors = ButtonDefaults.buttonColors(containerColor = KuemmeroGreen)
-                                ) { Text("🧾 Rechnung", fontWeight = FontWeight.Bold) }
-                                Button(
-                                    onClick = {
-                                        hauptseite = "Aufträge"
-                                        auftragFormOffen = false
-                                        auftragDetailIndex = null
-                                        bearbeiteIndex = null
-                                        statusFilter = "In Bearbeitung"
-                                        zahlungsFilterOffen = false
-                                        auftragsSuche = ""
-                                    },
-                                    modifier = Modifier.weight(1f).heightIn(min = 56.dp),
-                                    shape = RoundedCornerShape(18.dp),
-                                    colors = ButtonDefaults.buttonColors(containerColor = KuemmeroGreen)
-                                ) { Text("⏱ Arbeitszeit", fontWeight = FontWeight.Bold) }
                             }
                         }
                         item {
@@ -4872,19 +4193,7 @@ fun KuemmeroApp() {
                                         }
                                         OutlinedTextField(kvStrasse, { kvStrasse = it }, label = { Text("Adresse") }, colors = feldFarben, modifier = Modifier.fillMaxWidth())
                                         OutlinedTextField(kvOrt, { kvOrt = it }, label = { Text("PLZ und Ort") }, colors = feldFarben, modifier = Modifier.fillMaxWidth())
-                                        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                                            Text("Leistungsposition", color = KuemmeroGreen, fontWeight = FontWeight.Bold)
-                                            OutlinedButton(
-                                                onClick = { leistungsAuswahlZiel = "kv" },
-                                                modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp),
-                                                shape = RoundedCornerShape(26.dp),
-                                                border = BorderStroke(2.dp, KuemmeroGreen),
-                                                colors = ButtonDefaults.outlinedButtonColors(contentColor = KuemmeroGreen)
-                                            ) {
-                                                Text(if (kvLeistung.isBlank()) "Position auswählen" else "Ausgewählt: $kvLeistung", fontWeight = FontWeight.Bold)
-                                            }
-                                            OutlinedTextField(kvLeistung, { kvLeistung = it }, label = { Text("Leistung / eigene Beschreibung") }, colors = feldFarben, modifier = Modifier.fillMaxWidth())
-                                        }
+                                        OutlinedTextField(kvLeistung, { kvLeistung = it }, label = { Text("Leistung") }, colors = feldFarben, modifier = Modifier.fillMaxWidth())
                                         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                                             Text("📷 Bild vorher", color = KuemmeroGreen, fontWeight = FontWeight.Bold)
                                             OutlinedButton(
@@ -5042,53 +4351,6 @@ fun KuemmeroApp() {
                             }
                         }
 
-                        if (mahnungTestmodus) {
-                            item {
-                                Card(
-                                    Modifier.fillMaxWidth(),
-                                    colors = CardDefaults.cardColors(containerColor = KuemmeroMint),
-                                    border = BorderStroke(2.dp, KuemmeroGreen),
-                                    shape = RoundedCornerShape(18.dp)
-                                ) {
-                                    Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                                        Text("🧪 TEST-MODUS", color = KuemmeroGreen, fontWeight = FontWeight.Bold)
-                                        Text("Diese Mahnung ist eine reine Testrechnung. Echte Rechnungsdaten werden nicht verändert.", color = KuemmeroText)
-                                        Text("Rechnung: TEST-RECHNUNG · Betrag: ${euro(420.0)}", color = KuemmeroText)
-                                        if (!testMahnung1Erstellt) {
-                                            Button(
-                                                onClick = {
-                                                    testMahnung1Datum = heuteText
-                                                    testMahnung1Frist = standardMahnung1Frist(context)
-                                                    testMahnung1Gebuehr = mahnungEinstellungGebuehr
-                                                    testMahnung1Text = mahnungEinstellungText
-                                                    testMahnung1DialogOffen = true
-                                                },
-                                                modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp),
-                                                shape = RoundedCornerShape(26.dp),
-                                                colors = ButtonDefaults.buttonColors(containerColor = KuemmeroGreen)
-                                            ) { Text("Test-Mahnung erstellen", fontWeight = FontWeight.Bold) }
-                                        } else {
-                                            Text("1. Test-Mahnung erstellt · ${testMahnung1Datum.ifBlank { "ohne Datum" }} · Frist: ${testMahnung1Frist.ifBlank { "ohne Frist" }}", color = KuemmeroGreen, fontWeight = FontWeight.Bold)
-                                            OutlinedButton(
-                                                onClick = { testMahnung1DialogOffen = true },
-                                                modifier = Modifier.fillMaxWidth().heightIn(min = 50.dp),
-                                                shape = RoundedCornerShape(25.dp),
-                                                border = BorderStroke(2.dp, KuemmeroGreen),
-                                                colors = ButtonDefaults.outlinedButtonColors(contentColor = KuemmeroGreen)
-                                            ) { Text("Test-Mahnung ändern") }
-                                            OutlinedButton(
-                                                onClick = { testMahnungLoeschBestaetigung = true },
-                                                modifier = Modifier.fillMaxWidth().heightIn(min = 50.dp),
-                                                shape = RoundedCornerShape(25.dp),
-                                                border = BorderStroke(2.dp, KuemmeroError),
-                                                colors = ButtonDefaults.outlinedButtonColors(contentColor = KuemmeroError)
-                                            ) { Text("Test-Mahnung löschen") }
-                                        }
-                                    }
-                                }
-                            }
-                        }
-
                         if (offeneRechnungen.isEmpty()) {
                             item {
                                 Card(Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = KuemmeroSurface), shape = RoundedCornerShape(18.dp)) {
@@ -5111,14 +4373,8 @@ fun KuemmeroApp() {
                                             Text(
                                                 a.kunde.ifBlank { "Kunde" },
                                                 style = MaterialTheme.typography.titleLarge,
-                                                color = KuemmeroGreen,
-                                                fontWeight = FontWeight.Bold,
-                                                modifier = Modifier
-                                                    .fillMaxWidth()
-                                                    .clickable {
-                                                        if (a.kunde.isNotBlank()) kundenAkteName = a.kunde
-                                                    }
-                                                    .padding(vertical = 4.dp)
+                                                color = KuemmeroText,
+                                                fontWeight = FontWeight.Bold
                                             )
                                             Text(
                                                 "Rechnung: ${a.rechnungsnummer}",
@@ -5126,15 +4382,7 @@ fun KuemmeroApp() {
                                                 fontWeight = FontWeight.Bold,
                                                 modifier = Modifier
                                                     .fillMaxWidth()
-                                                    .clickable {
-                                                        val auftragIndex = auftraege.indexOfFirst { it.nummer == a.nummer && it.kunde.equals(a.kunde, ignoreCase = true) }
-                                                        if (auftragIndex >= 0) {
-                                                            hauptseite = "Aufträge"
-                                                            auftragFormOffen = false
-                                                            bearbeiteIndex = null
-                                                            auftragDetailIndex = auftragIndex
-                                                        }
-                                                    }
+                                                    .clickable { rechnungDetailIndex = index }
                                                     .padding(vertical = 4.dp)
                                             )
                                             Text("Betrag: ${euro(gesamtbetrag(a.stunden, a.material, a.fahrt, a.stundensatz, a.erstellungskosten))}", color = KuemmeroText)
@@ -5230,102 +4478,6 @@ fun KuemmeroApp() {
                             ) { Text("📅 Kalender", fontWeight = FontWeight.Bold) }
                         }
                         item {
-                            OutlinedButton(
-                                onClick = { hauptseite = "Mahnungen" },
-                                modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp),
-                                shape = RoundedCornerShape(26.dp),
-                                border = BorderStroke(2.dp, KuemmeroGreen),
-                                colors = ButtonDefaults.outlinedButtonColors(contentColor = KuemmeroGreen)
-                            ) { Text("!  Mahnungen", fontWeight = FontWeight.Bold) }
-                        }
-                        item {
-                            OutlinedButton(
-                                onClick = { hauptseite = "Rechnungsarchiv" },
-                                modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp),
-                                shape = RoundedCornerShape(26.dp),
-                                border = BorderStroke(2.dp, KuemmeroGreen),
-                                colors = ButtonDefaults.outlinedButtonColors(contentColor = KuemmeroGreen)
-                            ) { Text("🧾 Rechnungsarchiv", fontWeight = FontWeight.Bold) }
-                        }
-                        item {
-                            OutlinedButton(
-                                onClick = { hauptseite = "Auswertung" },
-                                modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp),
-                                shape = RoundedCornerShape(26.dp),
-                                border = BorderStroke(2.dp, KuemmeroGreen),
-                                colors = ButtonDefaults.outlinedButtonColors(contentColor = KuemmeroGreen)
-                            ) { Text("📊 Monats-/Jahresübersicht", fontWeight = FontWeight.Bold) }
-                        }
-                        item {
-                            OutlinedButton(
-                                onClick = { globaleSuche = ""; hauptseite = "Suche" },
-                                modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp),
-                                shape = RoundedCornerShape(26.dp),
-                                border = BorderStroke(2.dp, KuemmeroGreen),
-                                colors = ButtonDefaults.outlinedButtonColors(contentColor = KuemmeroGreen)
-                            ) { Text("🔎 Globale Suche", fontWeight = FontWeight.Bold) }
-                        }
-                        item {
-                            OutlinedButton(
-                                onClick = { createDataExport.launch(dokumentSpeicherIntent("text/csv", "KÜMMERO-Datenexport-${SimpleDateFormat("yyyyMMdd-HHmm", Locale.GERMANY).format(Date())}.csv")) },
-                                modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp),
-                                shape = RoundedCornerShape(26.dp),
-                                border = BorderStroke(2.dp, KuemmeroGreen),
-                                colors = ButtonDefaults.outlinedButtonColors(contentColor = KuemmeroGreen)
-                            ) { Text("📤 Datenexport (CSV)", fontWeight = FontWeight.Bold) }
-                        }
-                        item {
-                            Card(
-                                Modifier.fillMaxWidth(),
-                                colors = CardDefaults.cardColors(containerColor = KuemmeroSurface),
-                                shape = RoundedCornerShape(18.dp)
-                            ) {
-                                Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                                    Text("📁 Dokumentenordner", style = MaterialTheme.typography.titleMedium, color = KuemmeroGreen, fontWeight = FontWeight.Bold)
-                                    Text(
-                                        if (dokumenteSpeicherOrdnerUri.isBlank())
-                                            "Kein zentraler Ordner ausgewählt. Beim Speichern kann ein Ziel gewählt werden."
-                                        else
-                                            "Zentraler Ordner ausgewählt. Neue PDFs und Datenexporte öffnen standardmäßig diesen Ordner." ,
-                                        style = MaterialTheme.typography.bodySmall,
-                                        color = KuemmeroText
-                                    )
-                                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
-                                        OutlinedButton(
-                                            onClick = { dokumenteOrdnerLauncher.launch(null) },
-                                            modifier = Modifier.weight(1f),
-                                            shape = RoundedCornerShape(22.dp),
-                                            border = BorderStroke(2.dp, KuemmeroGreen),
-                                            colors = ButtonDefaults.outlinedButtonColors(contentColor = KuemmeroGreen)
-                                        ) {
-                                            Text(if (dokumenteSpeicherOrdnerUri.isBlank()) "Ordner auswählen" else "Ordner ändern")
-                                        }
-                                        if (dokumenteSpeicherOrdnerUri.isNotBlank()) {
-                                            OutlinedButton(
-                                                onClick = {
-                                                    dokumentePrefs.edit().remove(DOKUMENTE_SPEICHERORDNER_URI_KEY).apply()
-                                                    dokumenteSpeicherOrdnerUri = ""
-                                                    android.widget.Toast.makeText(context, "Dokumentenordner entfernt.", android.widget.Toast.LENGTH_SHORT).show()
-                                                },
-                                                shape = RoundedCornerShape(22.dp),
-                                                border = BorderStroke(1.dp, KuemmeroError),
-                                                colors = ButtonDefaults.outlinedButtonColors(contentColor = KuemmeroError)
-                                            ) { Text("Entfernen") }
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                        item {
-                            OutlinedButton(
-                                onClick = { hauptseite = "Meine Leistungen" },
-                                modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp),
-                                shape = RoundedCornerShape(26.dp),
-                                border = BorderStroke(2.dp, KuemmeroGreen),
-                                colors = ButtonDefaults.outlinedButtonColors(contentColor = KuemmeroGreen)
-                            ) { Text("🛠 Meine Leistungen", fontWeight = FontWeight.Bold) }
-                        }
-                        item {
                             Card(Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = KuemmeroSurface), shape = RoundedCornerShape(18.dp)) {
                                 Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                                     Text("Sicherung & Daten", style = MaterialTheme.typography.titleMedium, color = KuemmeroGreen, fontWeight = FontWeight.Bold)
@@ -5342,7 +4494,6 @@ fun KuemmeroApp() {
                                         color = if (backupZeit > 0L) KuemmeroGreen else KuemmeroText
                                     )
                                     OutlinedButton(onClick = { sicherungBestaetigung = true }, modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp), shape = RoundedCornerShape(26.dp), border = BorderStroke(2.dp, KuemmeroGreen), colors = ButtonDefaults.outlinedButtonColors(contentColor = KuemmeroGreen)) { Text("Sicherung speichern / aktualisieren") }
-                                    OutlinedButton(onClick = { dropboxBestaetigung = true }, modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp), shape = RoundedCornerShape(26.dp), border = BorderStroke(2.dp, KuemmeroGreen), colors = ButtonDefaults.outlinedButtonColors(contentColor = KuemmeroGreen)) { Text("☁️ Jetzt in Dropbox sichern") }
                                     Button(onClick = { restoreBackup.launch(arrayOf("application/json", "text/plain", "application/octet-stream")) }, modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp), shape = RoundedCornerShape(26.dp), colors = ButtonDefaults.buttonColors(containerColor = KuemmeroGreenLight)) { Text("Daten wiederherstellen", fontWeight = FontWeight.Bold) }
                                 }
                             }
@@ -5381,524 +4532,9 @@ fun KuemmeroApp() {
                             }
                         }
                     }
-                    "Meine Leistungen" -> {
-                        item {
-                            Text("Meine Leistungen", style = MaterialTheme.typography.headlineSmall, color = KuemmeroGreen, fontWeight = FontWeight.Bold)
-                            Text("Hier kannst du deine Auswahl selbst erweitern, ändern und deaktivieren.", color = KuemmeroText)
-                            Text(
-                                "⚠ Die Liste ist keine rechtliche Freigabe. Nur Tätigkeiten anbieten, die dein Gewerbe und deine Qualifikation tatsächlich abdecken.",
-                                color = KuemmeroError,
-                                fontWeight = FontWeight.SemiBold,
-                                fontSize = 12.sp
-                            )
-                        }
-                        item {
-                            Button(
-                                onClick = {
-                                    leistungspositionBearbeiteIndex = null
-                                    leistungspositionName = ""
-                                    leistungspositionBeschreibung = ""
-                                    leistungspositionEinheit = "Pauschale"
-                                    leistungspositionPreis = ""
-                                    leistungspositionAktiv = true
-                                    leistungspositionDialog = true
-                                },
-                                modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp),
-                                shape = RoundedCornerShape(26.dp),
-                                colors = ButtonDefaults.buttonColors(containerColor = KuemmeroGreen)
-                            ) { Text("+ Neue Leistung", fontWeight = FontWeight.Bold) }
-                        }
-                        leistungspositionen.forEachIndexed { index, leistungPos ->
-                            item {
-                                Card(
-                                    Modifier.fillMaxWidth(),
-                                    colors = CardDefaults.cardColors(containerColor = if (leistungPos.aktiv) KuemmeroSurface else KuemmeroMint),
-                                    shape = RoundedCornerShape(18.dp),
-                                    border = BorderStroke(1.5.dp, if (leistungPos.aktiv) KuemmeroGreenLight else KuemmeroGreen)
-                                ) {
-                                    Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                                        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                                            Column(Modifier.weight(1f)) {
-                                                Text(leistungPos.name, fontWeight = FontWeight.Bold, color = KuemmeroText)
-                                                if (leistungPos.beschreibung.isNotBlank()) Text(leistungPos.beschreibung, color = KuemmeroText, style = MaterialTheme.typography.bodySmall)
-                                                Text("${leistungPos.einheit} · ${euro(leistungPos.preis)}", color = KuemmeroGreen, fontWeight = FontWeight.SemiBold)
-                                            }
-                                            Text(if (leistungPos.aktiv) "Aktiv" else "Inaktiv", color = if (leistungPos.aktiv) KuemmeroGreen else KuemmeroText, fontWeight = FontWeight.Bold)
-                                        }
-                                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                                            OutlinedButton(
-                                                onClick = {
-                                                    if (index > 0) {
-                                                        val list = leistungspositionen.toMutableList()
-                                                        val temp = list[index - 1]
-                                                        list[index - 1] = list[index]
-                                                        list[index] = temp
-                                                        leistungspositionen = list
-                                                        speichereLeistungspositionen(context, list)
-                                                    }
-                                                },
-                                                enabled = index > 0,
-                                                modifier = Modifier.weight(0.5f),
-                                                shape = RoundedCornerShape(22.dp),
-                                                border = BorderStroke(1.5.dp, KuemmeroGreen),
-                                                colors = ButtonDefaults.outlinedButtonColors(contentColor = KuemmeroGreen)
-                                            ) { Text("↑") }
-                                            OutlinedButton(
-                                                onClick = {
-                                                    if (index < leistungspositionen.lastIndex) {
-                                                        val list = leistungspositionen.toMutableList()
-                                                        val temp = list[index + 1]
-                                                        list[index + 1] = list[index]
-                                                        list[index] = temp
-                                                        leistungspositionen = list
-                                                        speichereLeistungspositionen(context, list)
-                                                    }
-                                                },
-                                                enabled = index < leistungspositionen.lastIndex,
-                                                modifier = Modifier.weight(0.5f),
-                                                shape = RoundedCornerShape(22.dp),
-                                                border = BorderStroke(1.5.dp, KuemmeroGreen),
-                                                colors = ButtonDefaults.outlinedButtonColors(contentColor = KuemmeroGreen)
-                                            ) { Text("↓") }
-                                            OutlinedButton(
-                                                onClick = {
-                                                    leistungspositionBearbeiteIndex = index
-                                                    leistungspositionName = leistungPos.name
-                                                    leistungspositionBeschreibung = leistungPos.beschreibung
-                                                    leistungspositionEinheit = leistungPos.einheit
-                                                    leistungspositionPreis = if (leistungPos.preis == 0.0) "" else leistungPos.preis.toString().replace('.', ',')
-                                                    leistungspositionAktiv = leistungPos.aktiv
-                                                    leistungspositionDialog = true
-                                                },
-                                                modifier = Modifier.weight(1.5f),
-                                                shape = RoundedCornerShape(22.dp),
-                                                border = BorderStroke(1.5.dp, KuemmeroGreen),
-                                                colors = ButtonDefaults.outlinedButtonColors(contentColor = KuemmeroGreen)
-                                            ) { Text("✏ Bearbeiten") }
-                                        }
-                                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                                            OutlinedButton(
-                                                onClick = {
-                                                    leistungsPreisIndex = index
-                                                    leistungsPreisEingabe = if (leistungPos.preis == 0.0) "" else String.format(Locale.GERMANY, "%.2f", leistungPos.preis)
-                                                },
-                                                modifier = Modifier.weight(1f),
-                                                shape = RoundedCornerShape(22.dp),
-                                                border = BorderStroke(1.5.dp, KuemmeroGreen),
-                                                colors = ButtonDefaults.outlinedButtonColors(contentColor = KuemmeroGreen)
-                                            ) { Text("💶 Preis") }
-                                            OutlinedButton(
-                                                onClick = {
-                                                    val list = leistungspositionen.toMutableList()
-                                                    list[index] = leistungPos.copy(aktiv = !leistungPos.aktiv)
-                                                    leistungspositionen = list
-                                                    speichereLeistungspositionen(context, list)
-                                                },
-                                                modifier = Modifier.weight(1.2f),
-                                                shape = RoundedCornerShape(22.dp),
-                                                border = BorderStroke(1.5.dp, KuemmeroGreen),
-                                                colors = ButtonDefaults.outlinedButtonColors(contentColor = KuemmeroGreen)
-                                            ) { Text(if (leistungPos.aktiv) "Deaktivieren" else "Aktivieren") }
-                                            OutlinedButton(
-                                                onClick = { leistungspositionLoeschIndex = index },
-                                                modifier = Modifier.weight(0.9f),
-                                                shape = RoundedCornerShape(22.dp),
-                                                border = BorderStroke(1.5.dp, KuemmeroError),
-                                                colors = ButtonDefaults.outlinedButtonColors(contentColor = KuemmeroError)
-                                            ) { Text("Löschen") }
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                        item {
-                            Spacer(Modifier.height(4.dp))
-                            OutlinedButton(
-                                onClick = {
-                                    leistungspositionBearbeiteIndex = null
-                                    leistungspositionName = ""
-                                    leistungspositionBeschreibung = ""
-                                    leistungspositionEinheit = "Pauschale"
-                                    leistungspositionPreis = ""
-                                    leistungspositionAktiv = true
-                                    leistungspositionDialog = true
-                                },
-                                modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp),
-                                shape = RoundedCornerShape(26.dp),
-                                border = BorderStroke(1.5.dp, KuemmeroGreen),
-                                colors = ButtonDefaults.outlinedButtonColors(contentColor = KuemmeroGreen)
-                            ) {
-                                Text("+ Weitere Leistung hinzufügen", fontWeight = FontWeight.Bold)
-                            }
-                        }
-                    }
-                    "Rechnungsarchiv" -> {
-                        item { Text("Rechnungsarchiv", style = MaterialTheme.typography.headlineSmall, color = KuemmeroGreen, fontWeight = FontWeight.Bold) }
-                        item {
-                            OutlinedTextField(
-                                value = rechnungArchivSuche,
-                                onValueChange = { rechnungArchivSuche = it },
-                                label = { Text("Rechnungen suchen") },
-                                placeholder = { Text("Kunde, Rechnungsnummer, Leistung ...") },
-                                singleLine = true, colors = feldFarben, modifier = Modifier.fillMaxWidth()
-                            )
-                        }
-                        item {
-                            Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                listOf("Alle", SimpleDateFormat("yyyy", Locale.GERMANY).format(Date()), (Calendar.getInstance().get(Calendar.YEAR) - 1).toString()).forEach { jahr ->
-                                    val aktiv = rechnungArchivJahr == jahr
-                                    Surface(Modifier.height(42.dp).clickable { rechnungArchivJahr = jahr }, shape = RoundedCornerShape(21.dp), color = if (aktiv) KuemmeroGreen else KuemmeroMint, border = BorderStroke(1.5.dp, KuemmeroGreen)) {
-                                        Box(Modifier.padding(horizontal = 16.dp), contentAlignment = Alignment.Center) { Text(jahr, color = if (aktiv) Color.White else KuemmeroText, fontWeight = FontWeight.SemiBold) }
-                                    }
-                                }
-                            }
-                        }
-                        val archiv = auftraege.filter { a ->
-                            a.rechnungsnummer.isNotBlank() &&
-                            (rechnungArchivJahr == "Alle" || a.rechnungsdatum.endsWith(rechnungArchivJahr)) &&
-                            (rechnungArchivSuche.isBlank() || listOf(a.kunde, a.rechnungsnummer, a.leistung).any { it.contains(rechnungArchivSuche, ignoreCase = true) })
-                        }.sortedByDescending { it.rechnungsdatum }
-                        if (archiv.isEmpty()) {
-                            item { Card(Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = KuemmeroSurface), shape = RoundedCornerShape(18.dp)) { Text("Keine Rechnungen im Archiv gefunden.", Modifier.padding(16.dp), color = KuemmeroText) } }
-                        } else {
-                            itemsIndexed(archiv) { _, a ->
-                                val index = auftraege.indexOfFirst { it.nummer == a.nummer }
-                                Card(Modifier.fillMaxWidth().clickable { if (index >= 0) { hauptseite = "Aufträge"; auftragDetailIndex = index; auftragFormOffen = false } }, colors = CardDefaults.cardColors(containerColor = KuemmeroSurface), shape = RoundedCornerShape(18.dp)) {
-                                    Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(5.dp)) {
-                                        Text(a.rechnungsnummer, color = KuemmeroGreen, fontWeight = FontWeight.Bold)
-                                        Text(a.kunde.ifBlank { "Kunde" }, color = KuemmeroText, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-                                        Text("${a.rechnungsdatum.ifBlank { "ohne Rechnungsdatum" }} · ${euro(gesamtbetrag(a.stunden, a.material, a.fahrt, a.stundensatz, a.erstellungskosten))}", color = KuemmeroText)
-                                        Text("Auftrag öffnen →", color = KuemmeroGreen, fontWeight = FontWeight.Bold)
-                                    }
-                                }
-                            }
-                        }
-                    }
-                    "Auswertung" -> {
-                        item { Text("Monats-/Jahresübersicht", style = MaterialTheme.typography.headlineSmall, color = KuemmeroGreen, fontWeight = FontWeight.Bold) }
-                        val aktuellesJahr = Calendar.getInstance().get(Calendar.YEAR)
-                        val jahrAuftraege = auftraege.filter { a ->
-                            val datumWert = a.leistungsdatum.ifBlank { a.datum }
-                            datumWert.endsWith(aktuellesJahr.toString())
-                        }
-                        item {
-                            Card(Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = KuemmeroGreen), shape = RoundedCornerShape(18.dp)) {
-                                Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(5.dp)) {
-                                    Text("Jahr $aktuellesJahr", color = Color.White, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleLarge)
-                                    Text("Umsatz: ${euro(jahrAuftraege.sumOf { gesamtbetrag(it.stunden, it.material, it.fahrt, it.stundensatz, it.erstellungskosten) })}", color = Color.White)
-                                    Text("Aufträge: ${jahrAuftraege.size}", color = Color.White)
-                                    Text("Bezahlt: ${euro(jahrAuftraege.filter { it.zahlungsstatus == "Bezahlt" }.sumOf { gesamtbetrag(it.stunden, it.material, it.fahrt, it.stundensatz, it.erstellungskosten) })}", color = Color.White)
-                                    Text("Offen: ${euro(jahrAuftraege.filter { it.zahlungsstatus != "Bezahlt" }.sumOf { gesamtbetrag(it.stunden, it.material, it.fahrt, it.stundensatz, it.erstellungskosten) })}", color = Color.White)
-                                }
-                            }
-                        }
-                        for (monat in 1..12) {
-                            val monatAuftraege = jahrAuftraege.filter { a ->
-                                try {
-                                    val d = datumFormat.parse(a.leistungsdatum.ifBlank { a.datum }) ?: return@filter false
-                                    val c = Calendar.getInstance().apply { time = d }
-                                    c.get(Calendar.MONTH) + 1 == monat
-                                } catch (_: Exception) { false }
-                            }
-                            if (monatAuftraege.isNotEmpty()) {
-                                item {
-                                    val name = SimpleDateFormat("MMMM", Locale.GERMANY).format(Calendar.getInstance().apply { set(Calendar.MONTH, monat - 1) }.time).replaceFirstChar { it.uppercase(Locale.GERMANY) }
-                                    Card(Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = KuemmeroSurface), shape = RoundedCornerShape(16.dp)) {
-                                        Row(Modifier.fillMaxWidth().padding(14.dp), horizontalArrangement = Arrangement.SpaceBetween) {
-                                            Column { Text(name, color = KuemmeroGreen, fontWeight = FontWeight.Bold); Text("${monatAuftraege.size} Aufträge", color = KuemmeroText) }
-                                            Text(euro(monatAuftraege.sumOf { gesamtbetrag(it.stunden, it.material, it.fahrt, it.stundensatz, it.erstellungskosten) }), color = KuemmeroText, fontWeight = FontWeight.Bold)
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                        item { Text("Die Übersicht dient der betrieblichen Orientierung und ersetzt keine Buchführung oder Steuerberatung.", color = KuemmeroText, style = MaterialTheme.typography.bodySmall) }
-                    }
-                    "Suche" -> {
-                        item { Text("Globale Suche", style = MaterialTheme.typography.headlineSmall, color = KuemmeroGreen, fontWeight = FontWeight.Bold) }
-                        item {
-                            OutlinedTextField(
-                                value = globaleSuche,
-                                onValueChange = { globaleSuche = it },
-                                label = { Text("Suche in KÜMMERO") },
-                                placeholder = { Text("Kunde, Auftrag, Rechnung, Leistung ...") },
-                                singleLine = true, colors = feldFarben, modifier = Modifier.fillMaxWidth()
-                            )
-                        }
-                        if (globaleSuche.trim().isNotBlank()) {
-                            val q = globaleSuche.trim()
-                            val kundenTreffer = kunden.filter { listOf(it.name, it.adresse, it.ort, it.telefon, it.email).any { v -> v.contains(q, true) } }
-                            val auftragTreffer = auftraege.filter { listOf(it.nummer, it.kunde, it.kundenStrasse, it.kundenOrt, it.leistung, it.rechnungsnummer, it.status).any { v -> v.contains(q, true) } }
-                            val kvTreffer = kostenvoranschlaege.filter { listOf(it.nummer, it.kunde, it.leistung).any { v -> v.contains(q, true) } }
-                            item { Text("Kunden (${kundenTreffer.size})", color = KuemmeroGreen, fontWeight = FontWeight.Bold) }
-                            kundenTreffer.take(10).forEach { k ->
-                                item { Card(Modifier.fillMaxWidth().clickable { hauptseite = "Kunden"; kundenAkteName = k.name }, colors = CardDefaults.cardColors(containerColor = KuemmeroSurface), shape = RoundedCornerShape(16.dp)) { Column(Modifier.padding(14.dp)) { Text(k.name, fontWeight = FontWeight.Bold, color = KuemmeroText); Text("Kunde öffnen →", color = KuemmeroGreen) } } }
-                            }
-                            item { Text("Aufträge / Rechnungen (${auftragTreffer.size})", color = KuemmeroGreen, fontWeight = FontWeight.Bold) }
-                            auftragTreffer.take(15).forEach { a ->
-                                item { val index = auftraege.indexOfFirst { it.nummer == a.nummer }; Card(Modifier.fillMaxWidth().clickable { if (index >= 0) { hauptseite = "Aufträge"; auftragDetailIndex = index; auftragFormOffen = false } }, colors = CardDefaults.cardColors(containerColor = KuemmeroSurface), shape = RoundedCornerShape(16.dp)) { Column(Modifier.padding(14.dp)) { Text(a.kunde.ifBlank { "Kunde" }, fontWeight = FontWeight.Bold, color = KuemmeroText); Text("${a.nummer}${if (a.rechnungsnummer.isBlank()) "" else " · ${a.rechnungsnummer}"}", color = KuemmeroGreen); if (a.leistung.isNotBlank()) Text(a.leistung, color = KuemmeroText) } } }
-                            }
-                            item { Text("Kostenvoranschläge (${kvTreffer.size})", color = KuemmeroGreen, fontWeight = FontWeight.Bold) }
-                            kvTreffer.take(10).forEach { k ->
-                                item { Card(Modifier.fillMaxWidth().clickable { hauptseite = "Kostenvoranschläge" }, colors = CardDefaults.cardColors(containerColor = KuemmeroSurface), shape = RoundedCornerShape(16.dp)) { Column(Modifier.padding(14.dp)) { Text(k.kunde.ifBlank { "Kunde" }, fontWeight = FontWeight.Bold, color = KuemmeroText); Text(k.nummer, color = KuemmeroGreen); Text("Kostenvoranschlag öffnen →", color = KuemmeroGreen) } } }
-                            }
-                            if (kundenTreffer.isEmpty() && auftragTreffer.isEmpty() && kvTreffer.isEmpty()) {
-                                item { Text("Keine Treffer gefunden.", color = KuemmeroText) }
-                            }
-                        }
-                    }
                 }
             }
         }
     }
-
-    if (leistungspositionDialog) {
-        AlertDialog(
-            onDismissRequest = { leistungspositionDialog = false },
-            title = { Text(if (leistungspositionBearbeiteIndex == null) "Neue Leistung" else "Leistung bearbeiten") },
-            text = {
-                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                    OutlinedTextField(leistungspositionName, { leistungspositionName = it }, label = { Text("Bezeichnung") }, singleLine = true, colors = feldFarben)
-                    OutlinedTextField(leistungspositionBeschreibung, { leistungspositionBeschreibung = it }, label = { Text("Beschreibung (optional)") }, colors = feldFarben)
-                    OutlinedTextField(leistungspositionEinheit, { leistungspositionEinheit = it }, label = { Text("Einheit") }, singleLine = true, colors = feldFarben)
-                    OutlinedTextField(leistungspositionPreis, { leistungspositionPreis = it }, label = { Text("Standardpreis €") }, singleLine = true, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal), colors = feldFarben)
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Checkbox(checked = leistungspositionAktiv, onCheckedChange = { leistungspositionAktiv = it }, colors = CheckboxDefaults.colors(checkedColor = KuemmeroGreen))
-                        Text("Bei Auftrag/Kostenvoranschlag anzeigen")
-                    }
-                }
-            },
-            confirmButton = {
-                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    TextButton(onClick = {
-                        val name = leistungspositionName.trim()
-                        if (name.isBlank()) {
-                            android.widget.Toast.makeText(context, "Bitte eine Bezeichnung eingeben.", 0).show()
-                        } else {
-                            val neu = Leistungsposition(name, leistungspositionBeschreibung.trim(), leistungspositionEinheit.trim().ifBlank { "Pauschale" }, zahl(leistungspositionPreis), leistungspositionAktiv)
-                            val list = leistungspositionen.toMutableList()
-                            val idx = leistungspositionBearbeiteIndex
-                            if (idx != null && idx in list.indices) list[idx] = neu else list.add(neu)
-                            leistungspositionen = list
-                            speichereLeistungspositionen(context, list)
-                            leistungspositionDialog = false
-                        }
-                    }) { Text("Speichern", color = KuemmeroGreen, fontWeight = FontWeight.Bold) }
-                    TextButton(onClick = {
-                        val name = leistungspositionName.trim()
-                        if (name.isBlank()) {
-                            android.widget.Toast.makeText(context, "Bitte eine Bezeichnung eingeben.", 0).show()
-                        } else {
-                            val neu = Leistungsposition(name, leistungspositionBeschreibung.trim(), leistungspositionEinheit.trim().ifBlank { "Pauschale" }, zahl(leistungspositionPreis), leistungspositionAktiv)
-                            val list = leistungspositionen.toMutableList()
-                            val idx = leistungspositionBearbeiteIndex
-                            if (idx != null && idx in list.indices) list[idx] = neu else list.add(neu)
-                            leistungspositionen = list
-                            speichereLeistungspositionen(context, list)
-                            leistungspositionBearbeiteIndex = null
-                            leistungspositionName = ""
-                            leistungspositionBeschreibung = ""
-                            leistungspositionEinheit = "Pauschale"
-                            leistungspositionPreis = ""
-                            leistungspositionAktiv = true
-                            // Dialog bleibt offen: direkt die nächste Leistung anlegen.
-                        }
-                    }) { Text("+ Weitere", color = KuemmeroGreen, fontWeight = FontWeight.Bold) }
-                }
-            },
-            dismissButton = { TextButton(onClick = { leistungspositionDialog = false }) { Text("Abbrechen") } }
-        )
-    }
-
-    if (leistungsPreisIndex != null) {
-        val idx = leistungsPreisIndex
-        val position = idx?.let { leistungspositionen.getOrNull(it) }
-        if (position != null) {
-            AlertDialog(
-                onDismissRequest = { leistungsPreisIndex = null },
-                title = { Text("Standardpreis ändern") },
-                text = {
-                    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                        Text(position.name, fontWeight = FontWeight.Bold, color = KuemmeroGreen)
-                        Text("Aktueller Preis: ${euro(position.preis)} / ${position.einheit}", color = KuemmeroText)
-                        OutlinedTextField(
-                            value = leistungsPreisEingabe,
-                            onValueChange = { leistungsPreisEingabe = it },
-                            label = { Text("Neuer Preis (€)") },
-                            singleLine = true,
-                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
-                            colors = feldFarben
-                        )
-                    }
-                },
-                confirmButton = {
-                    TextButton(onClick = {
-                        val preis = zahl(leistungsPreisEingabe)
-                        if (idx != null && idx in leistungspositionen.indices) {
-                            val list = leistungspositionen.toMutableList()
-                            list[idx] = position.copy(preis = preis)
-                            leistungspositionen = list
-                            speichereLeistungspositionen(context, list)
-                        }
-                        leistungsPreisIndex = null
-                    }) { Text("Speichern", color = KuemmeroGreen, fontWeight = FontWeight.Bold) }
-                },
-                dismissButton = { TextButton(onClick = { leistungsPreisIndex = null }) { Text("Abbrechen") } }
-            )
-        }
-    }
-
-    if (leistungspositionLoeschIndex != null) {
-        val idx = leistungspositionLoeschIndex
-        val name = idx?.let { leistungspositionen.getOrNull(it)?.name } ?: "Leistung"
-        AlertDialog(
-            onDismissRequest = { leistungspositionLoeschIndex = null },
-            title = { Text("Leistung löschen?") },
-            text = { Text("Soll \"$name\" wirklich aus deiner Leistungsliste gelöscht werden?") },
-            confirmButton = {
-                TextButton(onClick = {
-                    if (idx != null && idx in leistungspositionen.indices) {
-                        val list = leistungspositionen.toMutableList()
-                        list.removeAt(idx)
-                        leistungspositionen = list
-                        speichereLeistungspositionen(context, list)
-                    }
-                    leistungspositionLoeschIndex = null
-                }) { Text("Löschen", color = KuemmeroError, fontWeight = FontWeight.Bold) }
-            },
-            dismissButton = { TextButton(onClick = { leistungspositionLoeschIndex = null }) { Text("Abbrechen") } }
-        )
-    }
-
-    if (leistungsAuswahlZiel != null) {
-        AlertDialog(
-            onDismissRequest = { leistungsAuswahlZiel = null },
-            title = { Text("Leistungsposition auswählen") },
-            text = {
-                val aktuellerText = if (leistungsAuswahlZiel == "auftrag") leistung else kvLeistung
-                val ausgewaehlt = aktuellerText
-                    .split("\n")
-                    .map { it.trim() }
-                    .filter { it.isNotBlank() }
-                    .toSet()
-
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .heightIn(max = 420.dp)
-                        .verticalScroll(rememberScrollState()),
-                    verticalArrangement = Arrangement.spacedBy(6.dp)
-                ) {
-                    leistungspositionen.filter { it.aktiv }.forEach { leistungs ->
-                        val position = leistungs.name
-                        val istAusgewaehlt = ausgewaehlt.any { it.substringBefore(" — ").trim() == position }
-                        OutlinedButton(
-                            onClick = {
-                                if (istAusgewaehlt) {
-                                    val neueAuswahl = ausgewaehlt.filter { it.substringBefore(" — ").trim() != position }
-                                    val neuerText = neueAuswahl.joinToString("\n")
-                                    if (leistungsAuswahlZiel == "auftrag") leistung = neuerText
-                                    if (leistungsAuswahlZiel == "kv") kvLeistung = neuerText
-                                } else if (leistungs.preis > 0.0) {
-                                    leistungsPreisName = leistungs.name
-                                    leistungsPreisEinheit = leistungs.einheit
-                                    leistungsPreisVorschlag = String.format(Locale.GERMANY, "%.2f", leistungs.preis)
-                                    leistungsPreisDialog = true
-                                } else {
-                                    val neueAuswahl = ausgewaehlt + leistungs.name
-                                    val neuerText = neueAuswahl.joinToString("\n")
-                                    if (leistungsAuswahlZiel == "auftrag") leistung = neuerText
-                                    if (leistungsAuswahlZiel == "kv") kvLeistung = neuerText
-                                }
-                            },
-                            modifier = Modifier.fillMaxWidth(),
-                            shape = RoundedCornerShape(18.dp),
-                            border = BorderStroke(2.dp, if (istAusgewaehlt) KuemmeroGreen else KuemmeroGreenLight),
-                            colors = ButtonDefaults.outlinedButtonColors(
-                                containerColor = if (istAusgewaehlt) KuemmeroMint else Color.Transparent,
-                                contentColor = KuemmeroText
-                            )
-                        ) {
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(10.dp)
-                            ) {
-                                Text(if (istAusgewaehlt) "✓" else "○", color = KuemmeroGreen, fontWeight = FontWeight.Bold)
-                                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                                    Text(position, textAlign = TextAlign.Start)
-                                    if (leistungs.preis > 0.0) {
-                                        Text(
-                                            "Preisvorschlag: ${euro(leistungs.preis)} / ${leistungs.einheit}",
-                                            color = KuemmeroGreen,
-                                            fontSize = 12.sp,
-                                            fontWeight = FontWeight.SemiBold,
-                                            textAlign = TextAlign.Start
-                                        )
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-            },
-            confirmButton = {
-                TextButton(onClick = { leistungsAuswahlZiel = null }) {
-                    Text("Fertig", color = KuemmeroGreen, fontWeight = FontWeight.Bold)
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { leistungsAuswahlZiel = null }) { Text("Abbrechen") }
-            }
-        )
-    }
-
-    if (leistungsPreisDialog) {
-        AlertDialog(
-            onDismissRequest = { leistungsPreisDialog = false },
-            title = { Text("Preisvorschlag") },
-            text = {
-                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                    Text(leistungsPreisName, fontWeight = FontWeight.Bold, color = KuemmeroGreen)
-                    Text("Hinterlegter Preis: ${leistungsPreisVorschlag.replace(',', '.').let { zahl(it) }.let { euro(it) }} / $leistungsPreisEinheit", color = KuemmeroText)
-                    OutlinedTextField(
-                        value = leistungsPreisVorschlag,
-                        onValueChange = { leistungsPreisVorschlag = it },
-                        label = { Text("Preis für diesen Vorgang (€)") },
-                        singleLine = true,
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
-                        colors = feldFarben,
-                        modifier = Modifier.fillMaxWidth()
-                    )
-                    Text(
-                        "Der Preis ist nur ein Vorschlag. Du kannst ihn für diesen Auftrag/Kostenvoranschlag ändern.",
-                        color = KuemmeroText,
-                        fontSize = 12.sp
-                    )
-                }
-            },
-            confirmButton = {
-                TextButton(onClick = {
-                    val preis = zahl(leistungsPreisVorschlag)
-                    val zeile = if (preis > 0.0) {
-                        "$leistungsPreisName — ${euro(preis)} / $leistungsPreisEinheit"
-                    } else {
-                        leistungsPreisName
-                    }
-                    val aktuellerText = if (leistungsAuswahlZiel == "auftrag") leistung else kvLeistung
-                    val vorhandene = aktuellerText.split("\n").map { it.trim() }.filter { it.isNotBlank() }
-                    val ohnePosition = vorhandene.filter { it.substringBefore(" — ").trim() != leistungsPreisName }
-                    val neuerText = (ohnePosition + zeile).joinToString("\n")
-                    if (leistungsAuswahlZiel == "auftrag") leistung = neuerText
-                    if (leistungsAuswahlZiel == "kv") kvLeistung = neuerText
-                    leistungsPreisDialog = false
-                }) { Text("Übernehmen", color = KuemmeroGreen, fontWeight = FontWeight.Bold) }
-            },
-            dismissButton = {
-                TextButton(onClick = { leistungsPreisDialog = false }) { Text("Abbrechen") }
-            }
-        )
-    }
 }
-
-}
+                                     }
