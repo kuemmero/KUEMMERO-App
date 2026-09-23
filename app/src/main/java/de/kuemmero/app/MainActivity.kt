@@ -5313,7 +5313,7 @@ fun KuemmeroApp() {
         AlertDialog(
             onDismissRequest = { leistungspositionLoeschIndex = null },
             title = { Text("Leistung löschen?") },
-            text = { Text("Soll "$name" wirklich aus deiner Leistungsliste gelöscht werden?") },
+            text = { Text("Soll \"$name\" wirklich aus deiner Leistungsliste gelöscht werden?") },
             confirmButton = {
                 TextButton(onClick = {
                     if (idx != null && idx in leistungspositionen.indices) {
