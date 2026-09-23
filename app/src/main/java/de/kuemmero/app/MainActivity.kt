@@ -184,26 +184,6 @@ data class Auftrag(
 )
 
 private const val PREFS_NAME = "kuemmero_speicher"
-private const val APP_FEHLERPROTOKOLL_KEY = "app_fehlerprotokoll"
-
-private fun protokolliereAppEreignis(context: Context, bereich: String, meldung: String) {
-    try {
-        val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-        val alt = prefs.getString(APP_FEHLERPROTOKOLL_KEY, "") ?: ""
-        val zeit = SimpleDateFormat("dd.MM.yyyy HH:mm:ss", Locale.GERMANY).format(Date())
-        val neu = "[$zeit] $bereich: $meldung"
-        val zeilen = (if (alt.isBlank()) emptyList() else alt.lines()) + neu
-        prefs.edit().putString(APP_FEHLERPROTOKOLL_KEY, zeilen.takeLast(50).joinToString("\n")).apply()
-    } catch (_: Exception) { }
-}
-
-private fun leseAppFehlerprotokoll(context: Context): List<String> =
-    (context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-        .getString(APP_FEHLERPROTOKOLL_KEY, "") ?: "").lines().filter { it.isNotBlank() }.takeLast(50).reversed()
-
-private fun loescheAppFehlerprotokoll(context: Context) {
-    context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE).edit().remove(APP_FEHLERPROTOKOLL_KEY).apply()
-}
 private const val AUFTRAEGE_KEY = "auftraege"
 private const val KUNDEN_KEY = "kunden"
 private const val STUNDENSATZ_KEY = "stundensatz"
@@ -1861,7 +1841,6 @@ fun KuemmeroApp() {
 
     var sicherungBestaetigung by remember { mutableStateOf(false) }
     var dropboxBestaetigung by remember { mutableStateOf(false) }
-    var restoreBestaetigung by remember { mutableStateOf(false) }
     var abschlusspruefungIndex by remember { mutableStateOf<Int?>(null) }
     val backupScope = rememberCoroutineScope()
 
@@ -1879,8 +1858,7 @@ fun KuemmeroApp() {
                             out.flush()
                         } ?: throw Exception("Datei konnte nicht geöffnet werden")
                         true
-                    } catch (e: Exception) {
-                        protokolliereAppEreignis(context, "Sicherung", "Fehler: ${e.message ?: "unbekannter Fehler"}")
+                    } catch (_: Exception) {
                         false
                     }
                 }
@@ -2056,10 +2034,8 @@ fun KuemmeroApp() {
                 kvBearbeiteIndex = null
                 timerIndex = null
                 timerSekunden = 0L
-                protokolliereAppEreignis(context, "Wiederherstellung", "Erfolgreich abgeschlossen")
                 android.widget.Toast.makeText(context, "Daten wiederhergestellt. Sicherheitskopie des vorherigen Datenstands wurde erstellt.", android.widget.Toast.LENGTH_LONG).show()
             } catch (e: Exception) {
-                protokolliereAppEreignis(context, "Wiederherstellung", "Fehler: ${e.message ?: "unbekannter Fehler"}")
                 android.widget.Toast.makeText(context, "Wiederherstellung fehlgeschlagen", 1).show()
             }
         }
@@ -2220,22 +2196,6 @@ fun KuemmeroApp() {
         (a.status == "Erledigt" && a.rechnungsnummer.isBlank()) ||
         a.status == "In Bearbeitung"
     }.distinctBy { it.nummer.ifBlank { "${it.kunde}|${it.datum}|${it.leistung}" } }
-
-    if (restoreBestaetigung) {
-        AlertDialog(
-            onDismissRequest = { restoreBestaetigung = false },
-            title = { Text("Daten wiederherstellen?") },
-            text = { Text("Die aktuellen KÜMMERO-Daten werden durch den ausgewählten Sicherungsstand ersetzt. Vorher wird automatisch eine Sicherheitskopie des aktuellen Datenstands angelegt.") },
-            confirmButton = {
-                TextButton(onClick = {
-                    restoreBestaetigung = false
-                    protokolliereAppEreignis(context, "Wiederherstellung", "Wiederherstellung gestartet")
-                    restoreBackup.launch(arrayOf("application/json", "text/plain", "application/octet-stream"))
-                }) { Text("Ja, wiederherstellen", color = KuemmeroError, fontWeight = FontWeight.Bold) }
-            },
-            dismissButton = { TextButton(onClick = { restoreBestaetigung = false }) { Text("Abbrechen") } }
-        )
-    }
 
     if (sicherungBestaetigung) {
         val vorhandeneSicherung = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
@@ -3357,11 +3317,25 @@ fun KuemmeroApp() {
                 }
 
                 item {
+                    Text(
+                        "📝 ANGEBOT / KOSTENVORANSCHLAG",
+                        style = MaterialTheme.typography.headlineSmall,
+                        color = KuemmeroGreen,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Text(
+                        "Neues Angebot erstellen",
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = KuemmeroText
+                    )
+                }
+                item {
                     OutlinedTextField(
                         nummer, { nummer = it },
                         label = { Text("Angebotsnummer") },
                         colors = feldFarben,
-                        modifier = Modifier.fillMaxWidth()
+                        modifier = Modifier.fillMaxWidth(),
+                        readOnly = true
                     )
                 }
                 item {
@@ -3736,7 +3710,7 @@ fun KuemmeroApp() {
                     ) {
                         OutlinedButton(onClick = { sicherungBestaetigung = true }, modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp), shape = RoundedCornerShape(28.dp), border = BorderStroke(2.dp, KuemmeroGreen), colors = ButtonDefaults.outlinedButtonColors(contentColor = KuemmeroGreen)) { Text("Sicherung speichern / aktualisieren", fontWeight = FontWeight.SemiBold) }
                         OutlinedButton(onClick = { dropboxBestaetigung = true }, modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp), shape = RoundedCornerShape(28.dp), border = BorderStroke(2.dp, KuemmeroGreen), colors = ButtonDefaults.outlinedButtonColors(contentColor = KuemmeroGreen)) { Text("☁️ Jetzt in Dropbox sichern", fontWeight = FontWeight.SemiBold) }
-                        Button(onClick = { restoreBestaetigung = true }, modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp), shape = RoundedCornerShape(28.dp), colors = ButtonDefaults.buttonColors(containerColor = KuemmeroGreenLight)) { Text("Daten wiederherstellen", fontWeight = FontWeight.Bold) }
+                        Button(onClick = { restoreBackup.launch(arrayOf("application/json", "text/plain", "application/octet-stream")) }, modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp), shape = RoundedCornerShape(28.dp), colors = ButtonDefaults.buttonColors(containerColor = KuemmeroGreenLight)) { Text("Daten wiederherstellen", fontWeight = FontWeight.Bold) }
                         OutlinedButton(onClick = { sicherungBestaetigung = true }, modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp), shape = RoundedCornerShape(26.dp), border = BorderStroke(2.dp, KuemmeroGreen), colors = ButtonDefaults.outlinedButtonColors(contentColor = KuemmeroGreen)) { Text("Sicherung jetzt aktualisieren", fontWeight = FontWeight.SemiBold) }
                     }
                 }
@@ -4255,43 +4229,6 @@ fun KuemmeroApp() {
                                 colors = ButtonDefaults.buttonColors(containerColor = KuemmeroGreenLight)
                             ) {
                                 Text("PDF drucken", fontWeight = FontWeight.Bold)
-                            }
-
-                            OutlinedButton(
-                                onClick = {
-                                    bearbeiteIndex = index
-                                    auftragDetailIndex = index
-                                    auftragFormOffen = true
-                                    nummer = a.nummer.ifBlank { nummer }
-                                    datum = a.datum.ifBlank { datum }
-                                    leistungsdatum = a.leistungsdatum.ifBlank { a.terminDatum.ifBlank { a.datum.ifBlank { datum } } }
-                                    gueltigBis = a.gueltigBis.ifBlank { gueltigBis }
-                                    kunde = a.kunde
-                                    strasse = a.kundenStrasse
-                                    ort = a.kundenOrt
-                                    leistung = a.leistung
-                                    stunden = a.stunden.toString().replace(".", ",")
-                                    material = a.material.toString().replace(".", ",")
-                                    materialBonUri = a.materialBonUri
-                                    fahrt = a.fahrt.toString().replace(".", ",")
-                                    stundensatz = a.stundensatz.toString().replace(".", ",")
-                                    status = a.status
-                                    zahlungsstatus = a.zahlungsstatus
-                                    bezahltAm = a.bezahltAm
-                                    terminDatum = a.terminDatum
-                                    terminUhrzeit = a.terminUhrzeit
-                                    notiz = a.notiz
-                                    fotosVorher = a.fotosVorher
-                                    fotosNachher = a.fotosNachher
-                                    unterschriftPfad = a.unterschriftPfad
-                                    unterschriftDatum = a.unterschriftDatum
-                                },
-                                modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp),
-                                shape = RoundedCornerShape(26.dp),
-                                border = BorderStroke(2.dp, KuemmeroGreen),
-                                colors = ButtonDefaults.outlinedButtonColors(contentColor = KuemmeroGreen)
-                            ) {
-                                Text("✏ Korrigieren & neu drucken", fontWeight = FontWeight.Bold)
                             }
 
                             Text(
@@ -5352,20 +5289,6 @@ fun KuemmeroApp() {
                             ) { Text("📤 Datenexport (CSV)", fontWeight = FontWeight.Bold) }
                         }
                         item {
-                            Card(Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = KuemmeroSurface), shape = RoundedCornerShape(18.dp)) {
-                                Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                                    Text("🛠 Diagnose & Fehlerprotokoll", style = MaterialTheme.typography.titleMedium, color = KuemmeroGreen, fontWeight = FontWeight.Bold)
-                                    val protokoll = leseAppFehlerprotokoll(context)
-                                    Text(if (protokoll.isEmpty()) "Noch keine technischen Ereignisse protokolliert." else "${protokoll.size} Einträge gespeichert. Letzte Einträge:", style = MaterialTheme.typography.bodySmall, color = KuemmeroText)
-                                    protokoll.take(5).forEach { Text(it, style = MaterialTheme.typography.bodySmall, color = KuemmeroText) }
-                                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
-                                        OutlinedButton(onClick = { protokolliereAppEreignis(context, "Diagnose", "Manueller Testeintrag"); android.widget.Toast.makeText(context, "Testeintrag gespeichert.", 0).show() }, modifier = Modifier.weight(1f), shape = RoundedCornerShape(22.dp), border = BorderStroke(1.5.dp, KuemmeroGreen), colors = ButtonDefaults.outlinedButtonColors(contentColor = KuemmeroGreen)) { Text("Testeintrag") }
-                                        OutlinedButton(onClick = { loescheAppFehlerprotokoll(context); android.widget.Toast.makeText(context, "Protokoll gelöscht.", 0).show() }, modifier = Modifier.weight(1f), shape = RoundedCornerShape(22.dp), border = BorderStroke(1.5.dp, KuemmeroError), colors = ButtonDefaults.outlinedButtonColors(contentColor = KuemmeroError)) { Text("Leeren") }
-                                    }
-                                }
-                            }
-                        }
-                        item {
                             Card(
                                 Modifier.fillMaxWidth(),
                                 colors = CardDefaults.cardColors(containerColor = KuemmeroSurface),
@@ -5434,7 +5357,7 @@ fun KuemmeroApp() {
                                     )
                                     OutlinedButton(onClick = { sicherungBestaetigung = true }, modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp), shape = RoundedCornerShape(26.dp), border = BorderStroke(2.dp, KuemmeroGreen), colors = ButtonDefaults.outlinedButtonColors(contentColor = KuemmeroGreen)) { Text("Sicherung speichern / aktualisieren") }
                                     OutlinedButton(onClick = { dropboxBestaetigung = true }, modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp), shape = RoundedCornerShape(26.dp), border = BorderStroke(2.dp, KuemmeroGreen), colors = ButtonDefaults.outlinedButtonColors(contentColor = KuemmeroGreen)) { Text("☁️ Jetzt in Dropbox sichern") }
-                                    Button(onClick = { restoreBestaetigung = true }, modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp), shape = RoundedCornerShape(26.dp), colors = ButtonDefaults.buttonColors(containerColor = KuemmeroGreenLight)) { Text("Daten wiederherstellen", fontWeight = FontWeight.Bold) }
+                                    Button(onClick = { restoreBackup.launch(arrayOf("application/json", "text/plain", "application/octet-stream")) }, modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp), shape = RoundedCornerShape(26.dp), colors = ButtonDefaults.buttonColors(containerColor = KuemmeroGreenLight)) { Text("Daten wiederherstellen", fontWeight = FontWeight.Bold) }
                                 }
                             }
                         }
@@ -5721,11 +5644,6 @@ fun KuemmeroApp() {
                             val kundenTreffer = kunden.filter { listOf(it.name, it.adresse, it.ort, it.telefon, it.email).any { v -> v.contains(q, true) } }
                             val auftragTreffer = auftraege.filter { listOf(it.nummer, it.kunde, it.kundenStrasse, it.kundenOrt, it.leistung, it.rechnungsnummer, it.status).any { v -> v.contains(q, true) } }
                             val kvTreffer = kostenvoranschlaege.filter { listOf(it.nummer, it.kunde, it.leistung).any { v -> v.contains(q, true) } }
-                            val leistungsTreffer = leistungspositionen.filter { listOf(it.name, it.beschreibung, it.einheit).any { v -> v.contains(q, true) } }
-                            item { Text("Leistungen (${leistungsTreffer.size})", color = KuemmeroGreen, fontWeight = FontWeight.Bold) }
-                            leistungsTreffer.take(15).forEach { l ->
-                                item { Card(Modifier.fillMaxWidth().clickable { hauptseite = "Meine Leistungen" }, colors = CardDefaults.cardColors(containerColor = KuemmeroSurface), shape = RoundedCornerShape(16.dp)) { Column(Modifier.padding(14.dp)) { Text(l.name, fontWeight = FontWeight.Bold, color = KuemmeroText); Text("${l.einheit} · ${euro(l.preis)}", color = KuemmeroGreen); Text("Leistung öffnen →", color = KuemmeroGreen) } } }
-                            }
                             item { Text("Kunden (${kundenTreffer.size})", color = KuemmeroGreen, fontWeight = FontWeight.Bold) }
                             kundenTreffer.take(10).forEach { k ->
                                 item { Card(Modifier.fillMaxWidth().clickable { hauptseite = "Kunden"; kundenAkteName = k.name }, colors = CardDefaults.cardColors(containerColor = KuemmeroSurface), shape = RoundedCornerShape(16.dp)) { Column(Modifier.padding(14.dp)) { Text(k.name, fontWeight = FontWeight.Bold, color = KuemmeroText); Text("Kunde öffnen →", color = KuemmeroGreen) } } }
