@@ -1396,6 +1396,8 @@ fun KuemmeroApp() {
     var leistungspositionEinheit by remember { mutableStateOf("Pauschale") }
     var leistungspositionPreis by remember { mutableStateOf("") }
     var leistungspositionAktiv by remember { mutableStateOf(true) }
+    var leistungsPreisIndex by remember { mutableStateOf<Int?>(null) }
+    var leistungsPreisEingabe by remember { mutableStateOf("") }
     var kvFormOffen by remember { mutableStateOf(false) }
     var kvBearbeiteIndex by remember { mutableStateOf<Int?>(null) }
     var kvNummer by remember { mutableStateOf("KV-" + SimpleDateFormat("yyyyMMdd-HHmmss", Locale.GERMANY).format(heute)) }
@@ -5096,6 +5098,7 @@ fun KuemmeroApp() {
                                                     }
                                                 },
                                                 enabled = index > 0,
+                                                modifier = Modifier.weight(0.5f),
                                                 shape = RoundedCornerShape(22.dp),
                                                 border = BorderStroke(1.5.dp, KuemmeroGreen),
                                                 colors = ButtonDefaults.outlinedButtonColors(contentColor = KuemmeroGreen)
@@ -5112,6 +5115,7 @@ fun KuemmeroApp() {
                                                     }
                                                 },
                                                 enabled = index < leistungspositionen.lastIndex,
+                                                modifier = Modifier.weight(0.5f),
                                                 shape = RoundedCornerShape(22.dp),
                                                 border = BorderStroke(1.5.dp, KuemmeroGreen),
                                                 colors = ButtonDefaults.outlinedButtonColors(contentColor = KuemmeroGreen)
@@ -5126,11 +5130,23 @@ fun KuemmeroApp() {
                                                     leistungspositionAktiv = leistungPos.aktiv
                                                     leistungspositionDialog = true
                                                 },
+                                                modifier = Modifier.weight(1.5f),
+                                                shape = RoundedCornerShape(22.dp),
+                                                border = BorderStroke(1.5.dp, KuemmeroGreen),
+                                                colors = ButtonDefaults.outlinedButtonColors(contentColor = KuemmeroGreen)
+                                            ) { Text("✏ Bearbeiten") }
+                                        }
+                                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                            OutlinedButton(
+                                                onClick = {
+                                                    leistungsPreisIndex = index
+                                                    leistungsPreisEingabe = if (leistungPos.preis == 0.0) "" else String.format(Locale.GERMANY, "%.2f", leistungPos.preis)
+                                                },
                                                 modifier = Modifier.weight(1f),
                                                 shape = RoundedCornerShape(22.dp),
                                                 border = BorderStroke(1.5.dp, KuemmeroGreen),
                                                 colors = ButtonDefaults.outlinedButtonColors(contentColor = KuemmeroGreen)
-                                            ) { Text("Bearbeiten") }
+                                            ) { Text("💶 Preis") }
                                             OutlinedButton(
                                                 onClick = {
                                                     val list = leistungspositionen.toMutableList()
@@ -5138,13 +5154,14 @@ fun KuemmeroApp() {
                                                     leistungspositionen = list
                                                     speichereLeistungspositionen(context, list)
                                                 },
-                                                modifier = Modifier.weight(1f),
+                                                modifier = Modifier.weight(1.2f),
                                                 shape = RoundedCornerShape(22.dp),
                                                 border = BorderStroke(1.5.dp, KuemmeroGreen),
                                                 colors = ButtonDefaults.outlinedButtonColors(contentColor = KuemmeroGreen)
                                             ) { Text(if (leistungPos.aktiv) "Deaktivieren" else "Aktivieren") }
                                             OutlinedButton(
                                                 onClick = { leistungspositionLoeschIndex = index },
+                                                modifier = Modifier.weight(0.9f),
                                                 shape = RoundedCornerShape(22.dp),
                                                 border = BorderStroke(1.5.dp, KuemmeroError),
                                                 colors = ButtonDefaults.outlinedButtonColors(contentColor = KuemmeroError)
@@ -5309,6 +5326,44 @@ fun KuemmeroApp() {
             },
             dismissButton = { TextButton(onClick = { leistungspositionDialog = false }) { Text("Abbrechen") } }
         )
+    }
+
+    if (leistungsPreisIndex != null) {
+        val idx = leistungsPreisIndex
+        val position = idx?.let { leistungspositionen.getOrNull(it) }
+        if (position != null) {
+            AlertDialog(
+                onDismissRequest = { leistungsPreisIndex = null },
+                title = { Text("Standardpreis ändern") },
+                text = {
+                    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                        Text(position.name, fontWeight = FontWeight.Bold, color = KuemmeroGreen)
+                        Text("Aktueller Preis: ${euro(position.preis)} / ${position.einheit}", color = KuemmeroText)
+                        OutlinedTextField(
+                            value = leistungsPreisEingabe,
+                            onValueChange = { leistungsPreisEingabe = it },
+                            label = { Text("Neuer Preis (€)") },
+                            singleLine = true,
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                            colors = feldFarben
+                        )
+                    }
+                },
+                confirmButton = {
+                    TextButton(onClick = {
+                        val preis = zahl(leistungsPreisEingabe)
+                        if (idx != null && idx in leistungspositionen.indices) {
+                            val list = leistungspositionen.toMutableList()
+                            list[idx] = position.copy(preis = preis)
+                            leistungspositionen = list
+                            speichereLeistungspositionen(context, list)
+                        }
+                        leistungsPreisIndex = null
+                    }) { Text("Speichern", color = KuemmeroGreen, fontWeight = FontWeight.Bold) }
+                },
+                dismissButton = { TextButton(onClick = { leistungsPreisIndex = null }) { Text("Abbrechen") } }
+            )
+        }
     }
 
     if (leistungspositionLoeschIndex != null) {
