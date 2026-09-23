@@ -8,6 +8,7 @@ import android.graphics.BitmapFactory
 import android.graphics.pdf.PdfDocument
 import android.net.Uri
 import android.provider.MediaStore
+import android.provider.DocumentsContract
 import android.content.Intent
 import android.os.Bundle
 import android.os.CancellationSignal
@@ -183,12 +184,33 @@ data class Auftrag(
 )
 
 private const val PREFS_NAME = "kuemmero_speicher"
+private const val APP_FEHLERPROTOKOLL_KEY = "app_fehlerprotokoll"
+
+private fun protokolliereAppEreignis(context: Context, bereich: String, meldung: String) {
+    try {
+        val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        val alt = prefs.getString(APP_FEHLERPROTOKOLL_KEY, "") ?: ""
+        val zeit = SimpleDateFormat("dd.MM.yyyy HH:mm:ss", Locale.GERMANY).format(Date())
+        val neu = "[$zeit] $bereich: $meldung"
+        val zeilen = (if (alt.isBlank()) emptyList() else alt.lines()) + neu
+        prefs.edit().putString(APP_FEHLERPROTOKOLL_KEY, zeilen.takeLast(50).joinToString("\n")).apply()
+    } catch (_: Exception) { }
+}
+
+private fun leseAppFehlerprotokoll(context: Context): List<String> =
+    (context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        .getString(APP_FEHLERPROTOKOLL_KEY, "") ?: "").lines().filter { it.isNotBlank() }.takeLast(50).reversed()
+
+private fun loescheAppFehlerprotokoll(context: Context) {
+    context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE).edit().remove(APP_FEHLERPROTOKOLL_KEY).apply()
+}
 private const val AUFTRAEGE_KEY = "auftraege"
 private const val KUNDEN_KEY = "kunden"
 private const val STUNDENSATZ_KEY = "stundensatz"
 private const val BACKUP_URI_KEY = "backup_uri"
 private const val BACKUP_LAST_SUCCESS_KEY = "backup_last_success"
 private const val BACKUP_PRE_RESTORE_FILE = "kuemmero_vor_restore_backup.json"
+private const val DROPBOX_PACKAGE = "com.dropbox.android"
 private const val KOSTENVORANSCHLAEGE_KEY = "kostenvoranschlaege"
 private const val FIRMENNAME_KEY = "firmen_name"
 private const val FIRMENSTRASSE_KEY = "firmen_strasse"
@@ -200,6 +222,8 @@ private const val MAHNUNG1_FRIST_TAGE_KEY = "mahnung1_frist_tage"
 private const val MAHNUNG1_GEBUEHR_KEY = "mahnung1_gebuehr"
 private const val MAHNUNG1_TEXT_KEY = "mahnung1_text"
 private const val MAHNUNG_TESTMODUS_KEY = "mahnung_testmodus"
+private const val MAHNUNG_SPEICHERORDNER_URI_KEY = "mahnung_speicherordner_uri"
+private const val DOKUMENTE_SPEICHERORDNER_URI_KEY = "dokumente_speicherordner_uri"
 private fun standardMahnung1Frist(context: Context, basisDatum: Date = Date()): String {
     val tage = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
         .getInt(MAHNUNG1_FRIST_TAGE_KEY, 7)
@@ -476,6 +500,45 @@ private fun sichereBackupAutomatisch(context: Context): Boolean {
         // Die bisher gewählte Datei wurde z. B. gelöscht oder verschoben.
         // Die alte URI darf danach nicht weiter verwendet werden.
         prefs.edit().remove(BACKUP_URI_KEY).apply()
+        false
+    }
+}
+
+
+private fun teileBackupMitDropbox(context: Context): Boolean {
+    return try {
+        val dateiname = "KÜMMERO-Cloud-Sicherung-${SimpleDateFormat("yyyyMMdd-HHmm", Locale.GERMANY).format(Date())}.json"
+        val datei = java.io.File(context.cacheDir, dateiname)
+        datei.writeText(backupText(context), Charsets.UTF_8)
+
+        val uri = androidx.core.content.FileProvider.getUriForFile(
+            context,
+            context.packageName + ".fileprovider",
+            datei
+        )
+
+        val intent = Intent(Intent.ACTION_SEND).apply {
+            type = "application/json"
+            putExtra(Intent.EXTRA_STREAM, uri)
+            putExtra(Intent.EXTRA_SUBJECT, "KÜMMERO Cloud-Sicherung")
+            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            setPackage(DROPBOX_PACKAGE)
+        }
+        context.startActivity(intent)
+        true
+    } catch (_: android.content.ActivityNotFoundException) {
+        android.widget.Toast.makeText(
+            context,
+            "Dropbox ist nicht installiert oder nicht verfügbar.",
+            android.widget.Toast.LENGTH_LONG
+        ).show()
+        false
+    } catch (_: Exception) {
+        android.widget.Toast.makeText(
+            context,
+            "Dropbox-Sicherung konnte nicht vorbereitet werden.",
+            android.widget.Toast.LENGTH_LONG
+        ).show()
         false
     }
 }
@@ -1199,18 +1262,29 @@ data class Leistungsposition(
 private const val LEISTUNGSPOSITIONEN_KEY = "leistungspositionen"
 
 private val KUEMMERO_STANDARD_LEISTUNGEN = listOf(
-    Leistungsposition("Allgemeine Kleinreparatur"),
-    Leistungsposition("Möbelaufbau"),
-    Leistungsposition("Tapezieren"),
-    Leistungsposition("Rasen mähen"),
-    Leistungsposition("Haushalts- / Alltagshilfe"),
-    Leistungsposition("Schimmelbehandlung"),
-    Leistungsposition("Smart Home / Computer / Router"),
-    Leistungsposition("Elektro-/Strom-Kleinaufgabe"),
+    Leistungsposition(
+        "Einfache Kleinreparaturen / Ausbesserungen",
+        "Nur einfache, nicht wesentliche Ausbesserungsarbeiten im zulässigen Umfang."
+    ),
+    Leistungsposition("Möbel- und Regalmontage", "Montage von Möbeln und Regalen im zulässigen Umfang; keine Tischlerarbeiten."),
+    Leistungsposition(
+        "Kleine Tapezier-/Ausbesserungsarbeiten",
+        "Nur geringfügige Tapezier- oder Ausbesserungsarbeiten im zulässigen Umfang."
+    ),
+    Leistungsposition("Rasen mähen", "Gartenpflege / Rasenmähen."),
+    Leistungsposition("Haushalts- / Alltagshilfe", "Unterstützung im Haushalt und Alltag; keine Pflege- oder medizinischen Leistungen."),
+    Leistungsposition(
+        "Schimmel – Reinigung / oberflächliche Stellen",
+        "Nur einfache Reinigung bzw. oberflächliche Behandlung im zulässigen Umfang; keine umfassende Schimmel- oder Bauschadensanierung."
+    ),
+    Leistungsposition(
+        "Computer / Router / Smart Home – ohne Elektroarbeiten",
+        "Einrichtung und Konfiguration; keine Arbeiten an elektrischen Anlagen, Leitungen, Steckdosen oder Schaltern."
+    ),
     Leistungsposition("Anfahrt"),
     Leistungsposition("Arbeitszeit", einheit = "Stunde", preis = 42.0),
     Leistungsposition("Material"),
-    Leistungsposition("Eigene Position")
+    Leistungsposition("Eigene Position", "Nur für Tätigkeiten verwenden, die im eigenen Gewerbe tatsächlich zulässig sind.")
 )
 
 private fun ladeLeistungspositionen(context: Context): List<Leistungsposition> {
@@ -1233,6 +1307,32 @@ private fun ladeLeistungspositionen(context: Context): List<Leistungsposition> {
                 aktiv = o.optBoolean("aktiv", true)
             )
         }.filter { it.name.isNotBlank() }
+            .filterNot { it.name.equals("Elektro-/Strom-Kleinaufgabe", ignoreCase = true) }
+            .map { position ->
+                when {
+                    position.name.equals("Allgemeine Kleinreparatur", ignoreCase = true) -> position.copy(
+                        name = "Einfache Kleinreparaturen / Ausbesserungen",
+                        beschreibung = position.beschreibung.ifBlank { "Nur einfache, nicht wesentliche Ausbesserungsarbeiten im zulässigen Umfang." }
+                    )
+                    position.name.equals("Tapezieren", ignoreCase = true) -> position.copy(
+                        name = "Kleine Tapezier-/Ausbesserungsarbeiten",
+                        beschreibung = position.beschreibung.ifBlank { "Nur geringfügige Tapezier- oder Ausbesserungsarbeiten im zulässigen Umfang." }
+                    )
+                    position.name.equals("Schimmelbehandlung", ignoreCase = true) -> position.copy(
+                        name = "Schimmel – Reinigung / oberflächliche Stellen",
+                        beschreibung = position.beschreibung.ifBlank { "Nur einfache Reinigung bzw. oberflächliche Behandlung im zulässigen Umfang; keine umfassende Schimmel- oder Bauschadensanierung." }
+                    )
+                    position.name.equals("Smart Home / Computer / Router", ignoreCase = true) -> position.copy(
+                        name = "Computer / Router / Smart Home – ohne Elektroarbeiten",
+                        beschreibung = position.beschreibung.ifBlank { "Einrichtung und Konfiguration; keine Arbeiten an elektrischen Anlagen, Leitungen, Steckdosen oder Schaltern." }
+                    )
+                    position.name.equals("Eigene Position", ignoreCase = true) -> position.copy(
+                        beschreibung = position.beschreibung.ifBlank { "Nur für Tätigkeiten verwenden, die im eigenen Gewerbe tatsächlich zulässig sind." }
+                    )
+                    else -> position
+                }
+            }
+            .also { speichereLeistungspositionen(context, it) }
     } catch (_: Exception) {
         KUEMMERO_STANDARD_LEISTUNGEN
     }
@@ -1258,16 +1358,15 @@ private fun leistungsumfangHinweis(leistung: String): String? {
     val text = leistung.lowercase(Locale.GERMANY)
     val elektro = listOf(
         "elektroinstallation", "elektroinstall", "steckdose", "lichtschalter",
-        "sicherungskasten", "unterverteilung", "stromleitung", "stromanschluss",
+        "sicherungskasten", "sicherung", "unterverteilung", "stromleitung", "stromanschluss",
         "kabel verlegen", "elektrische installation"
     ).any { text.contains(it) }
-    val schimmel = listOf(
-        "schimmelsanierung", "schimmelsanieren", "professionelle schimmel",
-        "schimmelbeseitigung", "schimmel sanierung"
-    ).any { text.contains(it) }
+    val schimmel = text.contains("schimmel")
+    val tapezieren = text.contains("tapezier")
     return when {
-        elektro -> "Hinweis: Diese Leistungsbeschreibung kann in den Bereich des zulassungspflichtigen Elektrotechniker-Handwerks fallen. Nur Leistungen anbieten/ausführen, für die eine entsprechende Berechtigung besteht."
-        schimmel -> "Hinweis: Professionelle Schimmel-Sanierungsarbeiten können besondere fachliche und rechtliche Anforderungen haben. Nur den tatsächlich zulässigen Leistungsumfang anbieten."
+        elektro -> "Hinweis: Arbeiten an elektrischen Anlagen/Installationen können zum zulassungspflichtigen Elektrotechniker-Handwerk gehören. Nur entsprechend zulässige Tätigkeiten anbieten/ausführen."
+        schimmel -> "Hinweis: Keine umfassende Schimmel-Sanierung anbieten. Nur den tatsächlich zulässigen Reinigungs-/oberflächlichen Leistungsumfang ausführen."
+        tapezieren -> "Hinweis: Tapezierarbeiten nur in dem geringfügigen bzw. sonst rechtlich zulässigen Umfang anbieten."
         else -> null
     }
 }
@@ -1396,6 +1495,8 @@ fun KuemmeroApp() {
     var leistungspositionEinheit by remember { mutableStateOf("Pauschale") }
     var leistungspositionPreis by remember { mutableStateOf("") }
     var leistungspositionAktiv by remember { mutableStateOf(true) }
+    var leistungsPreisIndex by remember { mutableStateOf<Int?>(null) }
+    var leistungsPreisEingabe by remember { mutableStateOf("") }
     var kvFormOffen by remember { mutableStateOf(false) }
     var kvBearbeiteIndex by remember { mutableStateOf<Int?>(null) }
     var kvNummer by remember { mutableStateOf("KV-" + SimpleDateFormat("yyyyMMdd-HHmmss", Locale.GERMANY).format(heute)) }
@@ -1493,6 +1594,10 @@ fun KuemmeroApp() {
     var mahnung2Text by remember { mutableStateOf("") }
 
     var mahnungEinstellungenOffen by remember { mutableStateOf(false) }
+    var mahnungSpeicherBestaetigungOffen by remember { mutableStateOf(false) }
+    var ausstehendeMahnungDateiName by remember { mutableStateOf("") }
+    var ausstehendeMahnungTyp by remember { mutableStateOf(0) }
+    var ausstehendeMahnungIndex by remember { mutableStateOf<Int?>(null) }
     val mahnungPrefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
     var mahnungEinstellungFristTage by remember {
         mutableStateOf(mahnungPrefs.getInt(MAHNUNG1_FRIST_TAGE_KEY, 7).toString())
@@ -1533,10 +1638,109 @@ fun KuemmeroApp() {
         faelligAm = testHeuteText
     )
 
-    val testMahnungLauncher = rememberLauncherForActivityResult(
-        ActivityResultContracts.CreateDocument("application/pdf")
+    var mahnungSpeicherOrdnerUri by remember { mutableStateOf(mahnungPrefs.getString(MAHNUNG_SPEICHERORDNER_URI_KEY, "") ?: "") }
+
+    // Zentraler Ordner für alle von KÜMMERO erzeugten/gespeicherten Dokumente.
+    // Die Auswahl gilt für PDFs (Angebote, Rechnungen, Mahnungen, Test-PDFs) und CSV/JSON-Exporte.
+    val dokumentePrefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+    var dokumenteSpeicherOrdnerUri by remember {
+        mutableStateOf(dokumentePrefs.getString(DOKUMENTE_SPEICHERORDNER_URI_KEY, "") ?: "")
+    }
+    val dokumenteOrdnerLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.OpenDocumentTree()
     ) { uri ->
-        uri?.let {
+        if (uri != null) {
+            try {
+                context.contentResolver.takePersistableUriPermission(
+                    uri,
+                    Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION
+                )
+            } catch (_: Exception) { }
+            dokumentePrefs.edit().putString(DOKUMENTE_SPEICHERORDNER_URI_KEY, uri.toString()).apply()
+            dokumenteSpeicherOrdnerUri = uri.toString()
+            android.widget.Toast.makeText(context, "Dokumentenordner ausgewählt.", android.widget.Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    fun dokumentSpeicherIntent(mimeType: String, dateiname: String): Intent = Intent(Intent.ACTION_CREATE_DOCUMENT).apply {
+        addCategory(Intent.CATEGORY_OPENABLE)
+        type = mimeType
+        putExtra(Intent.EXTRA_TITLE, dateiname)
+        if (dokumenteSpeicherOrdnerUri.isNotBlank()) {
+            putExtra(DocumentsContract.EXTRA_INITIAL_URI, Uri.parse(dokumenteSpeicherOrdnerUri))
+        }
+    }
+
+    val mahnungOrdnerLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.OpenDocumentTree()
+    ) { uri ->
+        if (uri != null) {
+            try {
+                context.contentResolver.takePersistableUriPermission(
+                    uri,
+                    Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION
+                )
+            } catch (_: Exception) {
+                // Manche Anbieter erlauben keine dauerhafte Berechtigung; die aktuelle Auswahl bleibt trotzdem gültig.
+            }
+            mahnungPrefs.edit().putString(MAHNUNG_SPEICHERORDNER_URI_KEY, uri.toString()).apply()
+            mahnungSpeicherOrdnerUri = uri.toString()
+            android.widget.Toast.makeText(context, "Mahnung-Ordner ausgewählt.", android.widget.Toast.LENGTH_SHORT).show()
+        }
+    }
+
+
+    fun speichereMahnungInAusgewaehltenOrdner(typ: Int, index: Int, dateiname: String): Boolean {
+        if (mahnungSpeicherOrdnerUri.isBlank()) return false
+        val a = auftraege.getOrNull(index) ?: return false
+        return try {
+            val treeUri = Uri.parse(mahnungSpeicherOrdnerUri)
+            val mime = "application/pdf"
+            val zielUri = DocumentsContract.createDocument(
+                context.contentResolver,
+                treeUri,
+                mime,
+                dateiname
+            ) ?: throw Exception("Datei konnte nicht angelegt werden")
+            val pdf = if (typ == 1) {
+                erstelleMahnung1Pdf(context, a, mahnung1Datum.trim(), mahnung1Frist.trim(), zahl(mahnung1Gebuehr), mahnung1Text.trim())
+            } else {
+                erstelleMahnung2Pdf(context, a, mahnung2Datum.trim(), mahnung2Frist.trim(), zahl(mahnung2Gebuehr), mahnung2Text.trim())
+            }
+            context.contentResolver.openOutputStream(zielUri)?.use { out -> pdf.writeTo(out) } ?: throw Exception("Datei konnte nicht geöffnet werden")
+            pdf.close()
+            val aktualisiert = if (typ == 1) {
+                a.copy(
+                    mahnung1Datum = mahnung1Datum.trim(),
+                    mahnung1Frist = mahnung1Frist.trim(),
+                    mahnung1Gebuehr = zahl(mahnung1Gebuehr),
+                    mahnung1Text = mahnung1Text.trim(),
+                    mahnung1Erstellt = true
+                )
+            } else {
+                a.copy(
+                    mahnung2Datum = mahnung2Datum.trim(),
+                    mahnung2Frist = mahnung2Frist.trim(),
+                    mahnung2Gebuehr = zahl(mahnung2Gebuehr),
+                    mahnung2Text = mahnung2Text.trim(),
+                    mahnung2Erstellt = true
+                )
+            }
+            auftraege = auftraege.toMutableList().apply { set(index, aktualisiert) }
+            speichereAuftraege(context, auftraege)
+            if (typ == 1) mahnung1Index = null else mahnung2Index = null
+            android.widget.Toast.makeText(context, "Mahnung gespeichert.", android.widget.Toast.LENGTH_SHORT).show()
+            true
+        } catch (_: Exception) {
+            android.widget.Toast.makeText(context, "Mahnung konnte nicht gespeichert werden.", android.widget.Toast.LENGTH_LONG).show()
+            false
+        }
+    }
+
+    val testMahnungLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.StartActivityForResult()
+    ) { result ->
+        result.data?.data?.let { uri ->
             try {
                 val pdf = erstelleMahnung1Pdf(context, testMahnungAuftrag, testMahnung1Datum.trim(), testMahnung1Frist.trim(), zahl(testMahnung1Gebuehr), testMahnung1Text.trim())
                 context.contentResolver.openOutputStream(it)?.use { out -> pdf.writeTo(out) } ?: throw Exception("Datei konnte nicht geöffnet werden")
@@ -1551,9 +1755,9 @@ fun KuemmeroApp() {
     }
 
     val mahnung1Launcher = rememberLauncherForActivityResult(
-        ActivityResultContracts.CreateDocument("application/pdf")
-    ) { uri ->
-        uri?.let {
+        ActivityResultContracts.StartActivityForResult()
+    ) { result ->
+        result.data?.data?.let { uri ->
             val index = mahnung1Index
             val a = index?.let { i -> auftraege.getOrNull(i) }
             if (a != null) {
@@ -1580,9 +1784,9 @@ fun KuemmeroApp() {
     }
 
     val mahnung2Launcher = rememberLauncherForActivityResult(
-        ActivityResultContracts.CreateDocument("application/pdf")
-    ) { uri ->
-        uri?.let {
+        ActivityResultContracts.StartActivityForResult()
+    ) { result ->
+        result.data?.data?.let { uri ->
             val index = mahnung2Index
             val a = index?.let { i -> auftraege.getOrNull(i) }
             if (a != null) {
@@ -1656,13 +1860,15 @@ fun KuemmeroApp() {
     }
 
     var sicherungBestaetigung by remember { mutableStateOf(false) }
+    var dropboxBestaetigung by remember { mutableStateOf(false) }
+    var restoreBestaetigung by remember { mutableStateOf(false) }
     var abschlusspruefungIndex by remember { mutableStateOf<Int?>(null) }
     val backupScope = rememberCoroutineScope()
 
     val createBackup = rememberLauncherForActivityResult(
-        ActivityResultContracts.CreateDocument("application/json")
-    ) { uri ->
-        uri?.let { selectedUri ->
+        ActivityResultContracts.StartActivityForResult()
+    ) { result ->
+        result.data?.data?.let { selectedUri ->
             context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE).edit()
                 .putString(BACKUP_URI_KEY, selectedUri.toString()).apply()
             backupScope.launch {
@@ -1673,7 +1879,8 @@ fun KuemmeroApp() {
                             out.flush()
                         } ?: throw Exception("Datei konnte nicht geöffnet werden")
                         true
-                    } catch (_: Exception) {
+                    } catch (e: Exception) {
+                        protokolliereAppEreignis(context, "Sicherung", "Fehler: ${e.message ?: "unbekannter Fehler"}")
                         false
                     }
                 }
@@ -1688,9 +1895,9 @@ fun KuemmeroApp() {
         }
     }
     val createDataExport = rememberLauncherForActivityResult(
-        ActivityResultContracts.CreateDocument("text/csv")
-    ) { uri ->
-        uri?.let { selectedUri ->
+        ActivityResultContracts.StartActivityForResult()
+    ) { result ->
+        result.data?.data?.let { selectedUri ->
             backupScope.launch {
                 val csv = buildString {
                     append("KÜMMERO Datenexport\n")
@@ -1849,8 +2056,10 @@ fun KuemmeroApp() {
                 kvBearbeiteIndex = null
                 timerIndex = null
                 timerSekunden = 0L
+                protokolliereAppEreignis(context, "Wiederherstellung", "Erfolgreich abgeschlossen")
                 android.widget.Toast.makeText(context, "Daten wiederhergestellt. Sicherheitskopie des vorherigen Datenstands wurde erstellt.", android.widget.Toast.LENGTH_LONG).show()
             } catch (e: Exception) {
+                protokolliereAppEreignis(context, "Wiederherstellung", "Fehler: ${e.message ?: "unbekannter Fehler"}")
                 android.widget.Toast.makeText(context, "Wiederherstellung fehlgeschlagen", 1).show()
             }
         }
@@ -1896,9 +2105,9 @@ fun KuemmeroApp() {
     val datumJetzt = datumFormat.format(Date())
 
     val pdfLauncher = rememberLauncherForActivityResult(
-        ActivityResultContracts.CreateDocument("application/pdf")
-    ) { uri ->
-        uri?.let {
+        ActivityResultContracts.StartActivityForResult()
+    ) { result ->
+        result.data?.data?.let { uri ->
             val a = auftragFuerPdf
             val pdf = if (a != null) {
                 erstellePdf(
@@ -1922,9 +2131,9 @@ fun KuemmeroApp() {
 
 
     val rechnungLauncher = rememberLauncherForActivityResult(
-        ActivityResultContracts.CreateDocument("application/pdf")
-    ) { uri ->
-        uri?.let {
+        ActivityResultContracts.StartActivityForResult()
+    ) { result ->
+        result.data?.data?.let { uri ->
             val index = rechnungFuerIndex
             val a = index?.let { i -> auftraege.getOrNull(i) }
             if (a != null) {
@@ -2012,6 +2221,22 @@ fun KuemmeroApp() {
         a.status == "In Bearbeitung"
     }.distinctBy { it.nummer.ifBlank { "${it.kunde}|${it.datum}|${it.leistung}" } }
 
+    if (restoreBestaetigung) {
+        AlertDialog(
+            onDismissRequest = { restoreBestaetigung = false },
+            title = { Text("Daten wiederherstellen?") },
+            text = { Text("Die aktuellen KÜMMERO-Daten werden durch den ausgewählten Sicherungsstand ersetzt. Vorher wird automatisch eine Sicherheitskopie des aktuellen Datenstands angelegt.") },
+            confirmButton = {
+                TextButton(onClick = {
+                    restoreBestaetigung = false
+                    protokolliereAppEreignis(context, "Wiederherstellung", "Wiederherstellung gestartet")
+                    restoreBackup.launch(arrayOf("application/json", "text/plain", "application/octet-stream"))
+                }) { Text("Ja, wiederherstellen", color = KuemmeroError, fontWeight = FontWeight.Bold) }
+            },
+            dismissButton = { TextButton(onClick = { restoreBestaetigung = false }) { Text("Abbrechen") } }
+        )
+    }
+
     if (sicherungBestaetigung) {
         val vorhandeneSicherung = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
             .getString(BACKUP_URI_KEY, null)
@@ -2037,6 +2262,26 @@ fun KuemmeroApp() {
             },
             dismissButton = {
                 TextButton(onClick = { sicherungBestaetigung = false }) { Text("Abbrechen") }
+            }
+        )
+    }
+
+
+    if (dropboxBestaetigung) {
+        AlertDialog(
+            onDismissRequest = { dropboxBestaetigung = false },
+            title = { Text("Dropbox-Sicherung bestätigen") },
+            text = {
+                Text("Soll jetzt eine aktuelle KÜMMERO-Datensicherung an Dropbox übergeben werden? Es wird erst nach deiner Bestätigung die Dropbox-App geöffnet.")
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    dropboxBestaetigung = false
+                    teileBackupMitDropbox(context)
+                }) { Text("Ja, an Dropbox") }
+            },
+            dismissButton = {
+                TextButton(onClick = { dropboxBestaetigung = false }) { Text("Abbrechen") }
             }
         )
     }
@@ -2157,6 +2402,45 @@ fun KuemmeroApp() {
                         "Diese Werte sind nur Voreinstellungen. Bei jeder einzelnen Mahnung kannst du sie trotzdem ändern.",
                         color = KuemmeroText
                     )
+                    Card(
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = CardDefaults.cardColors(containerColor = KuemmeroMint),
+                        border = BorderStroke(1.dp, KuemmeroGreen),
+                        shape = RoundedCornerShape(14.dp)
+                    ) {
+                        Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Text("📁 Mahnung-Speicherordner", fontWeight = FontWeight.Bold, color = KuemmeroGreen)
+                            Text(
+                                if (mahnungSpeicherOrdnerUri.isBlank())
+                                    "Kein Ordner ausgewählt. Beim Speichern fragt Android nach dem Ziel."
+                                else
+                                    "Ein Ordner ist ausgewählt. Vor jeder Speicherung wird trotzdem nochmals gefragt." ,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = KuemmeroText
+                            )
+                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+                                OutlinedButton(
+                                    onClick = { mahnungOrdnerLauncher.launch(null) },
+                                    modifier = Modifier.weight(1f),
+                                    shape = RoundedCornerShape(22.dp),
+                                    border = BorderStroke(2.dp, KuemmeroGreen),
+                                    colors = ButtonDefaults.outlinedButtonColors(contentColor = KuemmeroGreen)
+                                ) { Text(if (mahnungSpeicherOrdnerUri.isBlank()) "Ordner auswählen" else "Ordner ändern") }
+                                if (mahnungSpeicherOrdnerUri.isNotBlank()) {
+                                    OutlinedButton(
+                                        onClick = {
+                                            mahnungPrefs.edit().remove(MAHNUNG_SPEICHERORDNER_URI_KEY).apply()
+                                            mahnungSpeicherOrdnerUri = ""
+                                            android.widget.Toast.makeText(context, "Mahnung-Ordner entfernt.", android.widget.Toast.LENGTH_SHORT).show()
+                                        },
+                                        shape = RoundedCornerShape(22.dp),
+                                        border = BorderStroke(1.dp, KuemmeroError),
+                                        colors = ButtonDefaults.outlinedButtonColors(contentColor = KuemmeroError)
+                                    ) { Text("Entfernen") }
+                                }
+                            }
+                        }
+                    }
                     if (mahnungEinstellungFristTage.toIntOrNull()?.coerceAtLeast(0) == 0) {
                         Card(
                             modifier = Modifier.fillMaxWidth(),
@@ -2248,6 +2532,38 @@ fun KuemmeroApp() {
         )
     }
 
+    if (mahnungSpeicherBestaetigungOffen) {
+        AlertDialog(
+            onDismissRequest = { mahnungSpeicherBestaetigungOffen = false },
+            title = { Text("Mahnung wirklich speichern?") },
+            text = {
+                Text(
+                    "Die PDF wird jetzt nur nach deiner Bestätigung im ausgewählten Mahnung-Ordner gespeichert.\n\nDatei: $ausstehendeMahnungDateiName\n\nOhne Bestätigung wird nichts gespeichert.",
+                    color = KuemmeroText
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    val ok = ausstehendeMahnungIndex?.let {
+                        speichereMahnungInAusgewaehltenOrdner(ausstehendeMahnungTyp, it, ausstehendeMahnungDateiName)
+                    } ?: false
+                    if (ok) {
+                        mahnungSpeicherBestaetigungOffen = false
+                        ausstehendeMahnungIndex = null
+                        ausstehendeMahnungDateiName = ""
+                        ausstehendeMahnungTyp = 0
+                    }
+                }) { Text("Jetzt speichern") }
+            },
+            dismissButton = { TextButton(onClick = {
+                mahnungSpeicherBestaetigungOffen = false
+                ausstehendeMahnungIndex = null
+                ausstehendeMahnungDateiName = ""
+                ausstehendeMahnungTyp = 0
+            }) { Text("Nicht speichern") } }
+        )
+    }
+
     if (testMahnung1DialogOffen && mahnungTestmodus) {
         AlertDialog(
             onDismissRequest = { testMahnung1DialogOffen = false },
@@ -2270,7 +2586,7 @@ fun KuemmeroApp() {
                     if (testMahnung1Datum.isBlank() || testMahnung1Frist.isBlank()) {
                         android.widget.Toast.makeText(context, "Bitte Mahndatum und Zahlungsfrist eingeben.", android.widget.Toast.LENGTH_SHORT).show()
                     } else {
-                        testMahnungLauncher.launch("KÜMMERO-TEST-Mahnung-${testMahnung1Datum.replace('.', '-')}.pdf")
+                        testMahnungLauncher.launch(dokumentSpeicherIntent("application/pdf", "KÜMMERO-TEST-Mahnung-${testMahnung1Datum.replace('.', '-')}.pdf"))
                     }
                 }) { Text(if (testMahnung1Erstellt) "Test-PDF neu erstellen" else "Test-PDF erstellen") }
             },
@@ -2339,7 +2655,15 @@ fun KuemmeroApp() {
                         android.widget.Toast.makeText(context, "Bitte Mahndatum und Zahlungsfrist eingeben.", 0).show()
                     } else {
                         val name = a.kunde.ifBlank { "Kunde" }.replace("/", "-")
-                        mahnung1Launcher.launch("KÜMMERO-1-Mahnung-${a.rechnungsnummer}-$name.pdf")
+                        val dateiname = "KÜMMERO-1-Mahnung-${a.rechnungsnummer}-$name.pdf"
+                        if (mahnungSpeicherOrdnerUri.isNotBlank()) {
+                            ausstehendeMahnungTyp = 1
+                            ausstehendeMahnungIndex = index
+                            ausstehendeMahnungDateiName = dateiname
+                            mahnungSpeicherBestaetigungOffen = true
+                        } else {
+                            mahnung1Launcher.launch(dokumentSpeicherIntent("application/pdf", dateiname))
+                        }
                     }
                 }) { Text("PDF erstellen") }
             },
@@ -2374,7 +2698,15 @@ fun KuemmeroApp() {
                         android.widget.Toast.makeText(context, "Bitte Mahndatum und Zahlungsfrist eingeben.", 0).show()
                     } else {
                         val name = a.kunde.ifBlank { "Kunde" }.replace("/", "-")
-                        mahnung2Launcher.launch("KÜMMERO-2-Mahnung-${a.rechnungsnummer}-$name.pdf")
+                        val dateiname = "KÜMMERO-2-Mahnung-${a.rechnungsnummer}-$name.pdf"
+                        if (mahnungSpeicherOrdnerUri.isNotBlank()) {
+                            ausstehendeMahnungTyp = 2
+                            ausstehendeMahnungIndex = index
+                            ausstehendeMahnungDateiName = dateiname
+                            mahnungSpeicherBestaetigungOffen = true
+                        } else {
+                            mahnung2Launcher.launch(dokumentSpeicherIntent("application/pdf", dateiname))
+                        }
                     }
                 }) { Text("PDF erstellen") }
             },
@@ -3385,7 +3717,7 @@ fun KuemmeroApp() {
                             if (kunde.isBlank()) {
                                 android.widget.Toast.makeText(context, "Bitte Kundennamen eingeben.", 0).show()
                             } else {
-                                pdfLauncher.launch("KÜMMERO-Angebot-$nummer.pdf")
+                                pdfLauncher.launch(dokumentSpeicherIntent("application/pdf", "KÜMMERO-Angebot-$nummer.pdf"))
                             }
                         },
                         modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp),
@@ -3403,7 +3735,8 @@ fun KuemmeroApp() {
                         { sicherungBereichOffen = !sicherungBereichOffen },
                     ) {
                         OutlinedButton(onClick = { sicherungBestaetigung = true }, modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp), shape = RoundedCornerShape(28.dp), border = BorderStroke(2.dp, KuemmeroGreen), colors = ButtonDefaults.outlinedButtonColors(contentColor = KuemmeroGreen)) { Text("Sicherung speichern / aktualisieren", fontWeight = FontWeight.SemiBold) }
-                        Button(onClick = { restoreBackup.launch(arrayOf("application/json", "text/plain", "application/octet-stream")) }, modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp), shape = RoundedCornerShape(28.dp), colors = ButtonDefaults.buttonColors(containerColor = KuemmeroGreenLight)) { Text("Daten wiederherstellen", fontWeight = FontWeight.Bold) }
+                        OutlinedButton(onClick = { dropboxBestaetigung = true }, modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp), shape = RoundedCornerShape(28.dp), border = BorderStroke(2.dp, KuemmeroGreen), colors = ButtonDefaults.outlinedButtonColors(contentColor = KuemmeroGreen)) { Text("☁️ Jetzt in Dropbox sichern", fontWeight = FontWeight.SemiBold) }
+                        Button(onClick = { restoreBestaetigung = true }, modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp), shape = RoundedCornerShape(28.dp), colors = ButtonDefaults.buttonColors(containerColor = KuemmeroGreenLight)) { Text("Daten wiederherstellen", fontWeight = FontWeight.Bold) }
                         OutlinedButton(onClick = { sicherungBestaetigung = true }, modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp), shape = RoundedCornerShape(26.dp), border = BorderStroke(2.dp, KuemmeroGreen), colors = ButtonDefaults.outlinedButtonColors(contentColor = KuemmeroGreen)) { Text("Sicherung jetzt aktualisieren", fontWeight = FontWeight.SemiBold) }
                     }
                 }
@@ -3996,7 +4329,7 @@ fun KuemmeroApp() {
                                         } else {
                                             rechnungFuerIndex = index
                                             val name = a.kunde.ifBlank { "Kunde" }.replace("/", "-")
-                                            rechnungLauncher.launch("KÜMMERO-Rechnung-$name.pdf")
+                                            rechnungLauncher.launch(dokumentSpeicherIntent("application/pdf", "KÜMMERO-Rechnung-$name.pdf"))
                                         }
                                     },
                                     modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp),
@@ -4974,12 +5307,68 @@ fun KuemmeroApp() {
                         }
                         item {
                             OutlinedButton(
-                                onClick = { createDataExport.launch("KÜMMERO-Datenexport-${SimpleDateFormat("yyyyMMdd-HHmm", Locale.GERMANY).format(Date())}.csv") },
+                                onClick = { createDataExport.launch(dokumentSpeicherIntent("text/csv", "KÜMMERO-Datenexport-${SimpleDateFormat("yyyyMMdd-HHmm", Locale.GERMANY).format(Date())}.csv")) },
                                 modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp),
                                 shape = RoundedCornerShape(26.dp),
                                 border = BorderStroke(2.dp, KuemmeroGreen),
                                 colors = ButtonDefaults.outlinedButtonColors(contentColor = KuemmeroGreen)
                             ) { Text("📤 Datenexport (CSV)", fontWeight = FontWeight.Bold) }
+                        }
+                        item {
+                            Card(Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = KuemmeroSurface), shape = RoundedCornerShape(18.dp)) {
+                                Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                    Text("🛠 Diagnose & Fehlerprotokoll", style = MaterialTheme.typography.titleMedium, color = KuemmeroGreen, fontWeight = FontWeight.Bold)
+                                    val protokoll = leseAppFehlerprotokoll(context)
+                                    Text(if (protokoll.isEmpty()) "Noch keine technischen Ereignisse protokolliert." else "${protokoll.size} Einträge gespeichert. Letzte Einträge:", style = MaterialTheme.typography.bodySmall, color = KuemmeroText)
+                                    protokoll.take(5).forEach { Text(it, style = MaterialTheme.typography.bodySmall, color = KuemmeroText) }
+                                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+                                        OutlinedButton(onClick = { protokolliereAppEreignis(context, "Diagnose", "Manueller Testeintrag"); android.widget.Toast.makeText(context, "Testeintrag gespeichert.", 0).show() }, modifier = Modifier.weight(1f), shape = RoundedCornerShape(22.dp), border = BorderStroke(1.5.dp, KuemmeroGreen), colors = ButtonDefaults.outlinedButtonColors(contentColor = KuemmeroGreen)) { Text("Testeintrag") }
+                                        OutlinedButton(onClick = { loescheAppFehlerprotokoll(context); android.widget.Toast.makeText(context, "Protokoll gelöscht.", 0).show() }, modifier = Modifier.weight(1f), shape = RoundedCornerShape(22.dp), border = BorderStroke(1.5.dp, KuemmeroError), colors = ButtonDefaults.outlinedButtonColors(contentColor = KuemmeroError)) { Text("Leeren") }
+                                    }
+                                }
+                            }
+                        }
+                        item {
+                            Card(
+                                Modifier.fillMaxWidth(),
+                                colors = CardDefaults.cardColors(containerColor = KuemmeroSurface),
+                                shape = RoundedCornerShape(18.dp)
+                            ) {
+                                Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                    Text("📁 Dokumentenordner", style = MaterialTheme.typography.titleMedium, color = KuemmeroGreen, fontWeight = FontWeight.Bold)
+                                    Text(
+                                        if (dokumenteSpeicherOrdnerUri.isBlank())
+                                            "Kein zentraler Ordner ausgewählt. Beim Speichern kann ein Ziel gewählt werden."
+                                        else
+                                            "Zentraler Ordner ausgewählt. Neue PDFs und Datenexporte öffnen standardmäßig diesen Ordner." ,
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = KuemmeroText
+                                    )
+                                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+                                        OutlinedButton(
+                                            onClick = { dokumenteOrdnerLauncher.launch(null) },
+                                            modifier = Modifier.weight(1f),
+                                            shape = RoundedCornerShape(22.dp),
+                                            border = BorderStroke(2.dp, KuemmeroGreen),
+                                            colors = ButtonDefaults.outlinedButtonColors(contentColor = KuemmeroGreen)
+                                        ) {
+                                            Text(if (dokumenteSpeicherOrdnerUri.isBlank()) "Ordner auswählen" else "Ordner ändern")
+                                        }
+                                        if (dokumenteSpeicherOrdnerUri.isNotBlank()) {
+                                            OutlinedButton(
+                                                onClick = {
+                                                    dokumentePrefs.edit().remove(DOKUMENTE_SPEICHERORDNER_URI_KEY).apply()
+                                                    dokumenteSpeicherOrdnerUri = ""
+                                                    android.widget.Toast.makeText(context, "Dokumentenordner entfernt.", android.widget.Toast.LENGTH_SHORT).show()
+                                                },
+                                                shape = RoundedCornerShape(22.dp),
+                                                border = BorderStroke(1.dp, KuemmeroError),
+                                                colors = ButtonDefaults.outlinedButtonColors(contentColor = KuemmeroError)
+                                            ) { Text("Entfernen") }
+                                        }
+                                    }
+                                }
+                            }
                         }
                         item {
                             OutlinedButton(
@@ -5007,7 +5396,8 @@ fun KuemmeroApp() {
                                         color = if (backupZeit > 0L) KuemmeroGreen else KuemmeroText
                                     )
                                     OutlinedButton(onClick = { sicherungBestaetigung = true }, modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp), shape = RoundedCornerShape(26.dp), border = BorderStroke(2.dp, KuemmeroGreen), colors = ButtonDefaults.outlinedButtonColors(contentColor = KuemmeroGreen)) { Text("Sicherung speichern / aktualisieren") }
-                                    Button(onClick = { restoreBackup.launch(arrayOf("application/json", "text/plain", "application/octet-stream")) }, modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp), shape = RoundedCornerShape(26.dp), colors = ButtonDefaults.buttonColors(containerColor = KuemmeroGreenLight)) { Text("Daten wiederherstellen", fontWeight = FontWeight.Bold) }
+                                    OutlinedButton(onClick = { dropboxBestaetigung = true }, modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp), shape = RoundedCornerShape(26.dp), border = BorderStroke(2.dp, KuemmeroGreen), colors = ButtonDefaults.outlinedButtonColors(contentColor = KuemmeroGreen)) { Text("☁️ Jetzt in Dropbox sichern") }
+                                    Button(onClick = { restoreBestaetigung = true }, modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp), shape = RoundedCornerShape(26.dp), colors = ButtonDefaults.buttonColors(containerColor = KuemmeroGreenLight)) { Text("Daten wiederherstellen", fontWeight = FontWeight.Bold) }
                                 }
                             }
                         }
@@ -5049,6 +5439,12 @@ fun KuemmeroApp() {
                         item {
                             Text("Meine Leistungen", style = MaterialTheme.typography.headlineSmall, color = KuemmeroGreen, fontWeight = FontWeight.Bold)
                             Text("Hier kannst du deine Auswahl selbst erweitern, ändern und deaktivieren.", color = KuemmeroText)
+                            Text(
+                                "⚠ Die Liste ist keine rechtliche Freigabe. Nur Tätigkeiten anbieten, die dein Gewerbe und deine Qualifikation tatsächlich abdecken.",
+                                color = KuemmeroError,
+                                fontWeight = FontWeight.SemiBold,
+                                fontSize = 12.sp
+                            )
                         }
                         item {
                             Button(
@@ -5083,10 +5479,7 @@ fun KuemmeroApp() {
                                             }
                                             Text(if (leistungPos.aktiv) "Aktiv" else "Inaktiv", color = if (leistungPos.aktiv) KuemmeroGreen else KuemmeroText, fontWeight = FontWeight.Bold)
                                         }
-                                        Row(
-                                            Modifier.fillMaxWidth(),
-                                            horizontalArrangement = Arrangement.spacedBy(8.dp)
-                                        ) {
+                                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                                             OutlinedButton(
                                                 onClick = {
                                                     if (index > 0) {
@@ -5099,7 +5492,7 @@ fun KuemmeroApp() {
                                                     }
                                                 },
                                                 enabled = index > 0,
-                                                modifier = Modifier.weight(1f),
+                                                modifier = Modifier.weight(0.5f),
                                                 shape = RoundedCornerShape(22.dp),
                                                 border = BorderStroke(1.5.dp, KuemmeroGreen),
                                                 colors = ButtonDefaults.outlinedButtonColors(contentColor = KuemmeroGreen)
@@ -5116,17 +5509,11 @@ fun KuemmeroApp() {
                                                     }
                                                 },
                                                 enabled = index < leistungspositionen.lastIndex,
-                                                modifier = Modifier.weight(1f),
+                                                modifier = Modifier.weight(0.5f),
                                                 shape = RoundedCornerShape(22.dp),
                                                 border = BorderStroke(1.5.dp, KuemmeroGreen),
                                                 colors = ButtonDefaults.outlinedButtonColors(contentColor = KuemmeroGreen)
                                             ) { Text("↓") }
-                                        }
-
-                                        Row(
-                                            Modifier.fillMaxWidth(),
-                                            horizontalArrangement = Arrangement.spacedBy(8.dp)
-                                        ) {
                                             OutlinedButton(
                                                 onClick = {
                                                     leistungspositionBearbeiteIndex = index
@@ -5137,12 +5524,23 @@ fun KuemmeroApp() {
                                                     leistungspositionAktiv = leistungPos.aktiv
                                                     leistungspositionDialog = true
                                                 },
+                                                modifier = Modifier.weight(1.5f),
+                                                shape = RoundedCornerShape(22.dp),
+                                                border = BorderStroke(1.5.dp, KuemmeroGreen),
+                                                colors = ButtonDefaults.outlinedButtonColors(contentColor = KuemmeroGreen)
+                                            ) { Text("✏ Bearbeiten") }
+                                        }
+                                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                            OutlinedButton(
+                                                onClick = {
+                                                    leistungsPreisIndex = index
+                                                    leistungsPreisEingabe = if (leistungPos.preis == 0.0) "" else String.format(Locale.GERMANY, "%.2f", leistungPos.preis)
+                                                },
                                                 modifier = Modifier.weight(1f),
                                                 shape = RoundedCornerShape(22.dp),
                                                 border = BorderStroke(1.5.dp, KuemmeroGreen),
                                                 colors = ButtonDefaults.outlinedButtonColors(contentColor = KuemmeroGreen)
-                                            ) { Text("Bearbeiten", maxLines = 1) }
-
+                                            ) { Text("💶 Preis") }
                                             OutlinedButton(
                                                 onClick = {
                                                     val list = leistungspositionen.toMutableList()
@@ -5150,22 +5548,41 @@ fun KuemmeroApp() {
                                                     leistungspositionen = list
                                                     speichereLeistungspositionen(context, list)
                                                 },
-                                                modifier = Modifier.weight(1f),
+                                                modifier = Modifier.weight(1.2f),
                                                 shape = RoundedCornerShape(22.dp),
                                                 border = BorderStroke(1.5.dp, KuemmeroGreen),
                                                 colors = ButtonDefaults.outlinedButtonColors(contentColor = KuemmeroGreen)
-                                            ) { Text(if (leistungPos.aktiv) "Deaktivieren" else "Aktivieren", maxLines = 1) }
-
+                                            ) { Text(if (leistungPos.aktiv) "Deaktivieren" else "Aktivieren") }
                                             OutlinedButton(
                                                 onClick = { leistungspositionLoeschIndex = index },
-                                                modifier = Modifier.weight(0.8f),
+                                                modifier = Modifier.weight(0.9f),
                                                 shape = RoundedCornerShape(22.dp),
                                                 border = BorderStroke(1.5.dp, KuemmeroError),
                                                 colors = ButtonDefaults.outlinedButtonColors(contentColor = KuemmeroError)
-                                            ) { Text("Löschen", maxLines = 1) }
+                                            ) { Text("Löschen") }
                                         }
                                     }
                                 }
+                            }
+                        }
+                        item {
+                            Spacer(Modifier.height(4.dp))
+                            OutlinedButton(
+                                onClick = {
+                                    leistungspositionBearbeiteIndex = null
+                                    leistungspositionName = ""
+                                    leistungspositionBeschreibung = ""
+                                    leistungspositionEinheit = "Pauschale"
+                                    leistungspositionPreis = ""
+                                    leistungspositionAktiv = true
+                                    leistungspositionDialog = true
+                                },
+                                modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp),
+                                shape = RoundedCornerShape(26.dp),
+                                border = BorderStroke(1.5.dp, KuemmeroGreen),
+                                colors = ButtonDefaults.outlinedButtonColors(contentColor = KuemmeroGreen)
+                            ) {
+                                Text("+ Weitere Leistung hinzufügen", fontWeight = FontWeight.Bold)
                             }
                         }
                     }
@@ -5267,6 +5684,11 @@ fun KuemmeroApp() {
                             val kundenTreffer = kunden.filter { listOf(it.name, it.adresse, it.ort, it.telefon, it.email).any { v -> v.contains(q, true) } }
                             val auftragTreffer = auftraege.filter { listOf(it.nummer, it.kunde, it.kundenStrasse, it.kundenOrt, it.leistung, it.rechnungsnummer, it.status).any { v -> v.contains(q, true) } }
                             val kvTreffer = kostenvoranschlaege.filter { listOf(it.nummer, it.kunde, it.leistung).any { v -> v.contains(q, true) } }
+                            val leistungsTreffer = leistungspositionen.filter { listOf(it.name, it.beschreibung, it.einheit).any { v -> v.contains(q, true) } }
+                            item { Text("Leistungen (${leistungsTreffer.size})", color = KuemmeroGreen, fontWeight = FontWeight.Bold) }
+                            leistungsTreffer.take(15).forEach { l ->
+                                item { Card(Modifier.fillMaxWidth().clickable { hauptseite = "Meine Leistungen" }, colors = CardDefaults.cardColors(containerColor = KuemmeroSurface), shape = RoundedCornerShape(16.dp)) { Column(Modifier.padding(14.dp)) { Text(l.name, fontWeight = FontWeight.Bold, color = KuemmeroText); Text("${l.einheit} · ${euro(l.preis)}", color = KuemmeroGreen); Text("Leistung öffnen →", color = KuemmeroGreen) } } }
+                            }
                             item { Text("Kunden (${kundenTreffer.size})", color = KuemmeroGreen, fontWeight = FontWeight.Bold) }
                             kundenTreffer.take(10).forEach { k ->
                                 item { Card(Modifier.fillMaxWidth().clickable { hauptseite = "Kunden"; kundenAkteName = k.name }, colors = CardDefaults.cardColors(containerColor = KuemmeroSurface), shape = RoundedCornerShape(16.dp)) { Column(Modifier.padding(14.dp)) { Text(k.name, fontWeight = FontWeight.Bold, color = KuemmeroText); Text("Kunde öffnen →", color = KuemmeroGreen) } } }
@@ -5306,23 +5728,83 @@ fun KuemmeroApp() {
                 }
             },
             confirmButton = {
-                TextButton(onClick = {
-                    val name = leistungspositionName.trim()
-                    if (name.isBlank()) {
-                        android.widget.Toast.makeText(context, "Bitte eine Bezeichnung eingeben.", 0).show()
-                    } else {
-                        val neu = Leistungsposition(name, leistungspositionBeschreibung.trim(), leistungspositionEinheit.trim().ifBlank { "Pauschale" }, zahl(leistungspositionPreis), leistungspositionAktiv)
-                        val list = leistungspositionen.toMutableList()
-                        val idx = leistungspositionBearbeiteIndex
-                        if (idx != null && idx in list.indices) list[idx] = neu else list.add(neu)
-                        leistungspositionen = list
-                        speichereLeistungspositionen(context, list)
-                        leistungspositionDialog = false
-                    }
-                }) { Text("Speichern", color = KuemmeroGreen, fontWeight = FontWeight.Bold) }
+                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    TextButton(onClick = {
+                        val name = leistungspositionName.trim()
+                        if (name.isBlank()) {
+                            android.widget.Toast.makeText(context, "Bitte eine Bezeichnung eingeben.", 0).show()
+                        } else {
+                            val neu = Leistungsposition(name, leistungspositionBeschreibung.trim(), leistungspositionEinheit.trim().ifBlank { "Pauschale" }, zahl(leistungspositionPreis), leistungspositionAktiv)
+                            val list = leistungspositionen.toMutableList()
+                            val idx = leistungspositionBearbeiteIndex
+                            if (idx != null && idx in list.indices) list[idx] = neu else list.add(neu)
+                            leistungspositionen = list
+                            speichereLeistungspositionen(context, list)
+                            leistungspositionDialog = false
+                        }
+                    }) { Text("Speichern", color = KuemmeroGreen, fontWeight = FontWeight.Bold) }
+                    TextButton(onClick = {
+                        val name = leistungspositionName.trim()
+                        if (name.isBlank()) {
+                            android.widget.Toast.makeText(context, "Bitte eine Bezeichnung eingeben.", 0).show()
+                        } else {
+                            val neu = Leistungsposition(name, leistungspositionBeschreibung.trim(), leistungspositionEinheit.trim().ifBlank { "Pauschale" }, zahl(leistungspositionPreis), leistungspositionAktiv)
+                            val list = leistungspositionen.toMutableList()
+                            val idx = leistungspositionBearbeiteIndex
+                            if (idx != null && idx in list.indices) list[idx] = neu else list.add(neu)
+                            leistungspositionen = list
+                            speichereLeistungspositionen(context, list)
+                            leistungspositionBearbeiteIndex = null
+                            leistungspositionName = ""
+                            leistungspositionBeschreibung = ""
+                            leistungspositionEinheit = "Pauschale"
+                            leistungspositionPreis = ""
+                            leistungspositionAktiv = true
+                            // Dialog bleibt offen: direkt die nächste Leistung anlegen.
+                        }
+                    }) { Text("+ Weitere", color = KuemmeroGreen, fontWeight = FontWeight.Bold) }
+                }
             },
             dismissButton = { TextButton(onClick = { leistungspositionDialog = false }) { Text("Abbrechen") } }
         )
+    }
+
+    if (leistungsPreisIndex != null) {
+        val idx = leistungsPreisIndex
+        val position = idx?.let { leistungspositionen.getOrNull(it) }
+        if (position != null) {
+            AlertDialog(
+                onDismissRequest = { leistungsPreisIndex = null },
+                title = { Text("Standardpreis ändern") },
+                text = {
+                    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                        Text(position.name, fontWeight = FontWeight.Bold, color = KuemmeroGreen)
+                        Text("Aktueller Preis: ${euro(position.preis)} / ${position.einheit}", color = KuemmeroText)
+                        OutlinedTextField(
+                            value = leistungsPreisEingabe,
+                            onValueChange = { leistungsPreisEingabe = it },
+                            label = { Text("Neuer Preis (€)") },
+                            singleLine = true,
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                            colors = feldFarben
+                        )
+                    }
+                },
+                confirmButton = {
+                    TextButton(onClick = {
+                        val preis = zahl(leistungsPreisEingabe)
+                        if (idx != null && idx in leistungspositionen.indices) {
+                            val list = leistungspositionen.toMutableList()
+                            list[idx] = position.copy(preis = preis)
+                            leistungspositionen = list
+                            speichereLeistungspositionen(context, list)
+                        }
+                        leistungsPreisIndex = null
+                    }) { Text("Speichern", color = KuemmeroGreen, fontWeight = FontWeight.Bold) }
+                },
+                dismissButton = { TextButton(onClick = { leistungsPreisIndex = null }) { Text("Abbrechen") } }
+            )
+        }
     }
 
     if (leistungspositionLoeschIndex != null) {
@@ -5359,7 +5841,13 @@ fun KuemmeroApp() {
                     .filter { it.isNotBlank() }
                     .toSet()
 
-                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(max = 420.dp)
+                        .verticalScroll(rememberScrollState()),
+                    verticalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
                     leistungspositionen.filter { it.aktiv }.forEach { leistungs ->
                         val position = leistungs.name
                         val istAusgewaehlt = ausgewaehlt.any { it.substringBefore(" — ").trim() == position }
