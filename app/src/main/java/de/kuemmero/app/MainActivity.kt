@@ -73,12 +73,32 @@ import kotlinx.coroutines.launch
 private const val RECHNUNG_SCAN_PREFIX = "rechnung_scan_"
 private const val RECHNUNGSNUMMER_COUNTER_KEY = "rechnungsnummer_counter"
 
-private fun naechsteRechnungsnummer(context: Context): String {
+private fun naechsteRechnungsnummer(
+    context: Context,
+    vorhandeneRechnungsnummern: List<String> = emptyList()
+): String {
     val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
     val jahr = SimpleDateFormat("yyyy", Locale.GERMANY).format(Date())
     val key = RECHNUNGSNUMMER_COUNTER_KEY + "_" + jahr
-    val naechste = prefs.getInt(key, 0) + 1
-    return "RE-$jahr-" + naechste.toString().padStart(4, '0')
+    val gespeicherterZaehler = prefs.getInt(key, 0)
+
+    val groessteVorhandeneNummer = vorhandeneRechnungsnummern
+        .mapNotNull { nummer ->
+            Regex("^RE-${Regex.escape(jahr)}-(\\d{4})$").find(nummer.trim())
+                ?.groupValues?.getOrNull(1)?.toIntOrNull()
+        }
+        .maxOrNull() ?: 0
+
+    val naechste = maxOf(gespeicherterZaehler, groessteVorhandeneNummer) + 1
+    var kandidat = "RE-$jahr-" + naechste.toString().padStart(4, '0')
+    var laufnummer = naechste
+
+    while (vorhandeneRechnungsnummern.any { it.equals(kandidat, ignoreCase = true) }) {
+        laufnummer++
+        kandidat = "RE-$jahr-" + laufnummer.toString().padStart(4, '0')
+    }
+
+    return kandidat
 }
 
 private fun speichereRechnungsnummer(
@@ -2131,7 +2151,13 @@ fun KuemmeroApp() {
                     return@rememberLauncherForActivityResult
                 }
                 try {
-                    val rechnungsnummer = naechsteRechnungsnummer(context)
+                    val vorhandeneRechnungsnummern = auftraege.map { it.rechnungsnummer }
+                    val rechnungsnummer = naechsteRechnungsnummer(context, vorhandeneRechnungsnummern)
+                    if (vorhandeneRechnungsnummern.any { it.equals(rechnungsnummer, ignoreCase = true) }) {
+                        android.widget.Toast.makeText(context, "Fehler: Rechnungsnummer bereits vergeben. Keine Rechnung gespeichert.", android.widget.Toast.LENGTH_LONG).show()
+                        rechnungFuerIndex = null
+                        return@rememberLauncherForActivityResult
+                    }
                     val rechnungsdatum = datumFormat.format(Date())
                     val faelligCal = Calendar.getInstance().apply { add(Calendar.DAY_OF_YEAR, 14) }
                     val faelligAm = datumFormat.format(faelligCal.time)
@@ -3610,17 +3636,23 @@ fun KuemmeroApp() {
                                     leistungsdatum = leistungsdatum.trim().ifBlank { datum.trim() }
                                 )
                                 val index = bearbeiteIndex
-                                if (index != null) {
+                                val doppelteAuftragsnummer = auftraege.withIndex().any {
+                                    it.index != index && it.value.nummer.equals(a.nummer.trim(), ignoreCase = true)
+                                }
+                                if (doppelteAuftragsnummer) {
+                                    android.widget.Toast.makeText(context, "Diese Auftragsnummer ist bereits vergeben. Bitte eine andere Nummer verwenden.", android.widget.Toast.LENGTH_LONG).show()
+                                } else if (index != null) {
                                     auftraege = auftraege.toMutableList().apply { set(index, a) }
                                     speichereAuftraege(context, auftraege)
                                     bearbeiteIndex = null
                                     android.widget.Toast.makeText(context, "Auftrag geändert.", 0).show()
+                                    auftragFormOffen = false
                                 } else {
                                     auftraege = auftraege + a
                                     speichereAuftraege(context, auftraege)
                                     android.widget.Toast.makeText(context, "Auftrag gespeichert.", 0).show()
+                                    auftragFormOffen = false
                                 }
-                                auftragFormOffen = false
                                 leistungsdatum = datumFormat.format(Date())
                                 kunde = ""
                                 strasse = ""
@@ -4966,20 +4998,30 @@ fun KuemmeroApp() {
                                                 if (kvKunde.isBlank()) {
                                                     android.widget.Toast.makeText(context, "Bitte Kundennamen eingeben.", 0).show()
                                                 } else {
-                                                    val k = Kostenvoranschlag(
-                                                        kvNummer.trim(), kvDatum.trim(), kvGueltigBis.trim(),
-                                                        kvKunde.trim(), kvStrasse.trim(), kvOrt.trim(), kvLeistung.trim(),
-                                                        zahl(kvStunden), zahl(kvMaterial), zahl(kvFahrt), zahl(kvStundensatz, 42.0),
-                                                        kvMaterialBonUri, kvFotosVorher, zahl(kvErstellungskosten)
-                                                    )
-                                                    val list = kostenvoranschlaege.toMutableList()
-                                                    if (kvBearbeiteIndex != null) list[kvBearbeiteIndex!!] = k else list.add(k)
-                                                    kostenvoranschlaege = list
-                                                    speichereKostenvoranschlaege(context, list)
-                                                    kvFormOffen = false
+                                                    val neueKvNummer = kvNummer.trim()
+                                                    val doppelteKvNummer = kostenvoranschlaege.withIndex().any {
+                                                        it.index != kvBearbeiteIndex && it.value.nummer.equals(neueKvNummer, ignoreCase = true)
+                                                    }
+                                                    if (neueKvNummer.isBlank()) {
+                                                        android.widget.Toast.makeText(context, "Bitte eine KV-Nummer eingeben.", android.widget.Toast.LENGTH_SHORT).show()
+                                                    } else if (doppelteKvNummer) {
+                                                        android.widget.Toast.makeText(context, "Diese KV-Nummer ist bereits vergeben. Bitte eine andere Nummer verwenden.", android.widget.Toast.LENGTH_LONG).show()
+                                                    } else {
+                                                        val k = Kostenvoranschlag(
+                                                            neueKvNummer, kvDatum.trim(), kvGueltigBis.trim(),
+                                                            kvKunde.trim(), kvStrasse.trim(), kvOrt.trim(), kvLeistung.trim(),
+                                                            zahl(kvStunden), zahl(kvMaterial), zahl(kvFahrt), zahl(kvStundensatz, 42.0),
+                                                            kvMaterialBonUri, kvFotosVorher, zahl(kvErstellungskosten)
+                                                        )
+                                                        val list = kostenvoranschlaege.toMutableList()
+                                                        if (kvBearbeiteIndex != null) list[kvBearbeiteIndex!!] = k else list.add(k)
+                                                        kostenvoranschlaege = list
+                                                        speichereKostenvoranschlaege(context, list)
+                                                        kvFormOffen = false
                                                     kvBearbeiteIndex = null
                                                     kvErstellungskosten = ""
                                                     android.widget.Toast.makeText(context, "Kostenvoranschlag gespeichert.", 0).show()
+                                                }
                                                 }
                                             },
                                             modifier = Modifier.fillMaxWidth().heightIn(min = 54.dp),
@@ -5128,23 +5170,32 @@ fun KuemmeroApp() {
                                                     }
                                                     .padding(vertical = 4.dp)
                                             )
-                                            Text(
-                                                "Rechnung: ${a.rechnungsnummer}",
-                                                color = KuemmeroGreen,
-                                                fontWeight = FontWeight.Bold,
-                                                modifier = Modifier
-                                                    .fillMaxWidth()
-                                                    .clickable {
-                                                        val auftragIndex = auftraege.indexOfFirst { it.nummer == a.nummer && it.kunde.equals(a.kunde, ignoreCase = true) }
-                                                        if (auftragIndex >= 0) {
-                                                            hauptseite = "Aufträge"
-                                                            auftragFormOffen = false
-                                                            bearbeiteIndex = null
-                                                            auftragDetailIndex = auftragIndex
-                                                        }
+                                            OutlinedButton(
+                                                onClick = {
+                                                    val auftragIndex = auftraege.indexOfFirst {
+                                                        it.nummer == a.nummer &&
+                                                            it.rechnungsnummer.equals(a.rechnungsnummer, ignoreCase = true)
                                                     }
-                                                    .padding(vertical = 4.dp)
-                                            )
+                                                    if (auftragIndex >= 0) {
+                                                        hauptseite = "Aufträge"
+                                                        auftragFormOffen = false
+                                                        bearbeiteIndex = null
+                                                        auftragDetailIndex = auftragIndex
+                                                    } else {
+                                                        android.widget.Toast.makeText(
+                                                            context,
+                                                            "Die zugehörige Rechnung wurde nicht gefunden.",
+                                                            android.widget.Toast.LENGTH_SHORT
+                                                        ).show()
+                                                    }
+                                                },
+                                                modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp),
+                                                shape = RoundedCornerShape(24.dp),
+                                                border = BorderStroke(2.dp, KuemmeroGreen),
+                                                colors = ButtonDefaults.outlinedButtonColors(contentColor = KuemmeroGreen)
+                                            ) {
+                                                Text("Rechnung: ${a.rechnungsnummer}  →", fontWeight = FontWeight.Bold)
+                                            }
                                             Text("Betrag: ${euro(gesamtbetrag(a.stunden, a.material, a.fahrt, a.stundensatz, a.erstellungskosten))}", color = KuemmeroText)
                                             Text("Fällig am: ${a.faelligAm.ifBlank { "nicht angegeben" }}", color = KuemmeroText)
 
