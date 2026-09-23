@@ -1406,6 +1406,10 @@ fun KuemmeroApp() {
     var kvOrt by remember { mutableStateOf("") }
     var kvLeistung by remember { mutableStateOf("") }
     var leistungsAuswahlZiel by remember { mutableStateOf<String?>(null) }
+    var leistungsPreisDialog by remember { mutableStateOf(false) }
+    var leistungsPreisName by remember { mutableStateOf("") }
+    var leistungsPreisEinheit by remember { mutableStateOf("Pauschale") }
+    var leistungsPreisVorschlag by remember { mutableStateOf("") }
     var kvStunden by remember { mutableStateOf("") }
     var kvMaterial by remember { mutableStateOf("") }
     var kvMaterialBonUri by remember { mutableStateOf("") }
@@ -5341,20 +5345,34 @@ fun KuemmeroApp() {
                     .filter { it.isNotBlank() }
                     .toSet()
 
-                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(max = 420.dp)
+                        .verticalScroll(rememberScrollState()),
+                    verticalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
                     leistungspositionen.filter { it.aktiv }.forEach { leistungs ->
                         val position = leistungs.name
-                        val istAusgewaehlt = position in ausgewaehlt
+                        val istAusgewaehlt = ausgewaehlt.any { it.substringBefore(" — ").trim() == position }
                         OutlinedButton(
                             onClick = {
-                                val neueAuswahl = if (istAusgewaehlt) {
-                                    ausgewaehlt.filter { it != position }
+                                if (istAusgewaehlt) {
+                                    val neueAuswahl = ausgewaehlt.filter { it.substringBefore(" — ").trim() != position }
+                                    val neuerText = neueAuswahl.joinToString("\n")
+                                    if (leistungsAuswahlZiel == "auftrag") leistung = neuerText
+                                    if (leistungsAuswahlZiel == "kv") kvLeistung = neuerText
+                                } else if (leistungs.preis > 0.0) {
+                                    leistungsPreisName = leistungs.name
+                                    leistungsPreisEinheit = leistungs.einheit
+                                    leistungsPreisVorschlag = String.format(Locale.GERMANY, "%.2f", leistungs.preis)
+                                    leistungsPreisDialog = true
                                 } else {
-                                    ausgewaehlt + position
+                                    val neueAuswahl = ausgewaehlt + leistungs.name
+                                    val neuerText = neueAuswahl.joinToString("\n")
+                                    if (leistungsAuswahlZiel == "auftrag") leistung = neuerText
+                                    if (leistungsAuswahlZiel == "kv") kvLeistung = neuerText
                                 }
-                                val neuerText = neueAuswahl.joinToString("\n")
-                                if (leistungsAuswahlZiel == "auftrag") leistung = neuerText
-                                if (leistungsAuswahlZiel == "kv") kvLeistung = neuerText
                             },
                             modifier = Modifier.fillMaxWidth(),
                             shape = RoundedCornerShape(18.dp),
@@ -5370,7 +5388,18 @@ fun KuemmeroApp() {
                                 horizontalArrangement = Arrangement.spacedBy(10.dp)
                             ) {
                                 Text(if (istAusgewaehlt) "✓" else "○", color = KuemmeroGreen, fontWeight = FontWeight.Bold)
-                                Text(position, modifier = Modifier.weight(1f), textAlign = TextAlign.Start)
+                                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                                    Text(position, textAlign = TextAlign.Start)
+                                    if (leistungs.preis > 0.0) {
+                                        Text(
+                                            "Preisvorschlag: ${euro(leistungs.preis)} / ${leistungs.einheit}",
+                                            color = KuemmeroGreen,
+                                            fontSize = 12.sp,
+                                            fontWeight = FontWeight.SemiBold,
+                                            textAlign = TextAlign.Start
+                                        )
+                                    }
+                                }
                             }
                         }
                     }
@@ -5383,6 +5412,53 @@ fun KuemmeroApp() {
             },
             dismissButton = {
                 TextButton(onClick = { leistungsAuswahlZiel = null }) { Text("Abbrechen") }
+            }
+        )
+    }
+
+    if (leistungsPreisDialog) {
+        AlertDialog(
+            onDismissRequest = { leistungsPreisDialog = false },
+            title = { Text("Preisvorschlag") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Text(leistungsPreisName, fontWeight = FontWeight.Bold, color = KuemmeroGreen)
+                    Text("Hinterlegter Preis: ${leistungsPreisVorschlag.replace(',', '.').let { zahl(it) }.let { euro(it) }} / $leistungsPreisEinheit", color = KuemmeroText)
+                    OutlinedTextField(
+                        value = leistungsPreisVorschlag,
+                        onValueChange = { leistungsPreisVorschlag = it },
+                        label = { Text("Preis für diesen Vorgang (€)") },
+                        singleLine = true,
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                        colors = feldFarben,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    Text(
+                        "Der Preis ist nur ein Vorschlag. Du kannst ihn für diesen Auftrag/Kostenvoranschlag ändern.",
+                        color = KuemmeroText,
+                        fontSize = 12.sp
+                    )
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    val preis = zahl(leistungsPreisVorschlag)
+                    val zeile = if (preis > 0.0) {
+                        "$leistungsPreisName — ${euro(preis)} / $leistungsPreisEinheit"
+                    } else {
+                        leistungsPreisName
+                    }
+                    val aktuellerText = if (leistungsAuswahlZiel == "auftrag") leistung else kvLeistung
+                    val vorhandene = aktuellerText.split("\n").map { it.trim() }.filter { it.isNotBlank() }
+                    val ohnePosition = vorhandene.filter { it.substringBefore(" — ").trim() != leistungsPreisName }
+                    val neuerText = (ohnePosition + zeile).joinToString("\n")
+                    if (leistungsAuswahlZiel == "auftrag") leistung = neuerText
+                    if (leistungsAuswahlZiel == "kv") kvLeistung = neuerText
+                    leistungsPreisDialog = false
+                }) { Text("Übernehmen", color = KuemmeroGreen, fontWeight = FontWeight.Bold) }
+            },
+            dismissButton = {
+                TextButton(onClick = { leistungsPreisDialog = false }) { Text("Abbrechen") }
             }
         )
     }
