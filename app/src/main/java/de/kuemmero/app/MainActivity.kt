@@ -8,6 +8,7 @@ import android.graphics.BitmapFactory
 import android.graphics.pdf.PdfDocument
 import android.net.Uri
 import android.provider.MediaStore
+import android.provider.DocumentsContract
 import android.content.Intent
 import android.os.Bundle
 import android.os.CancellationSignal
@@ -200,6 +201,8 @@ private const val MAHNUNG1_FRIST_TAGE_KEY = "mahnung1_frist_tage"
 private const val MAHNUNG1_GEBUEHR_KEY = "mahnung1_gebuehr"
 private const val MAHNUNG1_TEXT_KEY = "mahnung1_text"
 private const val MAHNUNG_TESTMODUS_KEY = "mahnung_testmodus"
+private const val MAHNUNG_SPEICHERORDNER_URI_KEY = "mahnung_speicherordner_uri"
+private const val DOKUMENTE_SPEICHERORDNER_URI_KEY = "dokumente_speicherordner_uri"
 private fun standardMahnung1Frist(context: Context, basisDatum: Date = Date()): String {
     val tage = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
         .getInt(MAHNUNG1_FRIST_TAGE_KEY, 7)
@@ -1531,6 +1534,10 @@ fun KuemmeroApp() {
     var mahnung2Text by remember { mutableStateOf("") }
 
     var mahnungEinstellungenOffen by remember { mutableStateOf(false) }
+    var mahnungSpeicherBestaetigungOffen by remember { mutableStateOf(false) }
+    var ausstehendeMahnungDateiName by remember { mutableStateOf("") }
+    var ausstehendeMahnungTyp by remember { mutableStateOf(0) }
+    var ausstehendeMahnungIndex by remember { mutableStateOf<Int?>(null) }
     val mahnungPrefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
     var mahnungEinstellungFristTage by remember {
         mutableStateOf(mahnungPrefs.getInt(MAHNUNG1_FRIST_TAGE_KEY, 7).toString())
@@ -1571,10 +1578,109 @@ fun KuemmeroApp() {
         faelligAm = testHeuteText
     )
 
-    val testMahnungLauncher = rememberLauncherForActivityResult(
-        ActivityResultContracts.CreateDocument("application/pdf")
+    var mahnungSpeicherOrdnerUri by remember { mutableStateOf(mahnungPrefs.getString(MAHNUNG_SPEICHERORDNER_URI_KEY, "") ?: "") }
+
+    // Zentraler Ordner für alle von KÜMMERO erzeugten/gespeicherten Dokumente.
+    // Die Auswahl gilt für PDFs (Angebote, Rechnungen, Mahnungen, Test-PDFs) und CSV/JSON-Exporte.
+    val dokumentePrefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+    var dokumenteSpeicherOrdnerUri by remember {
+        mutableStateOf(dokumentePrefs.getString(DOKUMENTE_SPEICHERORDNER_URI_KEY, "") ?: "")
+    }
+    val dokumenteOrdnerLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.OpenDocumentTree()
     ) { uri ->
-        uri?.let {
+        if (uri != null) {
+            try {
+                context.contentResolver.takePersistableUriPermission(
+                    uri,
+                    Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION
+                )
+            } catch (_: Exception) { }
+            dokumentePrefs.edit().putString(DOKUMENTE_SPEICHERORDNER_URI_KEY, uri.toString()).apply()
+            dokumenteSpeicherOrdnerUri = uri.toString()
+            android.widget.Toast.makeText(context, "Dokumentenordner ausgewählt.", android.widget.Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    fun dokumentSpeicherIntent(mimeType: String, dateiname: String): Intent = Intent(Intent.ACTION_CREATE_DOCUMENT).apply {
+        addCategory(Intent.CATEGORY_OPENABLE)
+        type = mimeType
+        putExtra(Intent.EXTRA_TITLE, dateiname)
+        if (dokumenteSpeicherOrdnerUri.isNotBlank()) {
+            putExtra(DocumentsContract.EXTRA_INITIAL_URI, Uri.parse(dokumenteSpeicherOrdnerUri))
+        }
+    }
+
+    val mahnungOrdnerLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.OpenDocumentTree()
+    ) { uri ->
+        if (uri != null) {
+            try {
+                context.contentResolver.takePersistableUriPermission(
+                    uri,
+                    Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION
+                )
+            } catch (_: Exception) {
+                // Manche Anbieter erlauben keine dauerhafte Berechtigung; die aktuelle Auswahl bleibt trotzdem gültig.
+            }
+            mahnungPrefs.edit().putString(MAHNUNG_SPEICHERORDNER_URI_KEY, uri.toString()).apply()
+            mahnungSpeicherOrdnerUri = uri.toString()
+            android.widget.Toast.makeText(context, "Mahnung-Ordner ausgewählt.", android.widget.Toast.LENGTH_SHORT).show()
+        }
+    }
+
+
+    fun speichereMahnungInAusgewaehltenOrdner(typ: Int, index: Int, dateiname: String): Boolean {
+        if (mahnungSpeicherOrdnerUri.isBlank()) return false
+        val a = auftraege.getOrNull(index) ?: return false
+        return try {
+            val treeUri = Uri.parse(mahnungSpeicherOrdnerUri)
+            val mime = "application/pdf"
+            val zielUri = DocumentsContract.createDocument(
+                context.contentResolver,
+                treeUri,
+                mime,
+                dateiname
+            ) ?: throw Exception("Datei konnte nicht angelegt werden")
+            val pdf = if (typ == 1) {
+                erstelleMahnung1Pdf(context, a, mahnung1Datum.trim(), mahnung1Frist.trim(), zahl(mahnung1Gebuehr), mahnung1Text.trim())
+            } else {
+                erstelleMahnung2Pdf(context, a, mahnung2Datum.trim(), mahnung2Frist.trim(), zahl(mahnung2Gebuehr), mahnung2Text.trim())
+            }
+            context.contentResolver.openOutputStream(zielUri)?.use { out -> pdf.writeTo(out) } ?: throw Exception("Datei konnte nicht geöffnet werden")
+            pdf.close()
+            val aktualisiert = if (typ == 1) {
+                a.copy(
+                    mahnung1Datum = mahnung1Datum.trim(),
+                    mahnung1Frist = mahnung1Frist.trim(),
+                    mahnung1Gebuehr = zahl(mahnung1Gebuehr),
+                    mahnung1Text = mahnung1Text.trim(),
+                    mahnung1Erstellt = true
+                )
+            } else {
+                a.copy(
+                    mahnung2Datum = mahnung2Datum.trim(),
+                    mahnung2Frist = mahnung2Frist.trim(),
+                    mahnung2Gebuehr = zahl(mahnung2Gebuehr),
+                    mahnung2Text = mahnung2Text.trim(),
+                    mahnung2Erstellt = true
+                )
+            }
+            auftraege = auftraege.toMutableList().apply { set(index, aktualisiert) }
+            speichereAuftraege(context, auftraege)
+            if (typ == 1) mahnung1Index = null else mahnung2Index = null
+            android.widget.Toast.makeText(context, "Mahnung gespeichert.", android.widget.Toast.LENGTH_SHORT).show()
+            true
+        } catch (_: Exception) {
+            android.widget.Toast.makeText(context, "Mahnung konnte nicht gespeichert werden.", android.widget.Toast.LENGTH_LONG).show()
+            false
+        }
+    }
+
+    val testMahnungLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.StartActivityForResult()
+    ) { result ->
+        result.data?.data?.let { uri ->
             try {
                 val pdf = erstelleMahnung1Pdf(context, testMahnungAuftrag, testMahnung1Datum.trim(), testMahnung1Frist.trim(), zahl(testMahnung1Gebuehr), testMahnung1Text.trim())
                 context.contentResolver.openOutputStream(it)?.use { out -> pdf.writeTo(out) } ?: throw Exception("Datei konnte nicht geöffnet werden")
@@ -1589,9 +1695,9 @@ fun KuemmeroApp() {
     }
 
     val mahnung1Launcher = rememberLauncherForActivityResult(
-        ActivityResultContracts.CreateDocument("application/pdf")
-    ) { uri ->
-        uri?.let {
+        ActivityResultContracts.StartActivityForResult()
+    ) { result ->
+        result.data?.data?.let { uri ->
             val index = mahnung1Index
             val a = index?.let { i -> auftraege.getOrNull(i) }
             if (a != null) {
@@ -1618,9 +1724,9 @@ fun KuemmeroApp() {
     }
 
     val mahnung2Launcher = rememberLauncherForActivityResult(
-        ActivityResultContracts.CreateDocument("application/pdf")
-    ) { uri ->
-        uri?.let {
+        ActivityResultContracts.StartActivityForResult()
+    ) { result ->
+        result.data?.data?.let { uri ->
             val index = mahnung2Index
             val a = index?.let { i -> auftraege.getOrNull(i) }
             if (a != null) {
@@ -1698,9 +1804,9 @@ fun KuemmeroApp() {
     val backupScope = rememberCoroutineScope()
 
     val createBackup = rememberLauncherForActivityResult(
-        ActivityResultContracts.CreateDocument("application/json")
-    ) { uri ->
-        uri?.let { selectedUri ->
+        ActivityResultContracts.StartActivityForResult()
+    ) { result ->
+        result.data?.data?.let { selectedUri ->
             context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE).edit()
                 .putString(BACKUP_URI_KEY, selectedUri.toString()).apply()
             backupScope.launch {
@@ -1726,9 +1832,9 @@ fun KuemmeroApp() {
         }
     }
     val createDataExport = rememberLauncherForActivityResult(
-        ActivityResultContracts.CreateDocument("text/csv")
-    ) { uri ->
-        uri?.let { selectedUri ->
+        ActivityResultContracts.StartActivityForResult()
+    ) { result ->
+        result.data?.data?.let { selectedUri ->
             backupScope.launch {
                 val csv = buildString {
                     append("KÜMMERO Datenexport\n")
@@ -1934,9 +2040,9 @@ fun KuemmeroApp() {
     val datumJetzt = datumFormat.format(Date())
 
     val pdfLauncher = rememberLauncherForActivityResult(
-        ActivityResultContracts.CreateDocument("application/pdf")
-    ) { uri ->
-        uri?.let {
+        ActivityResultContracts.StartActivityForResult()
+    ) { result ->
+        result.data?.data?.let { uri ->
             val a = auftragFuerPdf
             val pdf = if (a != null) {
                 erstellePdf(
@@ -1960,9 +2066,9 @@ fun KuemmeroApp() {
 
 
     val rechnungLauncher = rememberLauncherForActivityResult(
-        ActivityResultContracts.CreateDocument("application/pdf")
-    ) { uri ->
-        uri?.let {
+        ActivityResultContracts.StartActivityForResult()
+    ) { result ->
+        result.data?.data?.let { uri ->
             val index = rechnungFuerIndex
             val a = index?.let { i -> auftraege.getOrNull(i) }
             if (a != null) {
@@ -2195,6 +2301,45 @@ fun KuemmeroApp() {
                         "Diese Werte sind nur Voreinstellungen. Bei jeder einzelnen Mahnung kannst du sie trotzdem ändern.",
                         color = KuemmeroText
                     )
+                    Card(
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = CardDefaults.cardColors(containerColor = KuemmeroMint),
+                        border = BorderStroke(1.dp, KuemmeroGreen),
+                        shape = RoundedCornerShape(14.dp)
+                    ) {
+                        Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Text("📁 Mahnung-Speicherordner", fontWeight = FontWeight.Bold, color = KuemmeroGreen)
+                            Text(
+                                if (mahnungSpeicherOrdnerUri.isBlank())
+                                    "Kein Ordner ausgewählt. Beim Speichern fragt Android nach dem Ziel."
+                                else
+                                    "Ein Ordner ist ausgewählt. Vor jeder Speicherung wird trotzdem nochmals gefragt." ,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = KuemmeroText
+                            )
+                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+                                OutlinedButton(
+                                    onClick = { mahnungOrdnerLauncher.launch(null) },
+                                    modifier = Modifier.weight(1f),
+                                    shape = RoundedCornerShape(22.dp),
+                                    border = BorderStroke(2.dp, KuemmeroGreen),
+                                    colors = ButtonDefaults.outlinedButtonColors(contentColor = KuemmeroGreen)
+                                ) { Text(if (mahnungSpeicherOrdnerUri.isBlank()) "Ordner auswählen" else "Ordner ändern") }
+                                if (mahnungSpeicherOrdnerUri.isNotBlank()) {
+                                    OutlinedButton(
+                                        onClick = {
+                                            mahnungPrefs.edit().remove(MAHNUNG_SPEICHERORDNER_URI_KEY).apply()
+                                            mahnungSpeicherOrdnerUri = ""
+                                            android.widget.Toast.makeText(context, "Mahnung-Ordner entfernt.", android.widget.Toast.LENGTH_SHORT).show()
+                                        },
+                                        shape = RoundedCornerShape(22.dp),
+                                        border = BorderStroke(1.dp, KuemmeroError),
+                                        colors = ButtonDefaults.outlinedButtonColors(contentColor = KuemmeroError)
+                                    ) { Text("Entfernen") }
+                                }
+                            }
+                        }
+                    }
                     if (mahnungEinstellungFristTage.toIntOrNull()?.coerceAtLeast(0) == 0) {
                         Card(
                             modifier = Modifier.fillMaxWidth(),
@@ -2286,6 +2431,38 @@ fun KuemmeroApp() {
         )
     }
 
+    if (mahnungSpeicherBestaetigungOffen) {
+        AlertDialog(
+            onDismissRequest = { mahnungSpeicherBestaetigungOffen = false },
+            title = { Text("Mahnung wirklich speichern?") },
+            text = {
+                Text(
+                    "Die PDF wird jetzt nur nach deiner Bestätigung im ausgewählten Mahnung-Ordner gespeichert.\n\nDatei: $ausstehendeMahnungDateiName\n\nOhne Bestätigung wird nichts gespeichert.",
+                    color = KuemmeroText
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    val ok = ausstehendeMahnungIndex?.let {
+                        speichereMahnungInAusgewaehltenOrdner(ausstehendeMahnungTyp, it, ausstehendeMahnungDateiName)
+                    } ?: false
+                    if (ok) {
+                        mahnungSpeicherBestaetigungOffen = false
+                        ausstehendeMahnungIndex = null
+                        ausstehendeMahnungDateiName = ""
+                        ausstehendeMahnungTyp = 0
+                    }
+                }) { Text("Jetzt speichern") }
+            },
+            dismissButton = { TextButton(onClick = {
+                mahnungSpeicherBestaetigungOffen = false
+                ausstehendeMahnungIndex = null
+                ausstehendeMahnungDateiName = ""
+                ausstehendeMahnungTyp = 0
+            }) { Text("Nicht speichern") } }
+        )
+    }
+
     if (testMahnung1DialogOffen && mahnungTestmodus) {
         AlertDialog(
             onDismissRequest = { testMahnung1DialogOffen = false },
@@ -2308,7 +2485,7 @@ fun KuemmeroApp() {
                     if (testMahnung1Datum.isBlank() || testMahnung1Frist.isBlank()) {
                         android.widget.Toast.makeText(context, "Bitte Mahndatum und Zahlungsfrist eingeben.", android.widget.Toast.LENGTH_SHORT).show()
                     } else {
-                        testMahnungLauncher.launch("KÜMMERO-TEST-Mahnung-${testMahnung1Datum.replace('.', '-')}.pdf")
+                        testMahnungLauncher.launch(dokumentSpeicherIntent("application/pdf", "KÜMMERO-TEST-Mahnung-${testMahnung1Datum.replace('.', '-')}.pdf"))
                     }
                 }) { Text(if (testMahnung1Erstellt) "Test-PDF neu erstellen" else "Test-PDF erstellen") }
             },
@@ -2377,7 +2554,15 @@ fun KuemmeroApp() {
                         android.widget.Toast.makeText(context, "Bitte Mahndatum und Zahlungsfrist eingeben.", 0).show()
                     } else {
                         val name = a.kunde.ifBlank { "Kunde" }.replace("/", "-")
-                        mahnung1Launcher.launch("KÜMMERO-1-Mahnung-${a.rechnungsnummer}-$name.pdf")
+                        val dateiname = "KÜMMERO-1-Mahnung-${a.rechnungsnummer}-$name.pdf"
+                        if (mahnungSpeicherOrdnerUri.isNotBlank()) {
+                            ausstehendeMahnungTyp = 1
+                            ausstehendeMahnungIndex = index
+                            ausstehendeMahnungDateiName = dateiname
+                            mahnungSpeicherBestaetigungOffen = true
+                        } else {
+                            mahnung1Launcher.launch(dokumentSpeicherIntent("application/pdf", dateiname))
+                        }
                     }
                 }) { Text("PDF erstellen") }
             },
@@ -2412,7 +2597,15 @@ fun KuemmeroApp() {
                         android.widget.Toast.makeText(context, "Bitte Mahndatum und Zahlungsfrist eingeben.", 0).show()
                     } else {
                         val name = a.kunde.ifBlank { "Kunde" }.replace("/", "-")
-                        mahnung2Launcher.launch("KÜMMERO-2-Mahnung-${a.rechnungsnummer}-$name.pdf")
+                        val dateiname = "KÜMMERO-2-Mahnung-${a.rechnungsnummer}-$name.pdf"
+                        if (mahnungSpeicherOrdnerUri.isNotBlank()) {
+                            ausstehendeMahnungTyp = 2
+                            ausstehendeMahnungIndex = index
+                            ausstehendeMahnungDateiName = dateiname
+                            mahnungSpeicherBestaetigungOffen = true
+                        } else {
+                            mahnung2Launcher.launch(dokumentSpeicherIntent("application/pdf", dateiname))
+                        }
                     }
                 }) { Text("PDF erstellen") }
             },
@@ -3423,7 +3616,7 @@ fun KuemmeroApp() {
                             if (kunde.isBlank()) {
                                 android.widget.Toast.makeText(context, "Bitte Kundennamen eingeben.", 0).show()
                             } else {
-                                pdfLauncher.launch("KÜMMERO-Angebot-$nummer.pdf")
+                                pdfLauncher.launch(dokumentSpeicherIntent("application/pdf", "KÜMMERO-Angebot-$nummer.pdf"))
                             }
                         },
                         modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp),
@@ -4034,7 +4227,7 @@ fun KuemmeroApp() {
                                         } else {
                                             rechnungFuerIndex = index
                                             val name = a.kunde.ifBlank { "Kunde" }.replace("/", "-")
-                                            rechnungLauncher.launch("KÜMMERO-Rechnung-$name.pdf")
+                                            rechnungLauncher.launch(dokumentSpeicherIntent("application/pdf", "KÜMMERO-Rechnung-$name.pdf"))
                                         }
                                     },
                                     modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp),
@@ -5012,12 +5205,54 @@ fun KuemmeroApp() {
                         }
                         item {
                             OutlinedButton(
-                                onClick = { createDataExport.launch("KÜMMERO-Datenexport-${SimpleDateFormat("yyyyMMdd-HHmm", Locale.GERMANY).format(Date())}.csv") },
+                                onClick = { createDataExport.launch(dokumentSpeicherIntent("text/csv", "KÜMMERO-Datenexport-${SimpleDateFormat("yyyyMMdd-HHmm", Locale.GERMANY).format(Date())}.csv")) },
                                 modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp),
                                 shape = RoundedCornerShape(26.dp),
                                 border = BorderStroke(2.dp, KuemmeroGreen),
                                 colors = ButtonDefaults.outlinedButtonColors(contentColor = KuemmeroGreen)
                             ) { Text("📤 Datenexport (CSV)", fontWeight = FontWeight.Bold) }
+                        }
+                        item {
+                            Card(
+                                Modifier.fillMaxWidth(),
+                                colors = CardDefaults.cardColors(containerColor = KuemmeroSurface),
+                                shape = RoundedCornerShape(18.dp)
+                            ) {
+                                Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                    Text("📁 Dokumentenordner", style = MaterialTheme.typography.titleMedium, color = KuemmeroGreen, fontWeight = FontWeight.Bold)
+                                    Text(
+                                        if (dokumenteSpeicherOrdnerUri.isBlank())
+                                            "Kein zentraler Ordner ausgewählt. Beim Speichern kann ein Ziel gewählt werden."
+                                        else
+                                            "Zentraler Ordner ausgewählt. Neue PDFs und Datenexporte öffnen standardmäßig diesen Ordner." ,
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = KuemmeroText
+                                    )
+                                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+                                        OutlinedButton(
+                                            onClick = { dokumenteOrdnerLauncher.launch(null) },
+                                            modifier = Modifier.weight(1f),
+                                            shape = RoundedCornerShape(22.dp),
+                                            border = BorderStroke(2.dp, KuemmeroGreen),
+                                            colors = ButtonDefaults.outlinedButtonColors(contentColor = KuemmeroGreen)
+                                        ) {
+                                            Text(if (dokumenteSpeicherOrdnerUri.isBlank()) "Ordner auswählen" else "Ordner ändern")
+                                        }
+                                        if (dokumenteSpeicherOrdnerUri.isNotBlank()) {
+                                            OutlinedButton(
+                                                onClick = {
+                                                    dokumentePrefs.edit().remove(DOKUMENTE_SPEICHERORDNER_URI_KEY).apply()
+                                                    dokumenteSpeicherOrdnerUri = ""
+                                                    android.widget.Toast.makeText(context, "Dokumentenordner entfernt.", android.widget.Toast.LENGTH_SHORT).show()
+                                                },
+                                                shape = RoundedCornerShape(22.dp),
+                                                border = BorderStroke(1.dp, KuemmeroError),
+                                                colors = ButtonDefaults.outlinedButtonColors(contentColor = KuemmeroError)
+                                            ) { Text("Entfernen") }
+                                        }
+                                    }
+                                }
+                            }
                         }
                         item {
                             OutlinedButton(
