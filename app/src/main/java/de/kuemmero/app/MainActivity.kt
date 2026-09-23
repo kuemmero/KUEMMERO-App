@@ -28,6 +28,7 @@ import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.gestures.detectDragGestures
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.foundation.clickable
@@ -71,6 +72,36 @@ import kotlinx.coroutines.withContext
 import kotlinx.coroutines.launch
 
 private const val RECHNUNG_SCAN_PREFIX = "rechnung_scan_"
+
+private val KUEMMERO_HAUPTSEITEN = listOf(
+    "Heute",
+    "Aufträge",
+    "Kostenvoranschläge",
+    "Kunden",
+    "Mahnungen",
+    "Mehr"
+)
+
+private fun Modifier.kuemmeroHauptseitenWischen(
+    hauptseite: String,
+    onSeite: (String) -> Unit
+): Modifier = pointerInput(hauptseite) {
+    var gesamtDelta = 0f
+    detectHorizontalDragGestures(
+        onHorizontalDrag = { _, dragAmount ->
+            gesamtDelta += dragAmount
+        },
+        onDragEnd = {
+            val index = KUEMMERO_HAUPTSEITEN.indexOf(hauptseite)
+            if (index >= 0 && kotlin.math.abs(gesamtDelta) >= 80f) {
+                val zielIndex = if (gesamtDelta < 0f) index + 1 else index - 1
+                KUEMMERO_HAUPTSEITEN.getOrNull(zielIndex)?.let(onSeite)
+            }
+            gesamtDelta = 0f
+        },
+        onDragCancel = { gesamtDelta = 0f }
+    )
+}
 private const val RECHNUNGSNUMMER_COUNTER_KEY = "rechnungsnummer_counter"
 
 private fun naechsteRechnungsnummer(
@@ -3281,7 +3312,10 @@ fun KuemmeroApp() {
         if (hauptseite == "Aufträge") {
             LazyColumn(
                 state = listeState,
-                modifier = Modifier.padding(padding).padding(16.dp),
+                modifier = Modifier
+                    .padding(padding)
+                    .padding(16.dp)
+                    .kuemmeroHauptseitenWischen(hauptseite) { hauptseite = it },
                 verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
                 if (auftragFormOffen) {
@@ -4455,7 +4489,10 @@ fun KuemmeroApp() {
             }
         } else {
             LazyColumn(
-                modifier = Modifier.padding(padding).padding(16.dp),
+                modifier = Modifier
+                    .padding(padding)
+                    .padding(16.dp)
+                    .kuemmeroHauptseitenWischen(hauptseite) { hauptseite = it },
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
                 when (hauptseite) {
