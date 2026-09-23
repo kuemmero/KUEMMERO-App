@@ -452,6 +452,7 @@ private fun backupText(context: Context): String {
         put("auftraege", JSONArray(p.getString(AUFTRAEGE_KEY, "[]") ?: "[]"))
         put("kunden", JSONArray(p.getString(KUNDEN_KEY, "[]") ?: "[]"))
         put("kostenvoranschlaege", JSONArray(p.getString(KOSTENVORANSCHLAEGE_KEY, "[]") ?: "[]"))
+        put("leistungspositionen", JSONArray(p.getString(LEISTUNGSPOSITIONEN_KEY, "[]") ?: "[]"))
     }.toString(2)
 }
 
@@ -1187,20 +1188,71 @@ private fun KlappBereich(
     }
 }
 
-private val KUEMMERO_LEISTUNGSPOSITIONEN = listOf(
-    "Allgemeine Kleinreparatur",
-    "Möbelaufbau",
-    "Tapezieren",
-    "Rasen mähen",
-    "Haushalts- / Alltagshilfe",
-    "Schimmelbehandlung",
-    "Smart Home / Computer / Router",
-    "Elektro-/Strom-Kleinaufgabe",
-    "Anfahrt",
-    "Arbeitszeit",
-    "Material",
-    "Eigene Position"
+data class Leistungsposition(
+    val name: String,
+    val beschreibung: String = "",
+    val einheit: String = "Pauschale",
+    val preis: Double = 0.0,
+    val aktiv: Boolean = true
 )
+
+private const val LEISTUNGSPOSITIONEN_KEY = "leistungspositionen"
+
+private val KUEMMERO_STANDARD_LEISTUNGEN = listOf(
+    Leistungsposition("Allgemeine Kleinreparatur"),
+    Leistungsposition("Möbelaufbau"),
+    Leistungsposition("Tapezieren"),
+    Leistungsposition("Rasen mähen"),
+    Leistungsposition("Haushalts- / Alltagshilfe"),
+    Leistungsposition("Schimmelbehandlung"),
+    Leistungsposition("Smart Home / Computer / Router"),
+    Leistungsposition("Elektro-/Strom-Kleinaufgabe"),
+    Leistungsposition("Anfahrt"),
+    Leistungsposition("Arbeitszeit", einheit = "Stunde", preis = 42.0),
+    Leistungsposition("Material"),
+    Leistungsposition("Eigene Position")
+)
+
+private fun ladeLeistungspositionen(context: Context): List<Leistungsposition> {
+    val p = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+    val raw = p.getString(LEISTUNGSPOSITIONEN_KEY, null)
+    if (raw.isNullOrBlank()) {
+        val defaults = KUEMMERO_STANDARD_LEISTUNGEN
+        speichereLeistungspositionen(context, defaults)
+        return defaults
+    }
+    return try {
+        val arr = JSONArray(raw)
+        List(arr.length()) { i ->
+            val o = arr.optJSONObject(i) ?: JSONObject()
+            Leistungsposition(
+                name = o.optString("name"),
+                beschreibung = o.optString("beschreibung"),
+                einheit = o.optString("einheit", "Pauschale"),
+                preis = o.optDouble("preis", 0.0),
+                aktiv = o.optBoolean("aktiv", true)
+            )
+        }.filter { it.name.isNotBlank() }
+    } catch (_: Exception) {
+        KUEMMERO_STANDARD_LEISTUNGEN
+    }
+}
+
+private fun speichereLeistungspositionen(context: Context, liste: List<Leistungsposition>) {
+    val arr = JSONArray()
+    liste.forEach { l ->
+        arr.put(JSONObject().apply {
+            put("name", l.name)
+            put("beschreibung", l.beschreibung)
+            put("einheit", l.einheit)
+            put("preis", l.preis)
+            put("aktiv", l.aktiv)
+        })
+    }
+    context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        .edit().putString(LEISTUNGSPOSITIONEN_KEY, arr.toString()).commit()
+}
+
 
 private fun leistungsumfangHinweis(leistung: String): String? {
     val text = leistung.lowercase(Locale.GERMANY)
@@ -1335,6 +1387,15 @@ fun KuemmeroApp() {
     var rechnungArchivSuche by remember { mutableStateOf("") }
     var rechnungArchivJahr by remember { mutableStateOf("Alle") }
     var kostenvoranschlaege by remember { mutableStateOf(ladeKostenvoranschlaege(context)) }
+    var leistungspositionen by remember { mutableStateOf(ladeLeistungspositionen(context)) }
+    var leistungspositionDialog by remember { mutableStateOf(false) }
+    var leistungspositionBearbeiteIndex by remember { mutableStateOf<Int?>(null) }
+    var leistungspositionLoeschIndex by remember { mutableStateOf<Int?>(null) }
+    var leistungspositionName by remember { mutableStateOf("") }
+    var leistungspositionBeschreibung by remember { mutableStateOf("") }
+    var leistungspositionEinheit by remember { mutableStateOf("Pauschale") }
+    var leistungspositionPreis by remember { mutableStateOf("") }
+    var leistungspositionAktiv by remember { mutableStateOf(true) }
     var kvFormOffen by remember { mutableStateOf(false) }
     var kvBearbeiteIndex by remember { mutableStateOf<Int?>(null) }
     var kvNummer by remember { mutableStateOf("KV-" + SimpleDateFormat("yyyyMMdd-HHmmss", Locale.GERMANY).format(heute)) }
@@ -1752,6 +1813,7 @@ fun KuemmeroApp() {
                 val arr = obj.optJSONArray("auftraege") ?: JSONArray()
                 val kundenArr = obj.optJSONArray("kunden") ?: JSONArray()
                 val kvArr = obj.optJSONArray("kostenvoranschlaege") ?: JSONArray()
+                val leistungsArr = obj.optJSONArray("leistungspositionen")
                 context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE).edit()
                     .putString(STUNDENSATZ_KEY, rate)
                     .putString(FIRMENNAME_KEY, firmenNameBackup)
@@ -1762,7 +1824,9 @@ fun KuemmeroApp() {
                     .putString(STEUERNUMMER_KEY, steuernummerBackup)
                     .putString(AUFTRAEGE_KEY, arr.toString())
                     .putString(KUNDEN_KEY, kundenArr.toString())
-                    .putString(KOSTENVORANSCHLAEGE_KEY, kvArr.toString()).commit()
+                    .putString(KOSTENVORANSCHLAEGE_KEY, kvArr.toString())
+                    .apply { if (leistungsArr != null) putString(LEISTUNGSPOSITIONEN_KEY, leistungsArr.toString()) }
+                    .commit()
                 stundensatz = rate
                 unternehmerName = firmenNameBackup
                 unternehmerStrasse = firmenStrasseBackup
@@ -1773,6 +1837,7 @@ fun KuemmeroApp() {
                 auftraege = ladeAuftraege(context)
                 kunden = ladeKunden(context)
                 kostenvoranschlaege = ladeKostenvoranschlaege(context)
+                leistungspositionen = ladeLeistungspositionen(context)
                 auftragDetailIndex = null
                 auftragFormOffen = false
                 bearbeiteIndex = null
@@ -4913,6 +4978,15 @@ fun KuemmeroApp() {
                             ) { Text("📤 Datenexport (CSV)", fontWeight = FontWeight.Bold) }
                         }
                         item {
+                            OutlinedButton(
+                                onClick = { hauptseite = "Meine Leistungen" },
+                                modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp),
+                                shape = RoundedCornerShape(26.dp),
+                                border = BorderStroke(2.dp, KuemmeroGreen),
+                                colors = ButtonDefaults.outlinedButtonColors(contentColor = KuemmeroGreen)
+                            ) { Text("🛠 Meine Leistungen", fontWeight = FontWeight.Bold) }
+                        }
+                        item {
                             Card(Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = KuemmeroSurface), shape = RoundedCornerShape(18.dp)) {
                                 Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                                     Text("Sicherung & Daten", style = MaterialTheme.typography.titleMedium, color = KuemmeroGreen, fontWeight = FontWeight.Bold)
@@ -4963,6 +5037,116 @@ fun KuemmeroApp() {
                                     Text("KÜMMERO", style = MaterialTheme.typography.titleLarge, color = KuemmeroGreen, fontWeight = FontWeight.Bold)
                                     Text("Haus & Alltag – wir kümmern uns.", color = KuemmeroText)
                                     Text("${auftraege.size} Aufträge · ${kunden.size} Kunden", color = KuemmeroText)
+                                }
+                            }
+                        }
+                    }
+                    "Meine Leistungen" -> {
+                        item {
+                            Text("Meine Leistungen", style = MaterialTheme.typography.headlineSmall, color = KuemmeroGreen, fontWeight = FontWeight.Bold)
+                            Text("Hier kannst du deine Auswahl selbst erweitern, ändern und deaktivieren.", color = KuemmeroText)
+                        }
+                        item {
+                            Button(
+                                onClick = {
+                                    leistungspositionBearbeiteIndex = null
+                                    leistungspositionName = ""
+                                    leistungspositionBeschreibung = ""
+                                    leistungspositionEinheit = "Pauschale"
+                                    leistungspositionPreis = ""
+                                    leistungspositionAktiv = true
+                                    leistungspositionDialog = true
+                                },
+                                modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp),
+                                shape = RoundedCornerShape(26.dp),
+                                colors = ButtonDefaults.buttonColors(containerColor = KuemmeroGreen)
+                            ) { Text("+ Neue Leistung", fontWeight = FontWeight.Bold) }
+                        }
+                        leistungspositionen.forEachIndexed { index, leistungPos ->
+                            item {
+                                Card(
+                                    Modifier.fillMaxWidth(),
+                                    colors = CardDefaults.cardColors(containerColor = if (leistungPos.aktiv) KuemmeroSurface else KuemmeroMint),
+                                    shape = RoundedCornerShape(18.dp),
+                                    border = BorderStroke(1.5.dp, if (leistungPos.aktiv) KuemmeroGreenLight else KuemmeroGreen)
+                                ) {
+                                    Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                                            Column(Modifier.weight(1f)) {
+                                                Text(leistungPos.name, fontWeight = FontWeight.Bold, color = KuemmeroText)
+                                                if (leistungPos.beschreibung.isNotBlank()) Text(leistungPos.beschreibung, color = KuemmeroText, style = MaterialTheme.typography.bodySmall)
+                                                Text("${leistungPos.einheit} · ${euro(leistungPos.preis)}", color = KuemmeroGreen, fontWeight = FontWeight.SemiBold)
+                                            }
+                                            Text(if (leistungPos.aktiv) "Aktiv" else "Inaktiv", color = if (leistungPos.aktiv) KuemmeroGreen else KuemmeroText, fontWeight = FontWeight.Bold)
+                                        }
+                                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                            OutlinedButton(
+                                                onClick = {
+                                                    if (index > 0) {
+                                                        val list = leistungspositionen.toMutableList()
+                                                        val temp = list[index - 1]
+                                                        list[index - 1] = list[index]
+                                                        list[index] = temp
+                                                        leistungspositionen = list
+                                                        speichereLeistungspositionen(context, list)
+                                                    }
+                                                },
+                                                enabled = index > 0,
+                                                shape = RoundedCornerShape(22.dp),
+                                                border = BorderStroke(1.5.dp, KuemmeroGreen),
+                                                colors = ButtonDefaults.outlinedButtonColors(contentColor = KuemmeroGreen)
+                                            ) { Text("↑") }
+                                            OutlinedButton(
+                                                onClick = {
+                                                    if (index < leistungspositionen.lastIndex) {
+                                                        val list = leistungspositionen.toMutableList()
+                                                        val temp = list[index + 1]
+                                                        list[index + 1] = list[index]
+                                                        list[index] = temp
+                                                        leistungspositionen = list
+                                                        speichereLeistungspositionen(context, list)
+                                                    }
+                                                },
+                                                enabled = index < leistungspositionen.lastIndex,
+                                                shape = RoundedCornerShape(22.dp),
+                                                border = BorderStroke(1.5.dp, KuemmeroGreen),
+                                                colors = ButtonDefaults.outlinedButtonColors(contentColor = KuemmeroGreen)
+                                            ) { Text("↓") }
+                                            OutlinedButton(
+                                                onClick = {
+                                                    leistungspositionBearbeiteIndex = index
+                                                    leistungspositionName = leistungPos.name
+                                                    leistungspositionBeschreibung = leistungPos.beschreibung
+                                                    leistungspositionEinheit = leistungPos.einheit
+                                                    leistungspositionPreis = if (leistungPos.preis == 0.0) "" else leistungPos.preis.toString().replace('.', ',')
+                                                    leistungspositionAktiv = leistungPos.aktiv
+                                                    leistungspositionDialog = true
+                                                },
+                                                modifier = Modifier.weight(1f),
+                                                shape = RoundedCornerShape(22.dp),
+                                                border = BorderStroke(1.5.dp, KuemmeroGreen),
+                                                colors = ButtonDefaults.outlinedButtonColors(contentColor = KuemmeroGreen)
+                                            ) { Text("Bearbeiten") }
+                                            OutlinedButton(
+                                                onClick = {
+                                                    val list = leistungspositionen.toMutableList()
+                                                    list[index] = leistungPos.copy(aktiv = !leistungPos.aktiv)
+                                                    leistungspositionen = list
+                                                    speichereLeistungspositionen(context, list)
+                                                },
+                                                modifier = Modifier.weight(1f),
+                                                shape = RoundedCornerShape(22.dp),
+                                                border = BorderStroke(1.5.dp, KuemmeroGreen),
+                                                colors = ButtonDefaults.outlinedButtonColors(contentColor = KuemmeroGreen)
+                                            ) { Text(if (leistungPos.aktiv) "Deaktivieren" else "Aktivieren") }
+                                            OutlinedButton(
+                                                onClick = { leistungspositionLoeschIndex = index },
+                                                shape = RoundedCornerShape(22.dp),
+                                                border = BorderStroke(1.5.dp, KuemmeroError),
+                                                colors = ButtonDefaults.outlinedButtonColors(contentColor = KuemmeroError)
+                                            ) { Text("Löschen") }
+                                        }
+                                    }
                                 }
                             }
                         }
@@ -5087,28 +5271,119 @@ fun KuemmeroApp() {
         }
     }
 
+    if (leistungspositionDialog) {
+        AlertDialog(
+            onDismissRequest = { leistungspositionDialog = false },
+            title = { Text(if (leistungspositionBearbeiteIndex == null) "Neue Leistung" else "Leistung bearbeiten") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    OutlinedTextField(leistungspositionName, { leistungspositionName = it }, label = { Text("Bezeichnung") }, singleLine = true, colors = feldFarben)
+                    OutlinedTextField(leistungspositionBeschreibung, { leistungspositionBeschreibung = it }, label = { Text("Beschreibung (optional)") }, colors = feldFarben)
+                    OutlinedTextField(leistungspositionEinheit, { leistungspositionEinheit = it }, label = { Text("Einheit") }, singleLine = true, colors = feldFarben)
+                    OutlinedTextField(leistungspositionPreis, { leistungspositionPreis = it }, label = { Text("Standardpreis €") }, singleLine = true, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal), colors = feldFarben)
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Checkbox(checked = leistungspositionAktiv, onCheckedChange = { leistungspositionAktiv = it }, colors = CheckboxDefaults.colors(checkedColor = KuemmeroGreen))
+                        Text("Bei Auftrag/Kostenvoranschlag anzeigen")
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    val name = leistungspositionName.trim()
+                    if (name.isBlank()) {
+                        android.widget.Toast.makeText(context, "Bitte eine Bezeichnung eingeben.", 0).show()
+                    } else {
+                        val neu = Leistungsposition(name, leistungspositionBeschreibung.trim(), leistungspositionEinheit.trim().ifBlank { "Pauschale" }, zahl(leistungspositionPreis), leistungspositionAktiv)
+                        val list = leistungspositionen.toMutableList()
+                        val idx = leistungspositionBearbeiteIndex
+                        if (idx != null && idx in list.indices) list[idx] = neu else list.add(neu)
+                        leistungspositionen = list
+                        speichereLeistungspositionen(context, list)
+                        leistungspositionDialog = false
+                    }
+                }) { Text("Speichern", color = KuemmeroGreen, fontWeight = FontWeight.Bold) }
+            },
+            dismissButton = { TextButton(onClick = { leistungspositionDialog = false }) { Text("Abbrechen") } }
+        )
+    }
+
+    if (leistungspositionLoeschIndex != null) {
+        val idx = leistungspositionLoeschIndex
+        val name = idx?.let { leistungspositionen.getOrNull(it)?.name } ?: "Leistung"
+        AlertDialog(
+            onDismissRequest = { leistungspositionLoeschIndex = null },
+            title = { Text("Leistung löschen?") },
+            text = { Text("Soll "$name" wirklich aus deiner Leistungsliste gelöscht werden?") },
+            confirmButton = {
+                TextButton(onClick = {
+                    if (idx != null && idx in leistungspositionen.indices) {
+                        val list = leistungspositionen.toMutableList()
+                        list.removeAt(idx)
+                        leistungspositionen = list
+                        speichereLeistungspositionen(context, list)
+                    }
+                    leistungspositionLoeschIndex = null
+                }) { Text("Löschen", color = KuemmeroError, fontWeight = FontWeight.Bold) }
+            },
+            dismissButton = { TextButton(onClick = { leistungspositionLoeschIndex = null }) { Text("Abbrechen") } }
+        )
+    }
+
     if (leistungsAuswahlZiel != null) {
         AlertDialog(
             onDismissRequest = { leistungsAuswahlZiel = null },
             title = { Text("Leistungsposition auswählen") },
             text = {
+                val aktuellerText = if (leistungsAuswahlZiel == "auftrag") leistung else kvLeistung
+                val ausgewaehlt = aktuellerText
+                    .split("\n")
+                    .map { it.trim() }
+                    .filter { it.isNotBlank() }
+                    .toSet()
+
                 Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                    KUEMMERO_LEISTUNGSPOSITIONEN.forEach { position ->
+                    leistungspositionen.filter { it.aktiv }.forEach { leistungs ->
+                        val position = leistungs.name
+                        val istAusgewaehlt = position in ausgewaehlt
                         OutlinedButton(
                             onClick = {
-                                if (leistungsAuswahlZiel == "auftrag") leistung = position
-                                if (leistungsAuswahlZiel == "kv") kvLeistung = position
-                                leistungsAuswahlZiel = null
+                                val neueAuswahl = if (istAusgewaehlt) {
+                                    ausgewaehlt.filter { it != position }
+                                } else {
+                                    ausgewaehlt + position
+                                }
+                                val neuerText = neueAuswahl.joinToString("\n")
+                                if (leistungsAuswahlZiel == "auftrag") leistung = neuerText
+                                if (leistungsAuswahlZiel == "kv") kvLeistung = neuerText
                             },
                             modifier = Modifier.fillMaxWidth(),
                             shape = RoundedCornerShape(18.dp),
-                            border = BorderStroke(1.5.dp, KuemmeroGreen),
-                            colors = ButtonDefaults.outlinedButtonColors(contentColor = KuemmeroText)
-                        ) { Text(position, modifier = Modifier.fillMaxWidth(), textAlign = TextAlign.Start) }
+                            border = BorderStroke(2.dp, if (istAusgewaehlt) KuemmeroGreen else KuemmeroGreenLight),
+                            colors = ButtonDefaults.outlinedButtonColors(
+                                containerColor = if (istAusgewaehlt) KuemmeroMint else Color.Transparent,
+                                contentColor = KuemmeroText
+                            )
+                        ) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(10.dp)
+                            ) {
+                                Text(if (istAusgewaehlt) "✓" else "○", color = KuemmeroGreen, fontWeight = FontWeight.Bold)
+                                Text(position, modifier = Modifier.weight(1f), textAlign = TextAlign.Start)
+                            }
+                        }
                     }
                 }
             },
-            confirmButton = { TextButton(onClick = { leistungsAuswahlZiel = null }) { Text("Abbrechen") } }
+            confirmButton = {
+                TextButton(onClick = { leistungsAuswahlZiel = null }) {
+                    Text("Fertig", color = KuemmeroGreen, fontWeight = FontWeight.Bold)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { leistungsAuswahlZiel = null }) { Text("Abbrechen") }
+            }
         )
     }
 }
