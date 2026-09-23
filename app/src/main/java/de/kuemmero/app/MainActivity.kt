@@ -188,6 +188,7 @@ private fun speichereRechnungImArchiv(
             return try {
                 context.contentResolver.openOutputStream(uri)?.use { out ->
                     pdf.writeTo(out)
+                    true
                 } ?: false
             } catch (_: Exception) {
                 try { DocumentsContract.deleteDocument(context.contentResolver, uri) } catch (_: Exception) {}
