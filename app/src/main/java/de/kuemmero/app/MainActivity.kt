@@ -3262,6 +3262,11 @@ fun KuemmeroApp() {
                             color = KuemmeroGreen,
                             fontWeight = FontWeight.Bold
                         )
+                        Text(
+                            "📋 Auftrag – nicht Angebot/Kostenvoranschlag",
+                            style = MaterialTheme.typography.bodyLarge,
+                            color = KuemmeroText
+                        )
                     }
                 }
                 if (auftragFormOffen) {
@@ -3366,7 +3371,7 @@ fun KuemmeroApp() {
                         OutlinedTextField(
                             value = nummer,
                             onValueChange = { if (nummerBearbeiten) nummer = it },
-                            label = { Text("Angebotsnummer") },
+                            label = { Text("Auftragsnummer") },
                             colors = feldFarben,
                             modifier = Modifier.weight(1f),
                             readOnly = !nummerBearbeiten
@@ -3402,14 +3407,6 @@ fun KuemmeroApp() {
                         leistungsdatum, { leistungsdatum = it },
                         label = { Text("Leistungsdatum") },
                         placeholder = { Text("TT.MM.JJJJ") },
-                        colors = feldFarben,
-                        modifier = Modifier.fillMaxWidth()
-                    )
-                }
-                item {
-                    OutlinedTextField(
-                        gueltigBis, { gueltigBis = it },
-                        label = { Text("Gültig bis") },
                         colors = feldFarben,
                         modifier = Modifier.fillMaxWidth()
                     )
