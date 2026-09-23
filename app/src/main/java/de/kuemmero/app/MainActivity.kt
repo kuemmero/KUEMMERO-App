@@ -670,32 +670,46 @@ private fun erstellePdf(
     c.drawText("E-Mail: ${firmenEmail.ifBlank { "bitte eintragen" }}", 40f, 204f, p)
     c.drawText(dokumentTitel, 40f, 233f, p)
     p.textSize = 12f
-    c.drawText("Angebotsnummer: $nummer", 40f, 258f, p)
+    val istAuftrag = dokumentTitel.equals("AUFTRAG", ignoreCase = true)
+    c.drawText(if (istAuftrag) "Auftragsnummer: $nummer" else "Angebotsnummer: $nummer", 40f, 258f, p)
     c.drawText("Datum: $datum", 40f, 278f, p)
-    c.drawText("Gültig bis: $gueltigBis", 40f, 298f, p)
-    c.drawText("Kunde: $kunde", 40f, 328f, p)
-    c.drawText("Straße: $strasse", 40f, 348f, p)
-    c.drawText("PLZ und Ort: $ort", 40f, 368f, p)
-    c.drawText("Leistung: $leistung", 40f, 398f, p)
-    c.drawLine(40f, 423f, 550f, 423f, p)
-    c.drawText("Arbeitszeit", 40f, 448f, p)
-    c.drawText("%.2f Std.".format(Locale.GERMANY, stunden), 250f, 448f, p)
-    c.drawText(euro(arbeitsbetrag(stunden, stundensatz)), 450f, 448f, p)
-    c.drawText("Material", 40f, 473f, p)
-    c.drawText(euro(material), 450f, 473f, p)
-    c.drawText("Fahrtkosten", 40f, 498f, p)
-    c.drawText(euro(fahrt), 450f, 498f, p)
-    if (erstellungskosten > 0.0) {
-        c.drawText("Erstellungskosten", 40f, 523f, p)
-        c.drawText(euro(erstellungskosten), 450f, 523f, p)
+    if (!istAuftrag) {
+        c.drawText("Gültig bis: $gueltigBis", 40f, 298f, p)
     }
-    c.drawLine(40f, if (erstellungskosten > 0.0) 538f else 513f, 550f, if (erstellungskosten > 0.0) 538f else 513f, p)
+    val kundenY = if (istAuftrag) 308f else 328f
+    val strasseY = if (istAuftrag) 328f else 348f
+    val ortY = if (istAuftrag) 348f else 368f
+    val leistungY = if (istAuftrag) 378f else 398f
+    val lineY = if (istAuftrag) 403f else 423f
+    val arbeitsY = if (istAuftrag) 428f else 448f
+    c.drawText("Kunde: $kunde", 40f, kundenY, p)
+    c.drawText("Straße: $strasse", 40f, strasseY, p)
+    c.drawText("PLZ und Ort: $ort", 40f, ortY, p)
+    c.drawText("Leistung: $leistung", 40f, leistungY, p)
+    c.drawLine(40f, lineY, 550f, lineY, p)
+    c.drawText("Arbeitszeit", 40f, arbeitsY, p)
+    val materialY = arbeitsY + 25f
+    val fahrtY = arbeitsY + 50f
+    val erstellungY = arbeitsY + 75f
+    val line2Y = if (erstellungskosten > 0.0) arbeitsY + 90f else arbeitsY + 65f
+    val gesamtY = if (erstellungskosten > 0.0) arbeitsY + 125f else arbeitsY + 100f
+    val hinweisY = if (erstellungskosten > 0.0) arbeitsY + 155f else arbeitsY + 130f
+    c.drawText("%.2f Std.".format(Locale.GERMANY, stunden), 250f, arbeitsY, p)
+    c.drawText(euro(arbeitsbetrag(stunden, stundensatz)), 450f, arbeitsY, p)
+    c.drawText("Material", 40f, materialY, p)
+    c.drawText(euro(material), 450f, materialY, p)
+    c.drawText("Fahrtkosten", 40f, fahrtY, p)
+    c.drawText(euro(fahrt), 450f, fahrtY, p)
+    if (erstellungskosten > 0.0) {
+        c.drawText("Erstellungskosten", 40f, erstellungY, p)
+        c.drawText(euro(erstellungskosten), 450f, erstellungY, p)
+    }
+    c.drawLine(40f, line2Y, 550f, line2Y, p)
     val gesamt = gesamtbetrag(stunden, material, fahrt, stundensatz, erstellungskosten)
     p.textSize = 18f
-    c.drawText("Gesamtsumme: ${euro(gesamt)}", 40f, if (erstellungskosten > 0.0) 573f else 548f, p)
+    c.drawText("Gesamtsumme: ${euro(gesamt)}", 40f, gesamtY, p)
     p.textSize = 11f
-    val kvHinweisY = if (erstellungskosten > 0.0) 603f else 578f
-    c.drawText("Gemäß § 19 UStG wird keine Umsatzsteuer berechnet.", 40f, kvHinweisY, p)
+    c.drawText("Gemäß § 19 UStG wird keine Umsatzsteuer berechnet.", 40f, hinweisY, p)
     val unterschriftTitelY = if (dokumentTitel.contains("KOSTENVORANSCHLAG", ignoreCase = true) && erstellungskosten > 0.0) 650f else 628f
     if (dokumentTitel.contains("KOSTENVORANSCHLAG", ignoreCase = true) && erstellungskosten > 0.0) {
         p.textSize = 11f
@@ -1567,6 +1581,7 @@ fun KuemmeroApp() {
         }
     }
 
+    // Pflichtfelder werden vor dem Speichern/Erstellen zentral geprüft.
     val feldFarben = OutlinedTextFieldDefaults.colors(
         focusedContainerColor = KuemmeroMint,
         unfocusedContainerColor = KuemmeroMint,
@@ -2118,13 +2133,13 @@ fun KuemmeroApp() {
                     context, nummer, datum, gueltigBis,
                     a.kunde, a.kundenStrasse, a.kundenOrt, a.leistung,
                     a.stunden, a.material, a.fahrt, a.stundensatz, a.unterschriftPfad, a.unterschriftDatum,
-                    a.fotosVorher, a.fotosNachher
+                    a.fotosVorher, a.fotosNachher, "AUFTRAG"
                 )
             } else {
                 erstellePdf(
                     context, nummer, datum, gueltigBis, kunde, strasse, ort, leistung,
                     zahl(stunden), zahl(material), zahl(fahrt), zahl(stundensatz, 42.0), unterschriftPfad, unterschriftDatum,
-                    fotosVorher, fotosNachher
+                    fotosVorher, fotosNachher, "AUFTRAG"
                 )
             }
             context.contentResolver.openOutputStream(uri)?.use { out -> pdf.writeTo(out) }
@@ -2145,8 +2160,19 @@ fun KuemmeroApp() {
                 val rechnungsStrasse = rechnungsPrefs.getString(FIRMENSTRASSE_KEY, "") ?: ""
                 val rechnungsPlzOrt = rechnungsPrefs.getString(FIRMENPLZORT_KEY, "") ?: ""
                 val rechnungsSteuer = rechnungsPrefs.getString(STEUERNUMMER_KEY, "") ?: ""
-                if (rechnungsStrasse.isBlank() || rechnungsPlzOrt.isBlank() || rechnungsSteuer.isBlank()) {
-                    android.widget.Toast.makeText(context, "Bitte unter Mehr zuerst Straße, PLZ/Ort und Steuernummer eintragen.", android.widget.Toast.LENGTH_LONG).show()
+                val rechnungsName = rechnungsPrefs.getString(FIRMENNAME_KEY, "") ?: ""
+                val fehlendeRechnungsfelder = mutableListOf<String>()
+                if (rechnungsName.isBlank()) fehlendeRechnungsfelder.add("Unternehmensname / Inhaber")
+                if (rechnungsStrasse.isBlank()) fehlendeRechnungsfelder.add("Unternehmensstraße / Hausnummer")
+                if (rechnungsPlzOrt.isBlank()) fehlendeRechnungsfelder.add("Unternehmens-PLZ / Ort")
+                if (rechnungsSteuer.isBlank()) fehlendeRechnungsfelder.add("Steuernummer / USt-ID / KU-IdNr.")
+                if (a.kunde.trim().isBlank()) fehlendeRechnungsfelder.add("Kundenname")
+                if (a.kundenStrasse.trim().isBlank()) fehlendeRechnungsfelder.add("Kundenadresse")
+                if (a.kundenOrt.trim().isBlank()) fehlendeRechnungsfelder.add("Kunden-PLZ / Ort")
+                if (a.leistung.trim().isBlank()) fehlendeRechnungsfelder.add("Leistung")
+                if (a.leistungsdatum.ifBlank { a.terminDatum.ifBlank { a.datum } }.trim().isBlank()) fehlendeRechnungsfelder.add("Leistungsdatum")
+                if (fehlendeRechnungsfelder.isNotEmpty()) {
+                    android.widget.Toast.makeText(context, "Rechnung nicht erstellt. Pflichtfelder fehlen: ${fehlendeRechnungsfelder.joinToString(", ")}", android.widget.Toast.LENGTH_LONG).show()
                     rechnungFuerIndex = null
                     return@rememberLauncherForActivityResult
                 }
@@ -2340,7 +2366,9 @@ fun KuemmeroApp() {
             confirmButton = {
                 TextButton(onClick = {
                     val idx = arbeitszeitAendernIndex
-                    if (idx != null) {
+                    if (arbeitszeitNeu.trim().isBlank()) {
+                        android.widget.Toast.makeText(context, "Bitte Arbeitszeit eingeben.", android.widget.Toast.LENGTH_SHORT).show()
+                    } else if (idx != null) {
                         val stundenNeu = zahl(arbeitszeitNeu)
                         val aktualisiert = auftraege[idx].copy(
                             arbeitsSekunden = (stundenNeu * 3600.0).toLong(),
@@ -2826,23 +2854,30 @@ fun KuemmeroApp() {
             title = { Text("Neuen Kunden anlegen") },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text("* Pflichtfelder", color = KuemmeroGreen, fontWeight = FontWeight.Bold)
                     OutlinedTextField(
                         neuerKundenName,
                         { neuerKundenName = it },
-                        label = { Text("Kunde") },
-                        singleLine = true
+                        label = { Text("Kunde *") },
+                        singleLine = true,
+                        isError = neuerKundenName.isBlank(),
+                        supportingText = { if (neuerKundenName.isBlank()) Text("Pflichtfeld") }
                     )
                     OutlinedTextField(
                         neuerKundenAdresse,
                         { neuerKundenAdresse = it },
-                        label = { Text("Adresse") },
-                        singleLine = true
+                        label = { Text("Adresse *") },
+                        singleLine = true,
+                        isError = neuerKundenAdresse.isBlank(),
+                        supportingText = { if (neuerKundenAdresse.isBlank()) Text("Pflichtfeld") }
                     )
                     OutlinedTextField(
                         neuerKundenOrt,
                         { neuerKundenOrt = it },
-                        label = { Text("PLZ und Ort") },
-                        singleLine = true
+                        label = { Text("PLZ und Ort *") },
+                        singleLine = true,
+                        isError = neuerKundenOrt.isBlank(),
+                        supportingText = { if (neuerKundenOrt.isBlank()) Text("Pflichtfeld") }
                     )
                     OutlinedTextField(
                         neuerKundenTelefon,
@@ -2861,9 +2896,11 @@ fun KuemmeroApp() {
                 }
             },
             confirmButton = {
-                Button(onClick = {
-                    if (neuerKundenName.isBlank()) {
-                        android.widget.Toast.makeText(context, "Bitte Kundennamen eingeben.", 0).show()
+                Button(
+                    enabled = neuerKundenName.trim().isNotBlank() && neuerKundenAdresse.trim().isNotBlank() && neuerKundenOrt.trim().isNotBlank(),
+                    onClick = {
+                    if (neuerKundenName.trim().isBlank() || neuerKundenAdresse.trim().isBlank() || neuerKundenOrt.trim().isBlank()) {
+                        android.widget.Toast.makeText(context, "Bitte alle Pflichtfelder (*) ausfüllen.", 0).show()
                     } else {
                         val k = Kunde(
                             neuerKundenName.trim(),
@@ -3353,7 +3390,7 @@ fun KuemmeroApp() {
                 item {
                     OutlinedTextField(
                         nummer, { nummer = it },
-                        label = { Text("Angebotsnummer") },
+                        label = { Text("Auftragsnummer *") },
                         colors = feldFarben,
                         modifier = Modifier.fillMaxWidth()
                     )
@@ -3361,7 +3398,7 @@ fun KuemmeroApp() {
                 item {
                     OutlinedTextField(
                         strasse, { strasse = it },
-                        label = { Text("Adresse") },
+                        label = { Text("Adresse *") },
                         colors = feldFarben,
                         modifier = Modifier.fillMaxWidth()
                     )
@@ -3369,7 +3406,7 @@ fun KuemmeroApp() {
                 item {
                     OutlinedTextField(
                         datum, { datum = it },
-                        label = { Text("Datum") },
+                        label = { Text("Datum *") },
                         colors = feldFarben,
                         modifier = Modifier.fillMaxWidth()
                     )
@@ -3377,7 +3414,7 @@ fun KuemmeroApp() {
                 item {
                     OutlinedTextField(
                         leistungsdatum, { leistungsdatum = it },
-                        label = { Text("Leistungsdatum") },
+                        label = { Text("Leistungsdatum *") },
                         placeholder = { Text("TT.MM.JJJJ") },
                         colors = feldFarben,
                         modifier = Modifier.fillMaxWidth()
@@ -3385,16 +3422,8 @@ fun KuemmeroApp() {
                 }
                 item {
                     OutlinedTextField(
-                        gueltigBis, { gueltigBis = it },
-                        label = { Text("Gültig bis") },
-                        colors = feldFarben,
-                        modifier = Modifier.fillMaxWidth()
-                    )
-                }
-                item {
-                    OutlinedTextField(
                         kunde, { kunde = it },
-                        label = { Text("Kunde") },
+                        label = { Text("Kunde *") },
                         colors = feldFarben,
                         modifier = Modifier.fillMaxWidth()
                     )
@@ -3402,7 +3431,7 @@ fun KuemmeroApp() {
                 item {
                     OutlinedTextField(
                         ort, { ort = it },
-                        label = { Text("PLZ und Ort") },
+                        label = { Text("PLZ und Ort *") },
                         colors = feldFarben,
                         modifier = Modifier.fillMaxWidth()
                     )
@@ -3421,7 +3450,7 @@ fun KuemmeroApp() {
                         }
                         OutlinedTextField(
                             leistung, { leistung = it },
-                            label = { Text("Leistung / eigene Beschreibung") },
+                            label = { Text("Leistung / eigene Beschreibung *") },
                             colors = feldFarben,
                             modifier = Modifier.fillMaxWidth()
                         )
@@ -3603,8 +3632,16 @@ fun KuemmeroApp() {
                 item {
                     Button(
                         onClick = {
-                            if (kunde.isBlank()) {
-                                android.widget.Toast.makeText(context, "Bitte Kundennamen eingeben.", 0).show()
+                            val fehlendePflichtfelder = mutableListOf<String>()
+                            if (nummer.trim().isBlank()) fehlendePflichtfelder.add("Auftragsnummer")
+                            if (datum.trim().isBlank()) fehlendePflichtfelder.add("Datum")
+                            if (leistungsdatum.trim().isBlank()) fehlendePflichtfelder.add("Leistungsdatum")
+                            if (kunde.trim().isBlank()) fehlendePflichtfelder.add("Kunde")
+                            if (strasse.trim().isBlank()) fehlendePflichtfelder.add("Adresse")
+                            if (ort.trim().isBlank()) fehlendePflichtfelder.add("PLZ und Ort")
+                            if (leistung.trim().isBlank()) fehlendePflichtfelder.add("Leistung")
+                            if (fehlendePflichtfelder.isNotEmpty()) {
+                                android.widget.Toast.makeText(context, "Bitte Pflichtfelder ausfüllen: ${fehlendePflichtfelder.joinToString(", ")}", android.widget.Toast.LENGTH_LONG).show()
                             } else {
                                 speichereOderAktualisiereKunde(
                                     context,
@@ -3714,8 +3751,17 @@ fun KuemmeroApp() {
                 item {
                     Button(
                         onClick = {
-                            if (kunde.isBlank()) {
-                                android.widget.Toast.makeText(context, "Bitte Kundennamen eingeben.", 0).show()
+                            val fehlendePflichtfelder = listOf(
+                                "Auftragsnummer" to nummer.trim(),
+                                "Datum" to datum.trim(),
+                                "Leistungsdatum" to leistungsdatum.trim(),
+                                "Kunde" to kunde.trim(),
+                                "Adresse" to strasse.trim(),
+                                "PLZ und Ort" to ort.trim(),
+                                "Leistung" to leistung.trim()
+                            ).filter { it.second.isBlank() }.map { it.first }
+                            if (fehlendePflichtfelder.isNotEmpty()) {
+                                android.widget.Toast.makeText(context, "Bitte Pflichtfelder ausfüllen: ${fehlendePflichtfelder.joinToString(", ")}", android.widget.Toast.LENGTH_LONG).show()
                             } else {
                                 pdfLauncher.launch(dokumentSpeicherIntent("application/pdf", "KÜMMERO-Angebot-$nummer.pdf"))
                             }
@@ -3724,7 +3770,7 @@ fun KuemmeroApp() {
                         shape = RoundedCornerShape(28.dp),
                         colors = ButtonDefaults.buttonColors(containerColor = KuemmeroGreenLight)
                     ) {
-                        Text("PDF-Angebot erstellen", fontWeight = FontWeight.Bold)
+                        Text("PDF-Auftrag erstellen", fontWeight = FontWeight.Bold)
                     }
                 }
 
@@ -4892,11 +4938,11 @@ fun KuemmeroApp() {
                                             color = KuemmeroGreen,
                                             fontWeight = FontWeight.Bold
                                         )
-                                        OutlinedTextField(kvNummer, { kvNummer = it }, label = { Text("Nummer") }, colors = feldFarben, modifier = Modifier.fillMaxWidth())
-                                        OutlinedTextField(kvDatum, { kvDatum = it }, label = { Text("Datum") }, colors = feldFarben, modifier = Modifier.fillMaxWidth())
-                                        OutlinedTextField(kvGueltigBis, { kvGueltigBis = it }, label = { Text("Gültig bis") }, colors = feldFarben, modifier = Modifier.fillMaxWidth())
+                                        OutlinedTextField(kvNummer, { kvNummer = it }, label = { Text("Nummer *") }, colors = feldFarben, modifier = Modifier.fillMaxWidth())
+                                        OutlinedTextField(kvDatum, { kvDatum = it }, label = { Text("Datum *") }, colors = feldFarben, modifier = Modifier.fillMaxWidth())
+                                        OutlinedTextField(kvGueltigBis, { kvGueltigBis = it }, label = { Text("Gültig bis *") }, colors = feldFarben, modifier = Modifier.fillMaxWidth())
                                         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                                            Text("Kunde", color = KuemmeroGreen, fontWeight = FontWeight.Bold)
+                                            Text("Kunde *", color = KuemmeroGreen, fontWeight = FontWeight.Bold)
                                             OutlinedButton(
                                                 onClick = { kvKundenDialog = true },
                                                 modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp),
@@ -4910,8 +4956,8 @@ fun KuemmeroApp() {
                                                 }
                                             }
                                         }
-                                        OutlinedTextField(kvStrasse, { kvStrasse = it }, label = { Text("Adresse") }, colors = feldFarben, modifier = Modifier.fillMaxWidth())
-                                        OutlinedTextField(kvOrt, { kvOrt = it }, label = { Text("PLZ und Ort") }, colors = feldFarben, modifier = Modifier.fillMaxWidth())
+                                        OutlinedTextField(kvStrasse, { kvStrasse = it }, label = { Text("Adresse *") }, colors = feldFarben, modifier = Modifier.fillMaxWidth())
+                                        OutlinedTextField(kvOrt, { kvOrt = it }, label = { Text("PLZ und Ort *") }, colors = feldFarben, modifier = Modifier.fillMaxWidth())
                                         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                                             Text("Leistungsposition", color = KuemmeroGreen, fontWeight = FontWeight.Bold)
                                             OutlinedButton(
@@ -4923,7 +4969,7 @@ fun KuemmeroApp() {
                                             ) {
                                                 Text(if (kvLeistung.isBlank()) "Position auswählen" else "Ausgewählt: $kvLeistung", fontWeight = FontWeight.Bold)
                                             }
-                                            OutlinedTextField(kvLeistung, { kvLeistung = it }, label = { Text("Leistung / eigene Beschreibung") }, colors = feldFarben, modifier = Modifier.fillMaxWidth())
+                                            OutlinedTextField(kvLeistung, { kvLeistung = it }, label = { Text("Leistung / eigene Beschreibung *") }, colors = feldFarben, modifier = Modifier.fillMaxWidth())
                                         }
                                         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                                             Text("📷 Bild vorher", color = KuemmeroGreen, fontWeight = FontWeight.Bold)
@@ -4995,8 +5041,17 @@ fun KuemmeroApp() {
                                         )
                                         Button(
                                             onClick = {
-                                                if (kvKunde.isBlank()) {
-                                                    android.widget.Toast.makeText(context, "Bitte Kundennamen eingeben.", 0).show()
+                                                val fehlendePflichtfelder = listOf(
+                                                    "KV-Nummer" to kvNummer.trim(),
+                                                    "Datum" to kvDatum.trim(),
+                                                    "Gültig bis" to kvGueltigBis.trim(),
+                                                    "Kunde" to kvKunde.trim(),
+                                                    "Adresse" to kvStrasse.trim(),
+                                                    "PLZ und Ort" to kvOrt.trim(),
+                                                    "Leistung" to kvLeistung.trim()
+                                                ).filter { it.second.isBlank() }.map { it.first }
+                                                if (fehlendePflichtfelder.isNotEmpty()) {
+                                                    android.widget.Toast.makeText(context, "Bitte Pflichtfelder ausfüllen: ${fehlendePflichtfelder.joinToString(", ")}", android.widget.Toast.LENGTH_LONG).show()
                                                 } else {
                                                     val neueKvNummer = kvNummer.trim()
                                                     val doppelteKvNummer = kostenvoranschlaege.withIndex().any {
@@ -5410,13 +5465,23 @@ fun KuemmeroApp() {
                             Card(Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = KuemmeroSurface), shape = RoundedCornerShape(18.dp)) {
                                 Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                                     Text("Unternehmensdaten für Rechnungen", style = MaterialTheme.typography.titleMedium, color = KuemmeroGreen, fontWeight = FontWeight.Bold)
-                                    OutlinedTextField(unternehmerName, { unternehmerName = it }, label = { Text("Name / Inhaber") }, colors = feldFarben, modifier = Modifier.fillMaxWidth())
-                                    OutlinedTextField(unternehmerStrasse, { unternehmerStrasse = it }, label = { Text("Straße / Hausnummer") }, colors = feldFarben, modifier = Modifier.fillMaxWidth())
-                                    OutlinedTextField(unternehmerPlzOrt, { unternehmerPlzOrt = it }, label = { Text("PLZ / Ort") }, colors = feldFarben, modifier = Modifier.fillMaxWidth())
+                                    OutlinedTextField(unternehmerName, { unternehmerName = it }, label = { Text("Name / Inhaber *") }, colors = feldFarben, modifier = Modifier.fillMaxWidth())
+                                    OutlinedTextField(unternehmerStrasse, { unternehmerStrasse = it }, label = { Text("Straße / Hausnummer *") }, colors = feldFarben, modifier = Modifier.fillMaxWidth())
+                                    OutlinedTextField(unternehmerPlzOrt, { unternehmerPlzOrt = it }, label = { Text("PLZ / Ort *") }, colors = feldFarben, modifier = Modifier.fillMaxWidth())
                                     OutlinedTextField(unternehmerTelefon, { unternehmerTelefon = it }, label = { Text("Telefon") }, colors = feldFarben, modifier = Modifier.fillMaxWidth(), keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone))
                                     OutlinedTextField(unternehmerEmail, { unternehmerEmail = it }, label = { Text("E-Mail") }, colors = feldFarben, modifier = Modifier.fillMaxWidth(), keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email))
-                                    OutlinedTextField(steuernummer, { steuernummer = it }, label = { Text("Steuernummer / USt-ID / KU-IdNr.") }, colors = feldFarben, modifier = Modifier.fillMaxWidth())
+                                    OutlinedTextField(steuernummer, { steuernummer = it }, label = { Text("Steuernummer / USt-ID / KU-IdNr. *") }, colors = feldFarben, modifier = Modifier.fillMaxWidth())
                                     Button(onClick = {
+                                        val fehlendeUnternehmensdaten = listOf(
+                                            "Name / Inhaber" to unternehmerName.trim(),
+                                            "Straße / Hausnummer" to unternehmerStrasse.trim(),
+                                            "PLZ / Ort" to unternehmerPlzOrt.trim(),
+                                            "Steuernummer / USt-ID / KU-IdNr." to steuernummer.trim()
+                                        ).filter { it.second.isBlank() }.map { it.first }
+                                        if (fehlendeUnternehmensdaten.isNotEmpty()) {
+                                            android.widget.Toast.makeText(context, "Bitte Pflichtfelder ausfüllen: ${fehlendeUnternehmensdaten.joinToString(", ")}", android.widget.Toast.LENGTH_LONG).show()
+                                            return@Button
+                                        }
                                         context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE).edit()
                                             .putString(FIRMENNAME_KEY, unternehmerName.trim())
                                             .putString(FIRMENSTRASSE_KEY, unternehmerStrasse.trim())
