@@ -5083,7 +5083,10 @@ fun KuemmeroApp() {
                                             }
                                             Text(if (leistungPos.aktiv) "Aktiv" else "Inaktiv", color = if (leistungPos.aktiv) KuemmeroGreen else KuemmeroText, fontWeight = FontWeight.Bold)
                                         }
-                                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                        Row(
+                                            Modifier.fillMaxWidth(),
+                                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                        ) {
                                             OutlinedButton(
                                                 onClick = {
                                                     if (index > 0) {
@@ -5096,6 +5099,7 @@ fun KuemmeroApp() {
                                                     }
                                                 },
                                                 enabled = index > 0,
+                                                modifier = Modifier.weight(1f),
                                                 shape = RoundedCornerShape(22.dp),
                                                 border = BorderStroke(1.5.dp, KuemmeroGreen),
                                                 colors = ButtonDefaults.outlinedButtonColors(contentColor = KuemmeroGreen)
@@ -5112,10 +5116,17 @@ fun KuemmeroApp() {
                                                     }
                                                 },
                                                 enabled = index < leistungspositionen.lastIndex,
+                                                modifier = Modifier.weight(1f),
                                                 shape = RoundedCornerShape(22.dp),
                                                 border = BorderStroke(1.5.dp, KuemmeroGreen),
                                                 colors = ButtonDefaults.outlinedButtonColors(contentColor = KuemmeroGreen)
                                             ) { Text("↓") }
+                                        }
+
+                                        Row(
+                                            Modifier.fillMaxWidth(),
+                                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                        ) {
                                             OutlinedButton(
                                                 onClick = {
                                                     leistungspositionBearbeiteIndex = index
@@ -5130,7 +5141,8 @@ fun KuemmeroApp() {
                                                 shape = RoundedCornerShape(22.dp),
                                                 border = BorderStroke(1.5.dp, KuemmeroGreen),
                                                 colors = ButtonDefaults.outlinedButtonColors(contentColor = KuemmeroGreen)
-                                            ) { Text("Bearbeiten") }
+                                            ) { Text("Bearbeiten", maxLines = 1) }
+
                                             OutlinedButton(
                                                 onClick = {
                                                     val list = leistungspositionen.toMutableList()
@@ -5142,13 +5154,15 @@ fun KuemmeroApp() {
                                                 shape = RoundedCornerShape(22.dp),
                                                 border = BorderStroke(1.5.dp, KuemmeroGreen),
                                                 colors = ButtonDefaults.outlinedButtonColors(contentColor = KuemmeroGreen)
-                                            ) { Text(if (leistungPos.aktiv) "Deaktivieren" else "Aktivieren") }
+                                            ) { Text(if (leistungPos.aktiv) "Deaktivieren" else "Aktivieren", maxLines = 1) }
+
                                             OutlinedButton(
                                                 onClick = { leistungspositionLoeschIndex = index },
+                                                modifier = Modifier.weight(0.8f),
                                                 shape = RoundedCornerShape(22.dp),
                                                 border = BorderStroke(1.5.dp, KuemmeroError),
                                                 colors = ButtonDefaults.outlinedButtonColors(contentColor = KuemmeroError)
-                                            ) { Text("Löschen") }
+                                            ) { Text("Löschen", maxLines = 1) }
                                         }
                                     }
                                 }
