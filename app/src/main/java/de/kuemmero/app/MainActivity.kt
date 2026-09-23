@@ -1743,7 +1743,7 @@ fun KuemmeroApp() {
         result.data?.data?.let { uri ->
             try {
                 val pdf = erstelleMahnung1Pdf(context, testMahnungAuftrag, testMahnung1Datum.trim(), testMahnung1Frist.trim(), zahl(testMahnung1Gebuehr), testMahnung1Text.trim())
-                context.contentResolver.openOutputStream(it)?.use { out -> pdf.writeTo(out) } ?: throw Exception("Datei konnte nicht geöffnet werden")
+                context.contentResolver.openOutputStream(uri)?.use { out -> pdf.writeTo(out) } ?: throw Exception("Datei konnte nicht geöffnet werden")
                 pdf.close()
                 testMahnung1Erstellt = true
                 testMahnung1DialogOffen = false
@@ -1763,7 +1763,7 @@ fun KuemmeroApp() {
             if (a != null) {
                 try {
                     val pdf = erstelleMahnung1Pdf(context, a, mahnung1Datum.trim(), mahnung1Frist.trim(), zahl(mahnung1Gebuehr), mahnung1Text.trim())
-                    context.contentResolver.openOutputStream(it)?.use { out -> pdf.writeTo(out) } ?: throw Exception("Datei konnte nicht geöffnet werden")
+                    context.contentResolver.openOutputStream(uri)?.use { out -> pdf.writeTo(out) } ?: throw Exception("Datei konnte nicht geöffnet werden")
                     pdf.close()
                     val aktualisiert = a.copy(
                         mahnung1Datum = mahnung1Datum.trim(),
@@ -1792,7 +1792,7 @@ fun KuemmeroApp() {
             if (a != null) {
                 try {
                     val pdf = erstelleMahnung2Pdf(context, a, mahnung2Datum.trim(), mahnung2Frist.trim(), zahl(mahnung2Gebuehr), mahnung2Text.trim())
-                    context.contentResolver.openOutputStream(it)?.use { out -> pdf.writeTo(out) } ?: throw Exception("Datei konnte nicht geöffnet werden")
+                    context.contentResolver.openOutputStream(uri)?.use { out -> pdf.writeTo(out) } ?: throw Exception("Datei konnte nicht geöffnet werden")
                     pdf.close()
                     val aktualisiert = a.copy(
                         mahnung2Datum = mahnung2Datum.trim(),
@@ -2123,7 +2123,7 @@ fun KuemmeroApp() {
                     fotosVorher, fotosNachher
                 )
             }
-            context.contentResolver.openOutputStream(it)?.use { out -> pdf.writeTo(out) }
+            context.contentResolver.openOutputStream(uri)?.use { out -> pdf.writeTo(out) }
             pdf.close()
             auftragFuerPdf = null
         }
@@ -2169,7 +2169,7 @@ fun KuemmeroApp() {
                         a.unterschriftDatum,
                         a.fotosVorher, a.fotosNachher, a.erstellungskosten
                     )
-                    context.contentResolver.openOutputStream(it)?.use { out -> pdf.writeTo(out) }
+                    context.contentResolver.openOutputStream(uri)?.use { out -> pdf.writeTo(out) }
                     pdf.close()
                     speichereRechnungsnummer(context, rechnungsnummer)
                     auftraege = auftraege.toMutableList().apply {
