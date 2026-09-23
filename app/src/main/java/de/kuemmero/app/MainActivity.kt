@@ -1187,6 +1187,21 @@ private fun KlappBereich(
     }
 }
 
+private val KUEMMERO_LEISTUNGSPOSITIONEN = listOf(
+    "Allgemeine Kleinreparatur",
+    "Möbelaufbau",
+    "Tapezieren",
+    "Rasen mähen",
+    "Haushalts- / Alltagshilfe",
+    "Schimmelbehandlung",
+    "Smart Home / Computer / Router",
+    "Elektro-/Strom-Kleinaufgabe",
+    "Anfahrt",
+    "Arbeitszeit",
+    "Material",
+    "Eigene Position"
+)
+
 private fun leistungsumfangHinweis(leistung: String): String? {
     val text = leistung.lowercase(Locale.GERMANY)
     val elektro = listOf(
@@ -1329,6 +1344,7 @@ fun KuemmeroApp() {
     var kvStrasse by remember { mutableStateOf("") }
     var kvOrt by remember { mutableStateOf("") }
     var kvLeistung by remember { mutableStateOf("") }
+    var leistungsAuswahlZiel by remember { mutableStateOf<String?>(null) }
     var kvStunden by remember { mutableStateOf("") }
     var kvMaterial by remember { mutableStateOf("") }
     var kvMaterialBonUri by remember { mutableStateOf("") }
@@ -2997,12 +3013,24 @@ fun KuemmeroApp() {
                     )
                 }
                 item {
-                    OutlinedTextField(
-                        leistung, { leistung = it },
-                        label = { Text("Leistung") },
-                        colors = feldFarben,
-                        modifier = Modifier.fillMaxWidth()
-                    )
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Text("Leistungsposition", color = KuemmeroGreen, fontWeight = FontWeight.Bold)
+                        OutlinedButton(
+                            onClick = { leistungsAuswahlZiel = "auftrag" },
+                            modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp),
+                            shape = RoundedCornerShape(26.dp),
+                            border = BorderStroke(2.dp, KuemmeroGreen),
+                            colors = ButtonDefaults.outlinedButtonColors(contentColor = KuemmeroGreen)
+                        ) {
+                            Text(if (leistung.isBlank()) "Position auswählen" else "Ausgewählt: $leistung", fontWeight = FontWeight.Bold)
+                        }
+                        OutlinedTextField(
+                            leistung, { leistung = it },
+                            label = { Text("Leistung / eigene Beschreibung") },
+                            colors = feldFarben,
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                    }
                     leistungsumfangHinweis(leistung)?.let { hinweis ->
                         Text(
                             "⚠ $hinweis",
@@ -4482,7 +4510,19 @@ fun KuemmeroApp() {
                                         }
                                         OutlinedTextField(kvStrasse, { kvStrasse = it }, label = { Text("Adresse") }, colors = feldFarben, modifier = Modifier.fillMaxWidth())
                                         OutlinedTextField(kvOrt, { kvOrt = it }, label = { Text("PLZ und Ort") }, colors = feldFarben, modifier = Modifier.fillMaxWidth())
-                                        OutlinedTextField(kvLeistung, { kvLeistung = it }, label = { Text("Leistung") }, colors = feldFarben, modifier = Modifier.fillMaxWidth())
+                                        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                            Text("Leistungsposition", color = KuemmeroGreen, fontWeight = FontWeight.Bold)
+                                            OutlinedButton(
+                                                onClick = { leistungsAuswahlZiel = "kv" },
+                                                modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp),
+                                                shape = RoundedCornerShape(26.dp),
+                                                border = BorderStroke(2.dp, KuemmeroGreen),
+                                                colors = ButtonDefaults.outlinedButtonColors(contentColor = KuemmeroGreen)
+                                            ) {
+                                                Text(if (kvLeistung.isBlank()) "Position auswählen" else "Ausgewählt: $kvLeistung", fontWeight = FontWeight.Bold)
+                                            }
+                                            OutlinedTextField(kvLeistung, { kvLeistung = it }, label = { Text("Leistung / eigene Beschreibung") }, colors = feldFarben, modifier = Modifier.fillMaxWidth())
+                                        }
                                         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                                             Text("📷 Bild vorher", color = KuemmeroGreen, fontWeight = FontWeight.Bold)
                                             OutlinedButton(
@@ -5046,5 +5086,31 @@ fun KuemmeroApp() {
             }
         }
     }
+
+    if (leistungsAuswahlZiel != null) {
+        AlertDialog(
+            onDismissRequest = { leistungsAuswahlZiel = null },
+            title = { Text("Leistungsposition auswählen") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    KUEMMERO_LEISTUNGSPOSITIONEN.forEach { position ->
+                        OutlinedButton(
+                            onClick = {
+                                if (leistungsAuswahlZiel == "auftrag") leistung = position
+                                if (leistungsAuswahlZiel == "kv") kvLeistung = position
+                                leistungsAuswahlZiel = null
+                            },
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = RoundedCornerShape(18.dp),
+                            border = BorderStroke(1.5.dp, KuemmeroGreen),
+                            colors = ButtonDefaults.outlinedButtonColors(contentColor = KuemmeroText)
+                        ) { Text(position, modifier = Modifier.fillMaxWidth(), textAlign = TextAlign.Start) }
+                    }
+                }
+            },
+            confirmButton = { TextButton(onClick = { leistungsAuswahlZiel = null }) { Text("Abbrechen") } }
+        )
+    }
 }
-                                     }
+
+}
