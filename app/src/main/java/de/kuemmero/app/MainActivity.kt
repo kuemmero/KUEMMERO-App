@@ -5418,6 +5418,42 @@ fun KuemmeroApp() {
                             }
                         }
                         item {
+                            Card(
+                                Modifier.fillMaxWidth(),
+                                colors = CardDefaults.cardColors(containerColor = KuemmeroSurface),
+                                shape = RoundedCornerShape(18.dp)
+                            ) {
+                                Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                    Text("💶 Stundensatz", style = MaterialTheme.typography.titleMedium, color = KuemmeroGreen, fontWeight = FontWeight.Bold)
+                                    OutlinedTextField(
+                                        value = stundensatz,
+                                        onValueChange = { stundensatz = it },
+                                        label = { Text("Stundensatz (€ / Stunde)") },
+                                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                                        colors = feldFarben,
+                                        modifier = Modifier.fillMaxWidth()
+                                    )
+                                    Button(
+                                        onClick = {
+                                            val wert = zahl(stundensatz, 42.0)
+                                            stundensatz = String.format(Locale.GERMANY, "%.2f", wert)
+                                            context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+                                                .edit()
+                                                .putString(STUNDENSATZ_KEY, String.format(Locale.US, "%.2f", wert))
+                                                .apply()
+                                            android.widget.Toast.makeText(context, "Stundensatz gespeichert: ${euro(wert)}/Stunde", 0).show()
+                                        },
+                                        modifier = Modifier.fillMaxWidth()
+                                    ) { Text("Stundensatz speichern", fontWeight = FontWeight.Bold) }
+                                    Text(
+                                        "Der gespeicherte Satz wird für neue Aufträge und Kostenvoranschläge als Standard verwendet. Bereits gespeicherte Aufträge bleiben unverändert.",
+                                        color = KuemmeroText,
+                                        fontSize = 12.sp
+                                    )
+                                }
+                            }
+                        }
+                        item {
                             OutlinedButton(
                                 onClick = { hauptseite = "Kalender" },
                                 modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp),
