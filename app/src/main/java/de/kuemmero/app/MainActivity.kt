@@ -238,6 +238,7 @@ private const val PREFS_NAME = "kuemmero_speicher"
 private const val AUFTRAEGE_KEY = "auftraege"
 private const val KUNDEN_KEY = "kunden"
 private const val STUNDENSATZ_KEY = "stundensatz"
+private const val FAHRTKOSTEN_PRO_KM_KEY = "fahrtkosten_pro_km"
 private const val BACKUP_URI_KEY = "backup_uri"
 private const val BACKUP_LAST_SUCCESS_KEY = "backup_last_success"
 private const val BACKUP_PRE_RESTORE_FILE = "kuemmero_vor_restore_backup.json"
@@ -1486,7 +1487,8 @@ fun KuemmeroApp() {
     var stunden by remember { mutableStateOf("") }
     var material by remember { mutableStateOf("") }
     var materialBonUri by remember { mutableStateOf("") }
-    var fahrt by remember { mutableStateOf("") }
+    var fahrtKm by remember { mutableStateOf("") }
+    var fahrtKostenProKm by remember { mutableStateOf(context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE).getString(FAHRTKOSTEN_PRO_KM_KEY, "0.40") ?: "0.40") }
     var stundensatz by remember {
         mutableStateOf(
             context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
@@ -1574,7 +1576,7 @@ fun KuemmeroApp() {
     var kvMaterial by remember { mutableStateOf("") }
     var kvMaterialBonUri by remember { mutableStateOf("") }
     var kvFotosVorher by remember { mutableStateOf<List<String>>(emptyList()) }
-    var kvFahrt by remember { mutableStateOf("") }
+    var kvFahrtKm by remember { mutableStateOf("") }
     var kvStundensatz by remember { mutableStateOf(context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE).getString(STUNDENSATZ_KEY, "42.00") ?: "42.00") }
     var kvErstellungskosten by remember { mutableStateOf("") }
     var kvLoeschIndex by remember { mutableStateOf<Int?>(null) }
@@ -2270,7 +2272,7 @@ fun KuemmeroApp() {
 
     val arbeitsstunden = zahl(stunden)
     val materialKosten = zahl(material)
-    val fahrtKosten = zahl(fahrt)
+    val fahrtKosten = runde2(zahl(fahrtKm) * zahl(fahrtKostenProKm, 0.40))
     val rate = zahl(stundensatz, 42.0)
     val gesamt = gesamtbetrag(arbeitsstunden, materialKosten, fahrtKosten, rate)
     val umsatz = auftraege.sumOf { gesamtbetrag(it.stunden, it.material, it.fahrt, it.stundensatz, it.erstellungskosten) }
@@ -3624,12 +3626,15 @@ fun KuemmeroApp() {
                 }
                 item {
                     OutlinedTextField(
-                        fahrt, { fahrt = it; ungespeicherteAenderungen = true },
-                        label = { Text("Fahrtkosten (€)") },
+                        fahrtKm, { fahrtKm = it; ungespeicherteAenderungen = true },
+                        label = { Text("Kilometer") },
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
                         colors = feldFarben,
                         modifier = Modifier.fillMaxWidth()
                     )
+                }
+                item {
+                    Text("Fahrkosten: ${euro(fahrtKosten)} (${zahl(fahrtKm)} km × ${euro(zahl(fahrtKostenProKm, 0.40))}/km)", color = KuemmeroGreen, fontWeight = FontWeight.SemiBold)
                 }
                 item {
                     OutlinedTextField(
@@ -3800,7 +3805,7 @@ fun KuemmeroApp() {
                                 stunden = ""
                                 material = ""
                                 materialBonUri = ""
-                                fahrt = ""
+                                fahrtKm = ""
                                 status = "Offen"
                                 zahlungsstatus = "Offen"
                                 bezahltAm = ""
@@ -3836,7 +3841,7 @@ fun KuemmeroApp() {
                                 leistung = ""
                                 stunden = ""
                                 material = ""
-                                fahrt = ""
+                                fahrtKm = ""
                                 status = "Offen"
                                 zahlungsstatus = "Offen"
                                 bezahltAm = ""
@@ -4005,7 +4010,7 @@ fun KuemmeroApp() {
                                 stunden = ""
                                 material = ""
                                 materialBonUri = ""
-                                fahrt = ""
+                                fahrtKm = ""
                                 status = "Offen"
                                 zahlungsstatus = "Offen"
                                 bezahltAm = ""
@@ -4369,7 +4374,7 @@ fun KuemmeroApp() {
                                     stunden = a.stunden.toString().replace(".", ",")
                                     material = a.material.toString().replace(".", ",")
                                     materialBonUri = a.materialBonUri
-                                    fahrt = a.fahrt.toString().replace(".", ",")
+                                    fahrtKm = if (zahl(fahrtKostenProKm, 0.40) > 0.0) (a.fahrt / zahl(fahrtKostenProKm, 0.40)).toString().replace(".", ",") else ""
                                     stundensatz = a.stundensatz.toString().replace(".", ",")
                                     status = a.status
                                     zahlungsstatus = a.zahlungsstatus
@@ -4696,7 +4701,7 @@ fun KuemmeroApp() {
                                         leistungsdatum = datumJetzt
                                         gueltigBis = ""
                                         kunde = ""; strasse = ""; ort = ""; leistung = ""
-                                        stunden = ""; material = ""; materialBonUri = ""; fahrt = ""
+                                        stunden = ""; material = ""; materialBonUri = ""; fahrtKm = ""
                                         status = "Offen"; zahlungsstatus = "Offen"; bezahltAm = ""
                                         terminDatum = ""; terminUhrzeit = ""; notiz = ""
                                         fotosVorher = emptyList(); fotosNachher = emptyList()
@@ -4898,7 +4903,7 @@ fun KuemmeroApp() {
                                         kvMaterial = ""
                                         kvMaterialBonUri = ""
                                         kvFotosVorher = emptyList()
-                                        kvFahrt = ""
+                                        kvFahrtKm = ""
                                         kvFormOffen = true
                                     },
                                     modifier = Modifier.fillMaxWidth().heightIn(min = 54.dp),
@@ -4956,7 +4961,7 @@ fun KuemmeroApp() {
                                                     kvMaterial = k.material.toString().replace(".", ",")
                                                     kvMaterialBonUri = k.materialBonUri
                                                     kvFotosVorher = k.fotosVorher
-                                                    kvFahrt = k.fahrt.toString().replace(".", ",")
+                                                    kvFahrtKm = if (zahl(fahrtKostenProKm, 0.40) > 0.0) (k.fahrt / zahl(fahrtKostenProKm, 0.40)).toString().replace(".", ",") else ""
                                                     kvStundensatz = k.stundensatz.toString().replace(".", ",")
                                                     kvErstellungskosten = k.erstellungskosten.toString().replace(".", ",")
                                                     kvFormOffen = true
@@ -5129,7 +5134,8 @@ fun KuemmeroApp() {
                                                 }
                                             }
                                         }
-                                        OutlinedTextField(kvFahrt, { kvFahrt = it }, label = { Text("Fahrtkosten (€)") }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal), colors = feldFarben, modifier = Modifier.fillMaxWidth())
+                                        OutlinedTextField(kvFahrtKm, { kvFahrtKm = it }, label = { Text("Kilometer") }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal), colors = feldFarben, modifier = Modifier.fillMaxWidth())
+                                        Text("Fahrkosten: ${euro(runde2(zahl(kvFahrtKm) * zahl(fahrtKostenProKm, 0.40)))} (${zahl(kvFahrtKm)} km × ${euro(zahl(fahrtKostenProKm, 0.40))}/km)", color = KuemmeroGreen, fontWeight = FontWeight.SemiBold)
                                         OutlinedTextField(kvStundensatz, { kvStundensatz = it }, label = { Text("Stundensatz (€ / Stunde)") }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal), colors = feldFarben, modifier = Modifier.fillMaxWidth())
                                         OutlinedTextField(kvErstellungskosten, { kvErstellungskosten = it }, label = { Text("Erstellungskosten (€)") }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal), colors = feldFarben, modifier = Modifier.fillMaxWidth())
                                         if (zahl(kvErstellungskosten) > 0.0) {
@@ -5141,7 +5147,7 @@ fun KuemmeroApp() {
                                             )
                                         }
                                         Text(
-                                            "Gesamtsumme: ${euro(gesamtbetrag(zahl(kvStunden), zahl(kvMaterial), zahl(kvFahrt), zahl(kvStundensatz, 42.0), zahl(kvErstellungskosten)))}",
+                                            "Gesamtsumme: ${euro(gesamtbetrag(zahl(kvStunden), zahl(kvMaterial), runde2(zahl(kvFahrtKm) * zahl(fahrtKostenProKm, 0.40)), zahl(kvStundensatz, 42.0), zahl(kvErstellungskosten)))}",
                                             style = MaterialTheme.typography.titleLarge,
                                             color = KuemmeroGreen,
                                             fontWeight = FontWeight.Bold
@@ -5172,7 +5178,7 @@ fun KuemmeroApp() {
                                                         val k = Kostenvoranschlag(
                                                             neueKvNummer, kvDatum.trim(), kvGueltigBis.trim(),
                                                             kvKunde.trim(), kvStrasse.trim(), kvOrt.trim(), kvLeistung.trim(),
-                                                            zahl(kvStunden), zahl(kvMaterial), zahl(kvFahrt), zahl(kvStundensatz, 42.0),
+                                                            zahl(kvStunden), zahl(kvMaterial), runde2(zahl(kvFahrtKm) * zahl(fahrtKostenProKm, 0.40)), zahl(kvStundensatz, 42.0),
                                                             kvMaterialBonUri, kvFotosVorher, zahl(kvErstellungskosten)
                                                         )
                                                         val list = kostenvoranschlaege.toMutableList()
@@ -5565,6 +5571,34 @@ fun KuemmeroApp() {
                                     OutlinedButton(onClick = { sicherungBestaetigung = true }, modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp), shape = RoundedCornerShape(26.dp), border = BorderStroke(2.dp, KuemmeroGreen), colors = ButtonDefaults.outlinedButtonColors(contentColor = KuemmeroGreen)) { Text("Sicherung speichern / aktualisieren") }
                                     OutlinedButton(onClick = { dropboxBestaetigung = true }, modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp), shape = RoundedCornerShape(26.dp), border = BorderStroke(2.dp, KuemmeroGreen), colors = ButtonDefaults.outlinedButtonColors(contentColor = KuemmeroGreen)) { Text("☁️ Jetzt in Dropbox sichern") }
                                     Button(onClick = { restoreBackup.launch(arrayOf("application/json", "text/plain", "application/octet-stream")) }, modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp), shape = RoundedCornerShape(26.dp), colors = ButtonDefaults.buttonColors(containerColor = KuemmeroGreenLight)) { Text("Daten wiederherstellen", fontWeight = FontWeight.Bold) }
+                                }
+                            }
+                        }
+                        item {
+                            Card(Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = KuemmeroSurface), shape = RoundedCornerShape(18.dp)) {
+                                Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                    Text("Fahrkosten", style = MaterialTheme.typography.titleMedium, color = KuemmeroGreen, fontWeight = FontWeight.Bold)
+                                    Text("Preis pro Kilometer für neue Aufträge und Kostenvoranschläge.", color = KuemmeroText, fontSize = 13.sp)
+                                    OutlinedTextField(
+                                        value = fahrtKostenProKm,
+                                        onValueChange = { fahrtKostenProKm = it },
+                                        label = { Text("Fahrkosten pro km (€)") },
+                                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                                        colors = feldFarben,
+                                        modifier = Modifier.fillMaxWidth()
+                                    )
+                                    Button(
+                                        onClick = {
+                                            val wert = zahl(fahrtKostenProKm, 0.40)
+                                            fahrtKostenProKm = String.format(Locale.GERMANY, "%.2f", wert)
+                                            context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE).edit()
+                                                .putString(FAHRTKOSTEN_PRO_KM_KEY, fahrtKostenProKm.replace(',', '.'))
+                                                .apply()
+                                            android.widget.Toast.makeText(context, "Fahrkosten gespeichert: ${euro(wert)}/km", android.widget.Toast.LENGTH_SHORT).show()
+                                        },
+                                        modifier = Modifier.fillMaxWidth(),
+                                        colors = ButtonDefaults.buttonColors(containerColor = KuemmeroGreen)
+                                    ) { Text("Fahrkosten speichern", fontWeight = FontWeight.Bold) }
                                 }
                             }
                         }
