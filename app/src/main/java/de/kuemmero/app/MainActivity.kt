@@ -1022,179 +1022,143 @@ private fun erstelleRechnungPdf(
     return pdf
 }
 
-private fun erstelleMahnung1Pdf(
+private fun erstelleMahnungPdf(
     context: Context,
     auftrag: Auftrag,
+    mahnungsStufe: Int,
     mahnungDatum: String,
     zahlungsfrist: String,
     mahngebuehr: Double,
     eigenerText: String
 ): PdfDocument {
     val pdf = PdfDocument()
-    val page = pdf.startPage(PdfDocument.PageInfo.Builder(595, 842, 1).create())
-    val c = page.canvas
-    val p = Paint(Paint.ANTI_ALIAS_FLAG)
     val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
     val firmenName = prefs.getString(FIRMENNAME_KEY, "") ?: ""
     val firmenStrasse = prefs.getString(FIRMENSTRASSE_KEY, "") ?: ""
     val firmenPlzOrt = prefs.getString(FIRMENPLZORT_KEY, "") ?: ""
     val firmenTelefon = prefs.getString(FIRMENTELEFON_KEY, "") ?: ""
     val firmenEmail = prefs.getString(FIRMENEMAIL_KEY, "") ?: ""
+    val gruen = android.graphics.Color.rgb(47, 143, 87)
+    val mint = android.graphics.Color.rgb(232, 246, 238)
+    val dunkel = android.graphics.Color.rgb(45, 55, 50)
 
-    p.textSize = 16f
-    p.isFakeBoldText = true
-    c.drawText(firmenName.ifBlank { "KÜMMERO" }, 40f, 55f, p)
-    p.isFakeBoldText = false
-    p.textSize = 10f
-    c.drawText(firmenStrasse, 40f, 75f, p)
-    c.drawText(firmenPlzOrt, 40f, 90f, p)
-    if (firmenTelefon.isNotBlank()) c.drawText("Telefon: $firmenTelefon", 40f, 105f, p)
-    if (firmenEmail.isNotBlank()) c.drawText("E-Mail: $firmenEmail", 40f, 120f, p)
+    val page = pdf.startPage(PdfDocument.PageInfo.Builder(595, 842, 1).create())
+    val c = page.canvas
+    val p = Paint(Paint.ANTI_ALIAS_FLAG)
 
+    p.style = Paint.Style.FILL
+    p.color = gruen
+    c.drawRect(0f, 0f, 595f, 92f, p)
+    p.color = android.graphics.Color.WHITE
+    p.textSize = 28f
+    p.typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+    c.drawText("KÜMMERO", 36f, 42f, p)
+    p.textSize = 12f
+    p.typeface = Typeface.DEFAULT
+    c.drawText("Haus & Alltag – wir kümmern uns.", 36f, 65f, p)
+
+    p.color = dunkel
+    p.textSize = 9f
+    c.drawText(firmenName.ifBlank { "Name / Inhaber: bitte eintragen" }, 365f, 24f, p)
+    c.drawText(firmenStrasse, 365f, 39f, p)
+    c.drawText(firmenPlzOrt, 365f, 54f, p)
+    if (firmenTelefon.isNotBlank()) c.drawText("Tel.: $firmenTelefon", 365f, 69f, p)
+    if (firmenEmail.isNotBlank()) c.drawText("E-Mail: $firmenEmail", 365f, 84f, p)
+
+    var y = 130f
+    p.color = gruen
     p.textSize = 20f
-    p.isFakeBoldText = true
-    c.drawText("1. MAHNUNG", 40f, 170f, p)
-    p.isFakeBoldText = false
+    p.typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+    c.drawText("${mahnungsStufe}. MAHNUNG", 36f, y, p)
+    p.typeface = Typeface.DEFAULT
+    p.color = dunkel
     p.textSize = 11f
-    c.drawText("Mahndatum: $mahnungDatum", 40f, 195f, p)
-    c.drawText("Rechnungsnummer: ${auftrag.rechnungsnummer}", 40f, 215f, p)
-    c.drawText("Rechnungsdatum: ${auftrag.rechnungsdatum}", 40f, 235f, p)
-    c.drawText("Ursprünglich fällig am: ${auftrag.faelligAm}", 40f, 255f, p)
-    c.drawText("Kunde: ${auftrag.kunde}", 40f, 285f, p)
-    c.drawText("Adresse: ${auftrag.kundenStrasse}", 40f, 305f, p)
-    c.drawText("PLZ und Ort: ${auftrag.kundenOrt}", 40f, 325f, p)
+    y += 30f
+    c.drawText("Mahndatum: $mahnungDatum", 36f, y, p)
+    y += 18f
+    c.drawText("Rechnungsnummer: ${auftrag.rechnungsnummer.ifBlank { "—" }}", 36f, y, p)
+    y += 18f
+    c.drawText("Rechnungsdatum: ${auftrag.rechnungsdatum.ifBlank { "—" }}", 36f, y, p)
+    y += 18f
+    c.drawText("Ursprünglich fällig am: ${auftrag.faelligAm.ifBlank { "—" }}", 36f, y, p)
 
+    y += 30f
+    p.color = mint
+    c.drawRoundRect(30f, y - 18f, 565f, y + 65f, 10f, 10f, p)
+    p.color = gruen
+    p.textSize = 13f
+    p.typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+    c.drawText("Kunde", 44f, y + 4f, p)
+    p.color = dunkel
+    p.textSize = 11f
+    p.typeface = Typeface.DEFAULT
+    c.drawText(auftrag.kunde.ifBlank { "—" }, 44f, y + 24f, p)
+    c.drawText(auftrag.kundenStrasse.ifBlank { "—" }, 44f, y + 42f, p)
+    c.drawText(auftrag.kundenOrt.ifBlank { "—" }, 300f, y + 42f, p)
+
+    y += 100f
     val rechnungsbetrag = gesamtbetrag(auftrag.stunden, auftrag.material, auftrag.fahrt, auftrag.stundensatz, auftrag.erstellungskosten)
     val gesamt = runde2(rechnungsbetrag + mahngebuehr)
+    p.color = gruen
     p.textSize = 13f
-    p.isFakeBoldText = true
-    c.drawText("Offener Rechnungsbetrag: ${euro(rechnungsbetrag)}", 40f, 365f, p)
-    var y = 390f
-    if (mahngebuehr > 0.0) {
-        c.drawText("Mahngebühr: ${euro(mahngebuehr)}", 40f, y, p)
-        y += 25f
-        c.drawText("Gesamt zu zahlen: ${euro(gesamt)}", 40f, y, p)
-        y += 40f
-    } else {
-        c.drawText("Gesamt zu zahlen: ${euro(gesamt)}", 40f, y, p)
-        y += 40f
-    }
-    p.isFakeBoldText = false
+    p.typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+    c.drawText("Zahlungsübersicht", 36f, y, p)
+    y += 24f
+    p.color = dunkel
+    p.typeface = Typeface.DEFAULT
     p.textSize = 11f
+    c.drawText("Offener Rechnungsbetrag", 44f, y, p)
+    c.drawText(euro(rechnungsbetrag), 430f, y, p)
+    y += 20f
+    c.drawText("Mahngebühr", 44f, y, p)
+    c.drawText(euro(mahngebuehr), 430f, y, p)
+    y += 28f
+    p.color = mint
+    c.drawRoundRect(36f, y - 18f, 555f, y + 18f, 8f, 8f, p)
+    p.color = gruen
+    p.typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+    c.drawText("Gesamt zu zahlen", 48f, y + 5f, p)
+    c.drawText(euro(gesamt), 430f, y + 5f, p)
+    y += 55f
 
+    p.color = dunkel
+    p.typeface = Typeface.DEFAULT
+    p.textSize = 11f
     val text = eigenerText.ifBlank {
-        "Zu unserer Rechnung ${auftrag.rechnungsnummer} ist bisher kein Zahlungseingang festgestellt worden. Bitte begleichen Sie den offenen Betrag spätestens bis zum $zahlungsfrist."
+        "Zu unserer Rechnung ${auftrag.rechnungsnummer.ifBlank { "—" }} ist bisher kein Zahlungseingang festgestellt worden. Bitte begleichen Sie den offenen Betrag spätestens bis zum $zahlungsfrist."
     }
-    val words = text.split(Regex("\\s+"))
     var line = ""
-    for (word in words) {
+    for (word in text.split(Regex("\\s+"))) {
         val test = if (line.isBlank()) word else "$line $word"
         if (p.measureText(test) > 510f) {
-            c.drawText(line, 40f, y, p)
+            c.drawText(line, 42f, y, p)
             y += 17f
             line = word
         } else line = test
     }
-    if (line.isNotBlank()) {
-        c.drawText(line, 40f, y, p)
-        y += 17f
-    }
+    if (line.isNotBlank()) { c.drawText(line, 42f, y, p); y += 17f }
+    y += 20f
+    c.drawText("Neue Zahlungsfrist: $zahlungsfrist", 42f, y, p)
+    y += 32f
+    c.drawText("Mit freundlichen Grüßen", 42f, y, p)
     y += 18f
-    c.drawText("Neue Zahlungsfrist: $zahlungsfrist", 40f, y, p)
-    y += 30f
-    c.drawText("Mit freundlichen Grüßen", 40f, y, p)
-    y += 18f
-    c.drawText(firmenName.ifBlank { "KÜMMERO" }, 40f, y, p)
+    p.color = gruen
+    p.typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+    c.drawText(firmenName.ifBlank { "KÜMMERO" }, 42f, y, p)
+    p.typeface = Typeface.DEFAULT
+    p.textSize = 9f
+    c.drawText("KÜMMERO · Haus & Alltag – wir kümmern uns.", 36f, 815f, p)
     pdf.finishPage(page)
     return pdf
 }
+
+private fun erstelleMahnung1Pdf(
+    context: Context, auftrag: Auftrag, mahnungDatum: String, zahlungsfrist: String, mahngebuehr: Double, eigenerText: String
+): PdfDocument = erstelleMahnungPdf(context, auftrag, 1, mahnungDatum, zahlungsfrist, mahngebuehr, eigenerText)
 
 private fun erstelleMahnung2Pdf(
-    context: Context,
-    auftrag: Auftrag,
-    mahnungDatum: String,
-    zahlungsfrist: String,
-    mahngebuehr: Double,
-    eigenerText: String
-): PdfDocument {
-    val pdf = PdfDocument()
-    val page = pdf.startPage(PdfDocument.PageInfo.Builder(595, 842, 1).create())
-    val c = page.canvas
-    val p = Paint(Paint.ANTI_ALIAS_FLAG)
-    val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-    val firmenName = prefs.getString(FIRMENNAME_KEY, "") ?: ""
-    val firmenStrasse = prefs.getString(FIRMENSTRASSE_KEY, "") ?: ""
-    val firmenPlzOrt = prefs.getString(FIRMENPLZORT_KEY, "") ?: ""
-    val firmenTelefon = prefs.getString(FIRMENTELEFON_KEY, "") ?: ""
-    val firmenEmail = prefs.getString(FIRMENEMAIL_KEY, "") ?: ""
-
-    p.textSize = 16f
-    p.isFakeBoldText = true
-    c.drawText(firmenName.ifBlank { "KÜMMERO" }, 40f, 55f, p)
-    p.isFakeBoldText = false
-    p.textSize = 10f
-    c.drawText(firmenStrasse, 40f, 75f, p)
-    c.drawText(firmenPlzOrt, 40f, 90f, p)
-    if (firmenTelefon.isNotBlank()) c.drawText("Telefon: $firmenTelefon", 40f, 105f, p)
-    if (firmenEmail.isNotBlank()) c.drawText("E-Mail: $firmenEmail", 40f, 120f, p)
-
-    p.textSize = 20f
-    p.isFakeBoldText = true
-    c.drawText("2. MAHNUNG", 40f, 170f, p)
-    p.isFakeBoldText = false
-    p.textSize = 11f
-    c.drawText("Mahndatum: $mahnungDatum", 40f, 195f, p)
-    c.drawText("Rechnungsnummer: ${auftrag.rechnungsnummer}", 40f, 215f, p)
-    c.drawText("Rechnungsdatum: ${auftrag.rechnungsdatum}", 40f, 235f, p)
-    c.drawText("Ursprünglich fällig am: ${auftrag.faelligAm}", 40f, 255f, p)
-    c.drawText("Kunde: ${auftrag.kunde}", 40f, 285f, p)
-    c.drawText("Adresse: ${auftrag.kundenStrasse}", 40f, 305f, p)
-    c.drawText("PLZ und Ort: ${auftrag.kundenOrt}", 40f, 325f, p)
-
-    val rechnungsbetrag = gesamtbetrag(auftrag.stunden, auftrag.material, auftrag.fahrt, auftrag.stundensatz, auftrag.erstellungskosten)
-    val gesamt = runde2(rechnungsbetrag + mahngebuehr)
-    p.textSize = 13f
-    p.isFakeBoldText = true
-    c.drawText("Offener Rechnungsbetrag: ${euro(rechnungsbetrag)}", 40f, 365f, p)
-    var y = 390f
-    if (mahngebuehr > 0.0) {
-        c.drawText("Mahngebühr: ${euro(mahngebuehr)}", 40f, y, p)
-        y += 25f
-        c.drawText("Gesamt zu zahlen: ${euro(gesamt)}", 40f, y, p)
-        y += 40f
-    } else {
-        c.drawText("Gesamt zu zahlen: ${euro(gesamt)}", 40f, y, p)
-        y += 40f
-    }
-    p.isFakeBoldText = false
-    p.textSize = 11f
-
-    val text = eigenerText.ifBlank {
-        "Zu unserer Rechnung ${auftrag.rechnungsnummer} ist bisher kein Zahlungseingang festgestellt worden. Bitte begleichen Sie den offenen Betrag spätestens bis zum $zahlungsfrist."
-    }
-    val words = text.split(Regex("\\s+"))
-    var line = ""
-    for (word in words) {
-        val test = if (line.isBlank()) word else "$line $word"
-        if (p.measureText(test) > 510f) {
-            c.drawText(line, 40f, y, p)
-            y += 17f
-            line = word
-        } else line = test
-    }
-    if (line.isNotBlank()) {
-        c.drawText(line, 40f, y, p)
-        y += 17f
-    }
-    y += 18f
-    c.drawText("Neue Zahlungsfrist: $zahlungsfrist", 40f, y, p)
-    y += 30f
-    c.drawText("Mit freundlichen Grüßen", 40f, y, p)
-    y += 18f
-    c.drawText(firmenName.ifBlank { "KÜMMERO" }, 40f, y, p)
-    pdf.finishPage(page)
-    return pdf
-}
+    context: Context, auftrag: Auftrag, mahnungDatum: String, zahlungsfrist: String, mahngebuehr: Double, eigenerText: String
+): PdfDocument = erstelleMahnungPdf(context, auftrag, 2, mahnungDatum, zahlungsfrist, mahngebuehr, eigenerText)
 
 private fun druckeRechnungPdf(context: Context, auftrag: Auftrag) {
     val printManager = context.getSystemService(Context.PRINT_SERVICE) as PrintManager
@@ -1278,35 +1242,56 @@ private fun druckeRechnungPdf(context: Context, auftrag: Auftrag) {
 
 private fun erstelleProtokollPdf(context: Context, auftrag: Auftrag): PdfDocument {
     val pdf = PdfDocument()
-    val page = pdf.startPage(PdfDocument.PageInfo.Builder(595, 842, 1).create())
-    val c = page.canvas
-    val paint = Paint(Paint.ANTI_ALIAS_FLAG)
     val gruen = android.graphics.Color.rgb(47, 143, 87)
-    val mint = android.graphics.Color.rgb(220, 243, 230)
-    val text = android.graphics.Color.rgb(45, 55, 50)
-    var y = 55f
+    val mint = android.graphics.Color.rgb(232, 246, 238)
+    val dunkel = android.graphics.Color.rgb(45, 55, 50)
+    val protokollText = auftrag.protokoll.ifBlank { "Noch kein Auftragsprotokoll eingetragen." }
+    val rawLines = protokollText.replace("\r\n", "\n").split("\n")
 
-    paint.color = gruen
-    paint.style = Paint.Style.FILL
-    c.drawRect(0f, 0f, 595f, 92f, paint)
-    paint.color = android.graphics.Color.WHITE
-    paint.textSize = 28f
-    paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
-    c.drawText("KÜMMERO", 36f, 42f, paint)
-    paint.textSize = 12f
-    paint.typeface = Typeface.DEFAULT
-    c.drawText("Haus & Alltag – wir kümmern uns.", 36f, 65f, paint)
+    var pageNumber = 1
+    var page = pdf.startPage(PdfDocument.PageInfo.Builder(595, 842, pageNumber).create())
+    var c = page.canvas
+    val p = Paint(Paint.ANTI_ALIAS_FLAG)
 
-    y = 125f
-    paint.color = gruen
-    paint.textSize = 23f
-    paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
-    c.drawText("AUFTRAGSPROTOKOLL", 36f, y, paint)
+    fun header() {
+        p.style = Paint.Style.FILL
+        p.color = gruen
+        c.drawRect(0f, 0f, 595f, 92f, p)
+        p.color = android.graphics.Color.WHITE
+        p.textSize = 28f
+        p.typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+        c.drawText("KÜMMERO", 36f, 42f, p)
+        p.textSize = 12f
+        p.typeface = Typeface.DEFAULT
+        c.drawText("Haus & Alltag – wir kümmern uns.", 36f, 65f, p)
+        p.color = gruen
+        p.textSize = 20f
+        p.typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+        c.drawText("AUFTRAGSPROTOKOLL", 36f, 125f, p)
+        p.typeface = Typeface.DEFAULT
+    }
 
-    y += 34f
-    paint.color = text
-    paint.textSize = 12f
-    paint.typeface = Typeface.DEFAULT
+    fun footer() {
+        p.color = gruen
+        p.textSize = 9f
+        p.typeface = Typeface.DEFAULT
+        c.drawText("KÜMMERO · Haus & Alltag – wir kümmern uns. · Seite $pageNumber", 36f, 815f, p)
+    }
+
+    fun neueSeite() {
+        footer()
+        pdf.finishPage(page)
+        pageNumber++
+        page = pdf.startPage(PdfDocument.PageInfo.Builder(595, 842, pageNumber).create())
+        c = page.canvas
+        header()
+    }
+
+    header()
+    var y = 157f
+    p.color = dunkel
+    p.textSize = 11f
+    p.typeface = Typeface.DEFAULT
     val infos = listOf(
         "Auftrag: ${auftrag.nummer.ifBlank { "—" }}",
         "Datum: ${auftrag.datum.ifBlank { "—" }}",
@@ -1317,45 +1302,47 @@ private fun erstelleProtokollPdf(context: Context, auftrag: Auftrag): PdfDocumen
         "Arbeitszeit: ${zeitText(auftrag.arbeitsSekunden)}",
         "Gesamtbetrag: ${euro(gesamtbetrag(auftrag.stunden, auftrag.material, auftrag.fahrt, auftrag.stundensatz, auftrag.erstellungskosten))}"
     )
-    infos.forEach {
-        c.drawText(it, 36f, y, paint)
-        y += 20f
+    infos.forEach { info ->
+        c.drawText(info, 36f, y, p)
+        y += 19f
     }
 
     y += 12f
-    paint.color = mint
-    c.drawRoundRect(30f, y - 18f, 565f, y + 36f, 10f, 10f, paint)
-    paint.color = gruen
-    paint.textSize = 15f
-    paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
-    c.drawText("Dokumentation / Arbeitsverlauf", 42f, y + 4f, paint)
-    y += 60f
+    p.color = mint
+    c.drawRoundRect(30f, y - 18f, 565f, y + 28f, 10f, 10f, p)
+    p.color = gruen
+    p.textSize = 14f
+    p.typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+    c.drawText("Dokumentation / Arbeitsverlauf", 42f, y + 7f, p)
+    y += 50f
+    p.color = dunkel
+    p.textSize = 11f
+    p.typeface = Typeface.DEFAULT
 
-    paint.color = text
-    paint.textSize = 11f
-    paint.typeface = Typeface.DEFAULT
-    val protokollText = auftrag.protokoll.ifBlank { "Noch kein Auftragsprotokoll eingetragen." }
-    val lines = protokollText.replace("\r\n", "\n").split("\n")
-    for (line in lines) {
-        var rest = line
-        while (rest.isNotEmpty()) {
-            val maxWidth = 515f
-            var cut = rest.length
-            while (cut > 1 && paint.measureText(rest.substring(0, cut)) > maxWidth) cut--
-            val part = rest.substring(0, cut)
-            c.drawText(part, 42f, y, paint)
-            y += 17f
-            rest = rest.substring(cut)
-            if (y > 790f) break
+    val maxWidth = 515f
+    for (originalLine in rawLines) {
+        var rest = originalLine
+        if (rest.isEmpty()) {
+            y += 9f
+            if (y > 785f) { neueSeite(); y = 157f }
+            continue
         }
-        if (y > 790f) break
-        if (line.isEmpty()) y += 8f
+        while (rest.isNotEmpty()) {
+            var cut = rest.length
+            while (cut > 1 && p.measureText(rest.substring(0, cut)) > maxWidth) cut--
+            var part = rest.substring(0, cut)
+            if (cut < rest.length) {
+                val lastSpace = part.lastIndexOf(' ')
+                if (lastSpace > 0) { cut = lastSpace; part = rest.substring(0, cut) }
+            }
+            c.drawText(part.trim(), 42f, y, p)
+            y += 17f
+            rest = rest.substring(cut).trimStart()
+            if (y > 785f && rest.isNotEmpty()) { neueSeite(); y = 157f }
+        }
     }
 
-    paint.color = gruen
-    paint.textSize = 10f
-    paint.typeface = Typeface.DEFAULT
-    c.drawText("KÜMMERO · Haus & Alltag – wir kümmern uns.", 36f, 815f, paint)
+    footer()
     pdf.finishPage(page)
     return pdf
 }
@@ -1382,7 +1369,7 @@ private fun druckeProtokollPdf(context: Context, auftrag: Auftrag) {
                 "KÜMMERO-Auftragsprotokoll-${auftrag.nummer.ifBlank { "ohne-Nummer" }}.pdf"
             )
                 .setContentType(PrintDocumentInfo.CONTENT_TYPE_DOCUMENT)
-                .setPageCount(1)
+                .setPageCount(PrintDocumentInfo.PAGE_COUNT_UNKNOWN)
                 .build()
             callback.onLayoutFinished(info, true)
         }
