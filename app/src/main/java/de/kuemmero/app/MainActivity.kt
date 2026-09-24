@@ -1774,7 +1774,7 @@ fun KuemmeroApp() {
     var neuerKundenTelefon by remember { mutableStateOf("") }
     var neuerKundenEmail by remember { mutableStateOf("") }
     var nummer by remember {
-        mutableStateOf("ANG-" + SimpleDateFormat("yyyyMMdd-HHmmss", Locale.GERMANY).format(heute))
+        mutableStateOf(kuemmeroNaechsteDokumentNummer("AUF", Calendar.getInstance().get(Calendar.YEAR), auftraege.map { it.nummer }))
     }
     var datum by remember { mutableStateOf(datumFormat.format(heute)) }
     var leistungsdatum by remember { mutableStateOf(datumFormat.format(heute)) }
@@ -5086,7 +5086,7 @@ fun KuemmeroApp() {
                                         hauptseite = "Aufträge"
                                         auftragDetailIndex = null
                                         bearbeiteIndex = null
-                                        nummer = ""
+                                        nummer = kuemmeroNaechsteDokumentNummer("AUF", Calendar.getInstance().get(Calendar.YEAR), auftraege.map { it.nummer })
                                         datum = datumJetzt
                                         leistungsdatum = datumJetzt
                                         gueltigBis = ""
