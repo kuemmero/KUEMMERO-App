@@ -2179,7 +2179,7 @@ fun KuemmeroApp() {
             } else {
                 erstellePdf(
                     context, nummer, datum, gueltigBis, kunde, strasse, ort, leistung,
-                    zahl(stunden), zahl(material), zahl(fahrt), zahl(stundensatz, 42.0), unterschriftPfad, unterschriftDatum,
+                    arbeitsstunden, materialKosten, fahrtKosten, rate, unterschriftPfad, unterschriftDatum,
                     fotosVorher, fotosNachher, "AUFTRAG"
                 )
             }
