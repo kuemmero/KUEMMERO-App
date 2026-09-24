@@ -3337,7 +3337,7 @@ fun KuemmeroApp() {
                                 }
                             },
                             icon = { Text(iconText, fontSize = 20.sp) },
-                            label = { Text(label, fontSize = 10.sp, maxLines = 2, textAlign = TextAlign.Center) },
+                            label = { Text(label, fontSize = 9.sp, maxLines = 1, softWrap = false, textAlign = TextAlign.Center) },
                             colors = NavigationBarItemDefaults.colors(
                                 selectedIconColor = KuemmeroGreen,
                                 selectedTextColor = KuemmeroGreen,
@@ -3474,7 +3474,7 @@ fun KuemmeroApp() {
                 item {
                     OutlinedTextField(
                         nummer, { nummer = it },
-                        label = { Text("Angebotsnummer") },
+                        label = { Text("Auftragsnummer") },
                         colors = feldFarben,
                         modifier = Modifier.fillMaxWidth()
                     )
