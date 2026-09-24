@@ -758,7 +758,10 @@ private fun erstellePdf(
     // Saubere Leistungstabelle: Leistung | Menge/Details | Einzelpreis | Gesamt
     p.style = Paint.Style.STROKE
     p.strokeWidth = 1f
-    c.drawRect(40f, 420f, 550f, if (erstellungskosten > 0.0) 545f else 520f, p)
+    // Tabellenrahmen: Untere Linie immer unterhalb der letzten Textzeile.
+    // Dadurch wird "Fahrtkosten" nicht von der Rahmenlinie durchschnitten.
+    val tabellenEnde = if (erstellungskosten > 0.0) 570f else 545f
+    c.drawRect(40f, 420f, 550f, tabellenEnde, p)
     p.style = Paint.Style.FILL
     p.isFakeBoldText = true
     c.drawText("Leistung", 50f, 442f, p)
@@ -768,9 +771,16 @@ private fun erstellePdf(
     p.isFakeBoldText = false
     p.style = Paint.Style.STROKE
     c.drawLine(40f, 450f, 550f, 450f, p)
-    c.drawLine(245f, 420f, 245f, if (erstellungskosten > 0.0) 545f else 520f, p)
-    c.drawLine(375f, 420f, 375f, if (erstellungskosten > 0.0) 545f else 520f, p)
-    c.drawLine(480f, 420f, 480f, if (erstellungskosten > 0.0) 545f else 520f, p)
+    c.drawLine(245f, 420f, 245f, tabellenEnde, p)
+    c.drawLine(375f, 420f, 375f, tabellenEnde, p)
+    c.drawLine(480f, 420f, 480f, tabellenEnde, p)
+    // Klare Trennlinien zwischen den Positionen.
+    c.drawLine(40f, 480f, 550f, 480f, p)
+    c.drawLine(40f, 505f, 550f, 505f, p)
+    c.drawLine(40f, 530f, 550f, 530f, p)
+    if (erstellungskosten > 0.0) {
+        c.drawLine(40f, 555f, 550f, 555f, p)
+    }
     p.style = Paint.Style.FILL
     c.drawText("Arbeitszeit", 50f, 472f, p)
     c.drawText("%.2f Std.".format(Locale.GERMANY, stunden), 255f, 472f, p)
@@ -785,10 +795,10 @@ private fun erstellePdf(
     c.drawText(if (fahrtKm > 0.0) String.format(Locale.GERMANY, "%.2f €/km", fahrtSatz) else "—", 385f, 522f, p)
     c.drawText(euro(fahrt), 490f, 522f, p)
     if (erstellungskosten > 0.0) {
-        c.drawText("Erstellungskosten", 50f, 540f, p)
-        c.drawText("—", 255f, 540f, p)
-        c.drawText("—", 385f, 540f, p)
-        c.drawText(euro(erstellungskosten), 490f, 540f, p)
+        c.drawText("Erstellungskosten", 50f, 547f, p)
+        c.drawText("—", 255f, 547f, p)
+        c.drawText("—", 385f, 547f, p)
+        c.drawText(euro(erstellungskosten), 490f, 547f, p)
     }
     p.style = Paint.Style.FILL
     val gesamt = gesamtbetrag(stunden, material, fahrt, stundensatz, erstellungskosten)
