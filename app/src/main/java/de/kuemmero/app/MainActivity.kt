@@ -199,7 +199,9 @@ data class Auftrag(
     val rechnungUrsprungsnummer: String = "",
     val rechnungsstatus: String = "",
     val rechnungKorrekturHinweis: String = "",
-    val stornoNummer: String = ""
+    val stornoNummer: String = "",
+    // Eigenes Auftragsprotokoll: Verlauf/Arbeitsschritte/Bemerkungen zum Auftrag.
+    val protokoll: String = ""
 )
 
 private const val PREFS_NAME = "kuemmero_speicher"
@@ -225,6 +227,11 @@ private const val MAHNUNG1_TEXT_KEY = "mahnung1_text"
 private const val MAHNUNG_TESTMODUS_KEY = "mahnung_testmodus"
 private const val MAHNUNG_SPEICHERORDNER_URI_KEY = "mahnung_speicherordner_uri"
 private const val DOKUMENTE_SPEICHERORDNER_URI_KEY = "dokumente_speicherordner_uri"
+private const val DOKUMENTE_RECHNUNGEN_URI_KEY = "dokumente_rechnungen_uri"
+private const val DOKUMENTE_KOSTENVORANSCHLAEGE_URI_KEY = "dokumente_kostenvoranschlaege_uri"
+private const val DOKUMENTE_MAHNUNGEN_URI_KEY = "dokumente_mahnungen_uri"
+private const val DOKUMENTE_SONSTIGE_PDF_URI_KEY = "dokumente_sonstige_pdf_uri"
+private const val DOKUMENTE_DATENEXPORT_URI_KEY = "dokumente_datenexport_uri"
 private fun standardMahnung1Frist(context: Context, basisDatum: Date = Date()): String {
     val tage = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
         .getInt(MAHNUNG1_FRIST_TAGE_KEY, 7)
@@ -398,7 +405,8 @@ private fun ladeAuftraege(context: Context): List<Auftrag> {
             rechnungUrsprungsnummer = o.optString("rechnungUrsprungsnummer", ""),
             rechnungsstatus = o.optString("rechnungsstatus", ""),
             rechnungKorrekturHinweis = o.optString("rechnungKorrekturHinweis", ""),
-            stornoNummer = o.optString("stornoNummer", "")
+            stornoNummer = o.optString("stornoNummer", ""),
+            protokoll = o.optString("protokoll", "")
         )
     }
 }
@@ -476,6 +484,7 @@ private fun speichereAuftraege(context: Context, liste: List<Auftrag>) {
             put("rechnungsstatus", a.rechnungsstatus)
             put("rechnungKorrekturHinweis", a.rechnungKorrekturHinweis)
             put("stornoNummer", a.stornoNummer)
+            put("protokoll", a.protokoll)
             put("faelligAm", a.faelligAm)
             put("mahnung1Datum", a.mahnung1Datum)
             put("mahnung1Frist", a.mahnung1Frist)
@@ -861,9 +870,6 @@ private fun erstelleRechnungPdf(
     val page = pdf.startPage(PdfDocument.PageInfo.Builder(595, 842, 1).create())
     val c = page.canvas
     val p = Paint()
-    val kuemmeroGruen = android.graphics.Color.rgb(47, 143, 87)
-    val kuemmeroMint = android.graphics.Color.rgb(232, 246, 238)
-    p.color = kuemmeroGruen
     p.textSize = 28f
     c.drawText("KÜMMERO", 40f, 60f, p)
     p.textSize = 13f
@@ -1266,6 +1272,151 @@ private fun druckeRechnungPdf(context: Context, auftrag: Auftrag) {
     )
 }
 
+
+private fun erstelleProtokollPdf(context: Context, auftrag: Auftrag): PdfDocument {
+    val pdf = PdfDocument()
+    val page = pdf.startPage(PdfDocument.PageInfo.Builder(595, 842, 1).create())
+    val c = page.canvas
+    val paint = Paint(Paint.ANTI_ALIAS_FLAG)
+    val gruen = android.graphics.Color.rgb(47, 143, 87)
+    val mint = android.graphics.Color.rgb(220, 243, 230)
+    val text = android.graphics.Color.rgb(45, 55, 50)
+    var y = 55f
+
+    paint.color = gruen
+    paint.style = Paint.Style.FILL
+    c.drawRect(0f, 0f, 595f, 92f, paint)
+    paint.color = android.graphics.Color.WHITE
+    paint.textSize = 28f
+    paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+    c.drawText("KÜMMERO", 36f, 42f, paint)
+    paint.textSize = 12f
+    paint.typeface = Typeface.DEFAULT
+    c.drawText("Haus & Alltag – wir kümmern uns.", 36f, 65f, paint)
+
+    y = 125f
+    paint.color = gruen
+    paint.textSize = 23f
+    paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+    c.drawText("AUFTRAGSPROTOKOLL", 36f, y, paint)
+
+    y += 34f
+    paint.color = text
+    paint.textSize = 12f
+    paint.typeface = Typeface.DEFAULT
+    val infos = listOf(
+        "Auftrag: ${auftrag.nummer.ifBlank { "—" }}",
+        "Datum: ${auftrag.datum.ifBlank { "—" }}",
+        "Kunde: ${auftrag.kunde.ifBlank { "—" }}",
+        "Adresse: ${listOf(auftrag.kundenStrasse, auftrag.kundenOrt).filter { it.isNotBlank() }.joinToString(", ").ifBlank { "—" }}",
+        "Leistung: ${auftrag.leistung.ifBlank { "—" }}",
+        "Status: ${auftrag.status}",
+        "Arbeitszeit: ${zeitText(auftrag.arbeitsSekunden)}",
+        "Gesamtbetrag: ${euro(gesamtbetrag(auftrag.stunden, auftrag.material, auftrag.fahrt, auftrag.stundensatz, auftrag.erstellungskosten))}"
+    )
+    infos.forEach {
+        c.drawText(it, 36f, y, paint)
+        y += 20f
+    }
+
+    y += 12f
+    paint.color = mint
+    c.drawRoundRect(30f, y - 18f, 565f, y + 36f, 10f, 10f, paint)
+    paint.color = gruen
+    paint.textSize = 15f
+    paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+    c.drawText("Dokumentation / Arbeitsverlauf", 42f, y + 4f, paint)
+    y += 60f
+
+    paint.color = text
+    paint.textSize = 11f
+    paint.typeface = Typeface.DEFAULT
+    val protokollText = auftrag.protokoll.ifBlank { "Noch kein Auftragsprotokoll eingetragen." }
+    val lines = protokollText.replace("\r\n", "\n").split("\n")
+    for (line in lines) {
+        var rest = line
+        while (rest.isNotEmpty()) {
+            val maxWidth = 515f
+            var cut = rest.length
+            while (cut > 1 && paint.measureText(rest.substring(0, cut)) > maxWidth) cut--
+            val part = rest.substring(0, cut)
+            c.drawText(part, 42f, y, paint)
+            y += 17f
+            rest = rest.substring(cut)
+            if (y > 790f) break
+        }
+        if (y > 790f) break
+        if (line.isEmpty()) y += 8f
+    }
+
+    paint.color = gruen
+    paint.textSize = 10f
+    paint.typeface = Typeface.DEFAULT
+    c.drawText("KÜMMERO · Haus & Alltag – wir kümmern uns.", 36f, 815f, paint)
+    pdf.finishPage(page)
+    return pdf
+}
+
+private fun druckeProtokollPdf(context: Context, auftrag: Auftrag) {
+    val printManager = context.getSystemService(Context.PRINT_SERVICE) as PrintManager
+    val adapter = object : PrintDocumentAdapter() {
+        private var pdf: PdfDocument? = null
+
+        override fun onLayout(
+            oldAttributes: PrintAttributes?,
+            newAttributes: PrintAttributes,
+            cancellationSignal: CancellationSignal?,
+            callback: LayoutResultCallback,
+            extras: android.os.Bundle?
+        ) {
+            if (cancellationSignal?.isCanceled == true) {
+                callback.onLayoutCancelled()
+                return
+            }
+            pdf?.close()
+            pdf = erstelleProtokollPdf(context, auftrag)
+            val info = PrintDocumentInfo.Builder(
+                "KÜMMERO-Auftragsprotokoll-${auftrag.nummer.ifBlank { "ohne-Nummer" }}.pdf"
+            )
+                .setContentType(PrintDocumentInfo.CONTENT_TYPE_DOCUMENT)
+                .setPageCount(1)
+                .build()
+            callback.onLayoutFinished(info, true)
+        }
+
+        override fun onWrite(
+            pages: Array<out android.print.PageRange>,
+            destination: android.os.ParcelFileDescriptor,
+            cancellationSignal: CancellationSignal?,
+            callback: WriteResultCallback
+        ) {
+            try {
+                pdf?.writeTo(java.io.FileOutputStream(destination.fileDescriptor))
+                callback.onWriteFinished(arrayOf(android.print.PageRange.ALL_PAGES))
+            } catch (e: Exception) {
+                callback.onWriteFailed(e.message)
+            } finally {
+                try { destination.close() } catch (_: Exception) {}
+            }
+        }
+
+        override fun onFinish() {
+            pdf?.close()
+            pdf = null
+            super.onFinish()
+        }
+    }
+
+    printManager.print(
+        "KÜMMERO-Auftragsprotokoll-${auftrag.nummer.ifBlank { "ohne-Nummer" }}",
+        adapter,
+        PrintAttributes.Builder()
+            .setMediaSize(PrintAttributes.MediaSize.ISO_A4)
+            .setMinMargins(PrintAttributes.Margins.NO_MARGINS)
+            .build()
+    )
+}
+
 private fun druckePdf(
     context: Context,
     dateiname: String,
@@ -1641,6 +1792,7 @@ fun KuemmeroApp() {
     var terminDatum by remember { mutableStateOf("") }
     var terminUhrzeit by remember { mutableStateOf("") }
     var notiz by remember { mutableStateOf("") }
+    var protokoll by remember { mutableStateOf("") }
     var fotosVorher by remember { mutableStateOf<List<String>>(emptyList()) }
     var fotosNachher by remember { mutableStateOf<List<String>>(emptyList()) }
     var unterschriftPfad by remember { mutableStateOf("") }
@@ -1655,6 +1807,7 @@ fun KuemmeroApp() {
     var kalenderOffen by remember { mutableStateOf(false) }
     var terminBereichOffen by remember { mutableStateOf(false) }
     var notizBereichOffen by remember { mutableStateOf(false) }
+    var protokollBereichOffen by remember { mutableStateOf(false) }
     var fotosBereichOffen by remember { mutableStateOf(false) }
     var unterschriftBereichOffen by remember { mutableStateOf(false) }
     var sicherungBereichOffen by remember { mutableStateOf(false) }
@@ -1826,6 +1979,57 @@ fun KuemmeroApp() {
     var dokumenteSpeicherOrdnerUri by remember {
         mutableStateOf(dokumentePrefs.getString(DOKUMENTE_SPEICHERORDNER_URI_KEY, "") ?: "")
     }
+    fun dokumenteUnterordnerUri(rootUri: Uri, ordnerName: String): Uri? {
+        return try {
+            val resolver = context.contentResolver
+            val childrenUri = DocumentsContract.buildChildDocumentsUriUsingTree(
+                rootUri,
+                DocumentsContract.getTreeDocumentId(rootUri)
+            )
+            resolver.query(
+                childrenUri,
+                arrayOf(
+                    DocumentsContract.Document.COLUMN_DOCUMENT_ID,
+                    DocumentsContract.Document.COLUMN_DISPLAY_NAME,
+                    DocumentsContract.Document.COLUMN_MIME_TYPE
+                ),
+                null, null, null
+            )?.use { cursor ->
+                val idIndex = cursor.getColumnIndex(DocumentsContract.Document.COLUMN_DOCUMENT_ID)
+                val nameIndex = cursor.getColumnIndex(DocumentsContract.Document.COLUMN_DISPLAY_NAME)
+                val mimeIndex = cursor.getColumnIndex(DocumentsContract.Document.COLUMN_MIME_TYPE)
+                while (cursor.moveToNext()) {
+                    if (idIndex >= 0 && nameIndex >= 0 && mimeIndex >= 0 &&
+                        cursor.getString(nameIndex) == ordnerName &&
+                        cursor.getString(mimeIndex) == DocumentsContract.Document.MIME_TYPE_DIR
+                    ) {
+                        return@use DocumentsContract.buildDocumentUriUsingTree(rootUri, cursor.getString(idIndex))
+                    }
+                }
+                null
+            } ?: DocumentsContract.createDocument(
+                resolver, rootUri, DocumentsContract.Document.MIME_TYPE_DIR, ordnerName
+            )
+        } catch (_: Exception) {
+            null
+        }
+    }
+
+    fun dokumenteOrdnerAnlegen(rootUri: Uri) {
+        val ordner = listOf(
+            DOKUMENTE_RECHNUNGEN_URI_KEY to "Rechnungen",
+            DOKUMENTE_KOSTENVORANSCHLAEGE_URI_KEY to "Kostenvoranschlaege",
+            DOKUMENTE_MAHNUNGEN_URI_KEY to "Mahnungen",
+            DOKUMENTE_SONSTIGE_PDF_URI_KEY to "Sonstige PDF",
+            DOKUMENTE_DATENEXPORT_URI_KEY to "Datenexport"
+        )
+        ordner.forEach { (key, name) ->
+            dokumenteUnterordnerUri(rootUri, name)?.let { uri ->
+                dokumentePrefs.edit().putString(key, uri.toString()).apply()
+            }
+        }
+    }
+
     val dokumenteOrdnerLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.OpenDocumentTree()
     ) { uri ->
@@ -1836,9 +2040,28 @@ fun KuemmeroApp() {
                     Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION
                 )
             } catch (_: Exception) { }
-            dokumentePrefs.edit().putString(DOKUMENTE_SPEICHERORDNER_URI_KEY, uri.toString()).apply()
+            dokumentePrefs.edit()
+                .putString(DOKUMENTE_SPEICHERORDNER_URI_KEY, uri.toString())
+                .remove(DOKUMENTE_RECHNUNGEN_URI_KEY)
+                .remove(DOKUMENTE_KOSTENVORANSCHLAEGE_URI_KEY)
+                .remove(DOKUMENTE_MAHNUNGEN_URI_KEY)
+                .remove(DOKUMENTE_SONSTIGE_PDF_URI_KEY)
+                .remove(DOKUMENTE_DATENEXPORT_URI_KEY)
+                .apply()
+            dokumenteOrdnerAnlegen(uri)
             dokumenteSpeicherOrdnerUri = uri.toString()
-            android.widget.Toast.makeText(context, "Dokumentenordner ausgewählt.", android.widget.Toast.LENGTH_SHORT).show()
+            android.widget.Toast.makeText(context, "KÜMMERO-Dokumentenordner eingerichtet: Rechnungen, Kostenvoranschlaege, Mahnungen, Sonstige PDF und Datenexport.", android.widget.Toast.LENGTH_LONG).show()
+        }
+    }
+
+    fun dokumentKategorieKey(mimeType: String, dateiname: String): String {
+        val n = dateiname.lowercase(Locale.GERMANY)
+        return when {
+            mimeType == "text/csv" || n.contains("datenexport") -> DOKUMENTE_DATENEXPORT_URI_KEY
+            n.contains("mahnung") -> DOKUMENTE_MAHNUNGEN_URI_KEY
+            n.contains("rechnung") || n.contains("berichtigung") || n.contains("storno") -> DOKUMENTE_RECHNUNGEN_URI_KEY
+            n.contains("angebot") || n.contains("kostenvoranschlag") -> DOKUMENTE_KOSTENVORANSCHLAEGE_URI_KEY
+            else -> DOKUMENTE_SONSTIGE_PDF_URI_KEY
         }
     }
 
@@ -1847,7 +2070,25 @@ fun KuemmeroApp() {
         type = mimeType
         putExtra(Intent.EXTRA_TITLE, dateiname)
         if (dokumenteSpeicherOrdnerUri.isNotBlank()) {
-            putExtra(DocumentsContract.EXTRA_INITIAL_URI, Uri.parse(dokumenteSpeicherOrdnerUri))
+            val key = dokumentKategorieKey(mimeType, dateiname)
+            var zielUri = dokumentePrefs.getString(key, "") ?: ""
+            if (zielUri.isBlank()) {
+                val rootUri = Uri.parse(dokumenteSpeicherOrdnerUri)
+                val name = when (key) {
+                    DOKUMENTE_RECHNUNGEN_URI_KEY -> "Rechnungen"
+                    DOKUMENTE_KOSTENVORANSCHLAEGE_URI_KEY -> "Kostenvoranschlaege"
+                    DOKUMENTE_MAHNUNGEN_URI_KEY -> "Mahnungen"
+                    DOKUMENTE_DATENEXPORT_URI_KEY -> "Datenexport"
+                    else -> "Sonstige PDF"
+                }
+                zielUri = dokumenteUnterordnerUri(rootUri, name)?.toString() ?: ""
+                if (zielUri.isNotBlank()) dokumentePrefs.edit().putString(key, zielUri).apply()
+            }
+            if (zielUri.isNotBlank()) {
+                putExtra(DocumentsContract.EXTRA_INITIAL_URI, Uri.parse(zielUri))
+            } else {
+                putExtra(DocumentsContract.EXTRA_INITIAL_URI, Uri.parse(dokumenteSpeicherOrdnerUri))
+            }
         }
     }
 
@@ -3843,6 +4084,25 @@ fun KuemmeroApp() {
                 }
 
                 item {
+                    KlappBereich("📋 Auftragsprotokoll", protokollBereichOffen, { protokollBereichOffen = !protokollBereichOffen }) {
+                        Text(
+                            "Arbeitsverlauf, ausgeführte Arbeiten, Zeiten, Besonderheiten oder Übergaben dokumentieren.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = KuemmeroText
+                        )
+                        OutlinedTextField(
+                            protokoll,
+                            { protokoll = it },
+                            label = { Text("Protokoll zum Auftrag") },
+                            placeholder = { Text("z. B. 24.09.2026 – Auftrag begonnen …") },
+                            minLines = 5,
+                            colors = feldFarben,
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                    }
+                }
+
+                item {
                     KlappBereich("📷 Auftragsfotos (${fotosVorher.size + fotosNachher.size})", fotosBereichOffen, { fotosBereichOffen = !fotosBereichOffen }) {
                         Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
                             OutlinedButton(onClick = { fotoTyp = "Vorher"; fotoLauncher.launch("image/*") }, modifier = Modifier.weight(1f), colors = ButtonDefaults.outlinedButtonColors(contentColor = KuemmeroGreen)) { Text("📷 Vorher (${fotosVorher.size})") }
@@ -3910,7 +4170,8 @@ fun KuemmeroApp() {
                                     erstellungskosten = bearbeiteIndex?.let { auftraege.getOrNull(it)?.erstellungskosten } ?: 0.0,
                                     leistungsdatum = leistungsdatum.trim().ifBlank { datum.trim() },
                                     fahrtKm = zahl(fahrtKm),
-                                    fahrtKostenProKm = fahrtSatz
+                                    fahrtKostenProKm = fahrtSatz,
+                                    protokoll = protokoll.trim()
                                 )
                                 val index = bearbeiteIndex
                                 if (index != null) {
@@ -3940,6 +4201,7 @@ fun KuemmeroApp() {
                                 terminDatum = ""
                                 terminUhrzeit = ""
                                 notiz = ""
+                                protokoll = ""
                                 fotosVorher = emptyList()
                                 fotosNachher = emptyList()
                                 unterschriftPfad = ""
@@ -4324,6 +4586,16 @@ fun KuemmeroApp() {
                                 )
                             }
 
+                            OutlinedButton(
+                                onClick = { druckeProtokollPdf(context, a) },
+                                modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp),
+                                shape = RoundedCornerShape(26.dp),
+                                border = BorderStroke(2.dp, KuemmeroGreen),
+                                colors = ButtonDefaults.outlinedButtonColors(contentColor = KuemmeroGreen)
+                            ) {
+                                Text("📋 Auftragsprotokoll – PDF / Drucken", fontWeight = FontWeight.Bold)
+                            }
+
                             if (a.rechnungsnummer.isNotBlank() && a.zahlungsstatus != "Bezahlt" && rechnungIstUeberfaellig(a, heuteText)) {
                                 Button(
                                     onClick = {
@@ -4501,6 +4773,7 @@ fun KuemmeroApp() {
                                     terminDatum = a.terminDatum
                                     terminUhrzeit = a.terminUhrzeit
                                     notiz = a.notiz
+                                    protokoll = a.protokoll
                                     fotosVorher = a.fotosVorher
                                     fotosNachher = a.fotosNachher
                                     unterschriftPfad = a.unterschriftPfad
@@ -5666,12 +5939,12 @@ fun KuemmeroApp() {
                                 shape = RoundedCornerShape(18.dp)
                             ) {
                                 Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                                    Text("📁 Dokumentenordner", style = MaterialTheme.typography.titleMedium, color = KuemmeroGreen, fontWeight = FontWeight.Bold)
+                                    Text("📁 KÜMMERO-Dokumentenablage", style = MaterialTheme.typography.titleMedium, color = KuemmeroGreen, fontWeight = FontWeight.Bold)
                                     Text(
                                         if (dokumenteSpeicherOrdnerUri.isBlank())
                                             "Kein zentraler Ordner ausgewählt. Beim Speichern kann ein Ziel gewählt werden."
                                         else
-                                            "Zentraler Ordner ausgewählt. Neue PDFs und Datenexporte öffnen standardmäßig diesen Ordner." ,
+                                            "Zentraler Ordner eingerichtet. Rechnungen, Kostenvoranschlaege, Mahnungen, sonstige PDFs und Datenexporte werden jeweils im passenden Unterordner vorgeschlagen." ,
                                         style = MaterialTheme.typography.bodySmall,
                                         color = KuemmeroText
                                     )
