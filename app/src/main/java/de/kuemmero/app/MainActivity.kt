@@ -3249,8 +3249,25 @@ fun KuemmeroApp() {
 
     Scaffold(
             modifier = Modifier.pointerInput(hauptseite) {
+                var gesamtWisch = 0f
+                var wischAusgeloest = false
                 detectHorizontalDragGestures(
-                    onHorizontalDrag = { change, dragAmount -> change.consume(); if (kotlin.math.abs(dragAmount) > 100f) { wischSeite(dragAmount); } }
+                    onHorizontalDrag = { change, dragAmount ->
+                        change.consume()
+                        gesamtWisch += dragAmount
+                        if (!wischAusgeloest && kotlin.math.abs(gesamtWisch) >= 100f) {
+                            wischAusgeloest = true
+                            wischSeite(gesamtWisch)
+                        }
+                    },
+                    onDragEnd = {
+                        gesamtWisch = 0f
+                        wischAusgeloest = false
+                    },
+                    onDragCancel = {
+                        gesamtWisch = 0f
+                        wischAusgeloest = false
+                    }
                 )
             },
             topBar = {
