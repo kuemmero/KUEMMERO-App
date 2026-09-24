@@ -871,6 +871,8 @@ private fun erstelleRechnungPdf(
     val page = pdf.startPage(PdfDocument.PageInfo.Builder(595, 842, 1).create())
     val c = page.canvas
     val p = Paint()
+    val kuemmeroGruen = android.graphics.Color.rgb(47, 143, 87)
+    val kuemmeroMint = android.graphics.Color.rgb(232, 246, 238)
     p.textSize = 28f
     c.drawText("KÜMMERO", 40f, 60f, p)
     p.textSize = 13f
