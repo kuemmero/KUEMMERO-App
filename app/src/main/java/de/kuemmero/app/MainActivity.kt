@@ -3868,6 +3868,221 @@ fun KuemmeroApp() {
             }
         }
 
+        if (hauptseite == "AuftragDetail") {
+            val detailIndex = auftragDetailIndex
+            val detailAuftrag = detailIndex?.let { auftraege.getOrNull(it) }
+            LazyColumn(
+                modifier = Modifier.padding(padding).padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                item {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        TextButton(
+                            onClick = {
+                                auftragDetailIndex = null
+                                hauptseite = "Aufträge"
+                            }
+                        ) {
+                            Text("← Zurück", color = KuemmeroGreen, fontWeight = FontWeight.Bold)
+                        }
+                        Text(
+                            "Auftrag",
+                            style = MaterialTheme.typography.headlineSmall,
+                            color = KuemmeroGreen,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                }
+
+                if (detailAuftrag == null || detailIndex == null) {
+                    item {
+                        Card(
+                            Modifier.fillMaxWidth(),
+                            colors = CardDefaults.cardColors(containerColor = KuemmeroSurface),
+                            shape = RoundedCornerShape(20.dp)
+                        ) {
+                            Text("Kein Auftrag ausgewählt.", modifier = Modifier.padding(18.dp), color = KuemmeroText)
+                        }
+                    }
+                } else {
+                    val a = detailAuftrag
+                    item {
+                        Card(
+                            Modifier.fillMaxWidth(),
+                            colors = CardDefaults.cardColors(containerColor = KuemmeroSurface),
+                            shape = RoundedCornerShape(22.dp),
+                            border = BorderStroke(1.5.dp, KuemmeroGreenLight)
+                        ) {
+                            Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                Text(
+                                    a.kunde.ifBlank { "Ohne Kundenname" },
+                                    style = MaterialTheme.typography.headlineSmall,
+                                    color = KuemmeroText,
+                                    fontWeight = FontWeight.Bold
+                                )
+                                if (a.nummer.isNotBlank()) Text("Auftrag: ${a.nummer}", color = KuemmeroGreen, fontWeight = FontWeight.Bold)
+                                if (a.datum.isNotBlank()) Text("Datum: ${a.datum}", color = KuemmeroText)
+                                if (a.terminDatum.isNotBlank()) Text("📅 Termin: ${a.terminDatum}${if (a.terminUhrzeit.isNotBlank()) " · ${a.terminUhrzeit}" else ""}", color = KuemmeroGreen, fontWeight = FontWeight.Bold)
+                                Text("Status: ${a.status}", color = KuemmeroGreen, fontWeight = FontWeight.Bold)
+                                if (a.kundenStrasse.isNotBlank() || a.kundenOrt.isNotBlank()) {
+                                    Text(listOf(a.kundenStrasse, a.kundenOrt).filter { it.isNotBlank() }.joinToString(", "), color = KuemmeroText)
+                                }
+                                if (a.leistung.isNotBlank()) Text("Leistung: ${a.leistung}", color = KuemmeroText)
+                                Text(
+                                    "Gesamt: ${euro(gesamtbetrag(a.stunden, a.material, a.fahrt, a.stundensatz, a.erstellungskosten))}",
+                                    style = MaterialTheme.typography.titleLarge,
+                                    color = KuemmeroGreen,
+                                    fontWeight = FontWeight.Bold
+                                )
+                                Text(
+                                    if (a.zahlungsstatus == "Bezahlt") "Zahlung: Bezahlt${if (a.bezahltAm.isNotBlank()) " – ${a.bezahltAm}" else ""}" else "Zahlung: Offen",
+                                    color = if (a.zahlungsstatus == "Bezahlt") KuemmeroGreen else KuemmeroError,
+                                    fontWeight = FontWeight.Bold
+                                )
+                                if (a.rechnungsnummer.isNotBlank()) Text("Rechnung: ${a.rechnungsnummer} · fällig ${a.faelligAm}", color = KuemmeroText)
+                            }
+                        }
+                    }
+
+                    item {
+                        Button(
+                            onClick = {
+                                val heuteBezahlt = datumFormat.format(Date())
+                                val bezahlt = a.zahlungsstatus != "Bezahlt"
+                                auftraege = auftraege.toMutableList().apply {
+                                    set(detailIndex, if (bezahlt) a.copy(zahlungsstatus = "Bezahlt", bezahltAm = heuteBezahlt) else a.copy(zahlungsstatus = "Offen", bezahltAm = ""))
+                                }
+                                speichereAuftraege(context, auftraege)
+                            },
+                            modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp),
+                            shape = RoundedCornerShape(26.dp),
+                            colors = ButtonDefaults.buttonColors(containerColor = if (a.zahlungsstatus == "Bezahlt") KuemmeroGreenLight else KuemmeroGreen)
+                        ) {
+                            Text(if (a.zahlungsstatus == "Bezahlt") "Zahlung zurücksetzen" else "Als bezahlt markieren", fontWeight = FontWeight.Bold)
+                        }
+                    }
+
+                    item {
+                        Button(
+                            onClick = { druckeProtokollPdf(context, a) },
+                            modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp),
+                            shape = RoundedCornerShape(26.dp),
+                            colors = ButtonDefaults.buttonColors(containerColor = KuemmeroGreen)
+                        ) { Text("📋 Protokoll erstellen / drucken", fontWeight = FontWeight.Bold) }
+                    }
+
+                    item {
+                        Button(
+                            onClick = {
+                                bearbeiteIndex = detailIndex
+                                auftragDetailIndex = null
+                                hauptseite = "Aufträge"
+                                auftragFormOffen = true
+                                nummer = a.nummer
+                                datum = a.datum
+                                leistungsdatum = a.leistungsdatum.ifBlank { a.terminDatum.ifBlank { a.datum } }
+                                gueltigBis = a.gueltigBis
+                                kunde = a.kunde
+                                strasse = a.kundenStrasse
+                                ort = a.kundenOrt
+                                leistung = a.leistung
+                                stunden = a.stunden.toString().replace(".", ",")
+                                material = a.material.toString().replace(".", ",")
+                                materialBonUri = a.materialBonUri
+                                fahrtKm = if (a.fahrtKm > 0.0) a.fahrtKm.toString().replace(".", ",") else ""
+                                stundensatz = a.stundensatz.toString().replace(".", ",")
+                                status = a.status
+                                zahlungsstatus = a.zahlungsstatus
+                                bezahltAm = a.bezahltAm
+                                terminDatum = a.terminDatum
+                                terminUhrzeit = a.terminUhrzeit
+                                notiz = a.notiz
+                                protokoll = a.protokoll
+                                fotosVorher = a.fotosVorher
+                                fotosNachher = a.fotosNachher
+                                unterschriftPfad = a.unterschriftPfad
+                                unterschriftDatum = a.unterschriftDatum
+                            },
+                            modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp),
+                            shape = RoundedCornerShape(26.dp),
+                            colors = ButtonDefaults.buttonColors(containerColor = KuemmeroGreen)
+                        ) { Text("✏ Auftrag bearbeiten", fontWeight = FontWeight.Bold) }
+                    }
+
+                    item {
+                        Button(
+                            onClick = {
+                                rechnungFuerIndex = detailIndex
+                                hauptseite = "Rechnung"
+                            },
+                            modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp),
+                            shape = RoundedCornerShape(26.dp),
+                            colors = ButtonDefaults.buttonColors(containerColor = KuemmeroGreenLight)
+                        ) { Text("🧾 Rechnung erstellen", fontWeight = FontWeight.Bold) }
+                    }
+
+                    item {
+                        Button(
+                            onClick = {
+                                kvBearbeiteIndex = null
+                                kvNummer = kuemmeroNaechsteDokumentNummer("KV", Calendar.getInstance().get(Calendar.YEAR), kostenvoranschlaege.map { it.nummer })
+                                kvDatum = datumFormat.format(Date())
+                                kvGueltigBis = ""
+                                kvKunde = a.kunde
+                                kvStrasse = a.kundenStrasse
+                                kvOrt = a.kundenOrt
+                                kvLeistung = a.leistung
+                                kvStunden = a.stunden.toString().replace(".", ",")
+                                kvMaterial = a.material.toString().replace(".", ",")
+                                kvMaterialBonUri = a.materialBonUri
+                                kvFotosVorher = a.fotosVorher
+                                kvFahrtKm = if (a.fahrtKm > 0.0) a.fahrtKm.toString().replace(".", ",") else ""
+                                kvStundensatz = a.stundensatz.toString().replace(".", ",")
+                                kvErstellungskosten = ""
+                                kvFormOffen = true
+                                auftragDetailIndex = null
+                                hauptseite = "Kostenvoranschläge"
+                            },
+                            modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp),
+                            shape = RoundedCornerShape(26.dp),
+                            colors = ButtonDefaults.buttonColors(containerColor = KuemmeroGreenLight)
+                        ) { Text("📄 Kostenvoranschlag erstellen", fontWeight = FontWeight.Bold) }
+                    }
+
+                    item {
+                        Button(
+                            onClick = {
+                                druckePdf(
+                                    context,
+                                    "KÜMMERO-Auftrag-${a.kunde}.pdf",
+                                    a.nummer.ifBlank { nummer },
+                                    a.datum.ifBlank { datum },
+                                    a.gueltigBis.ifBlank { gueltigBis },
+                                    a
+                                )
+                            },
+                            modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp),
+                            shape = RoundedCornerShape(26.dp),
+                            colors = ButtonDefaults.buttonColors(containerColor = KuemmeroGreenLight)
+                        ) { Text("🖨 Auftrag / PDF drucken", fontWeight = FontWeight.Bold) }
+                    }
+
+                    item {
+                        OutlinedButton(
+                            onClick = { auftragDetailIndex = null; hauptseite = "Aufträge" },
+                            modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp),
+                            shape = RoundedCornerShape(26.dp),
+                            border = BorderStroke(2.dp, KuemmeroGreen),
+                            colors = ButtonDefaults.outlinedButtonColors(contentColor = KuemmeroGreen)
+                        ) { Text("← Zurück zur Auftragsübersicht", fontWeight = FontWeight.Bold) }
+                    }
+                }
+            }
+        }
+
         if (hauptseite == "Aufträge") {
             LazyColumn(
                 state = listeState,
@@ -4589,6 +4804,7 @@ fun KuemmeroApp() {
                             auftragFormOffen = false
                             bearbeiteIndex = null
                             auftragDetailIndex = index
+                            hauptseite = "AuftragDetail"
                         },
                         colors = CardDefaults.cardColors(containerColor = KuemmeroSurface),
                         shape = RoundedCornerShape(22.dp)
@@ -4665,6 +4881,7 @@ fun KuemmeroApp() {
                                         auftragFormOffen = false
                                         bearbeiteIndex = null
                                         auftragDetailIndex = index
+                                        hauptseite = "AuftragDetail"
                                     },
                                     modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp),
                                     shape = RoundedCornerShape(24.dp),
