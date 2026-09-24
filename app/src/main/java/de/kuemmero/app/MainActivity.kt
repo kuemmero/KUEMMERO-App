@@ -181,13 +181,17 @@ data class Auftrag(
     val arbeitsSekunden: Long = 0L,
     val arbeitszeitUebernommen: Boolean = false,
     val erstellungskosten: Double = 0.0,
-    val leistungsdatum: String = ""
+    val leistungsdatum: String = "",
+    // Fahrkosten werden zusätzlich zu Legacy-"fahrt" dauerhaft als km und damaliger Satz gespeichert.
+    val fahrtKm: Double = 0.0,
+    val fahrtKostenProKm: Double = 0.40
 )
 
 private const val PREFS_NAME = "kuemmero_speicher"
 private const val AUFTRAEGE_KEY = "auftraege"
 private const val KUNDEN_KEY = "kunden"
 private const val STUNDENSATZ_KEY = "stundensatz"
+private const val FAHRTKOSTEN_PRO_KM_KEY = "fahrtkosten_pro_km"
 private const val BACKUP_URI_KEY = "backup_uri"
 private const val BACKUP_LAST_SUCCESS_KEY = "backup_last_success"
 private const val BACKUP_PRE_RESTORE_FILE = "kuemmero_vor_restore_backup.json"
@@ -242,7 +246,9 @@ data class Kostenvoranschlag(
     val stundensatz: Double = 42.0,
     val materialBonUri: String = "",
     val fotosVorher: List<String> = emptyList(),
-    val erstellungskosten: Double = 0.0
+    val erstellungskosten: Double = 0.0,
+    val fahrtKm: Double = 0.0,
+    val fahrtKostenProKm: Double = 0.40
 )
 
 private fun ladeKostenvoranschlaege(context: Context): List<Kostenvoranschlag> {
@@ -257,7 +263,9 @@ private fun ladeKostenvoranschlaege(context: Context): List<Kostenvoranschlag> {
             o.optString("leistung"), o.optDouble("stunden", 0.0), o.optDouble("material", 0.0),
             o.optDouble("fahrt", 0.0), o.optDouble("stundensatz", 42.0), o.optString("materialBonUri", ""),
             run { val a = o.optJSONArray("fotosVorher") ?: JSONArray(); List(a.length()) { j -> a.optString(j) } },
-            o.optDouble("erstellungskosten", 0.0)
+            o.optDouble("erstellungskosten", 0.0),
+            fahrtKm = o.optDouble("fahrtKm", 0.0),
+            fahrtKostenProKm = o.optDouble("fahrtKostenProKm", context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE).getString(FAHRTKOSTEN_PRO_KM_KEY, "0.40")?.replace(",", ".")?.toDoubleOrNull() ?: 0.40)
         )
     }
 }
@@ -269,7 +277,7 @@ private fun speichereKostenvoranschlaege(context: Context, liste: List<Kostenvor
             put("nummer", k.nummer); put("datum", k.datum); put("gueltigBis", k.gueltigBis)
             put("kunde", k.kunde); put("kundenStrasse", k.kundenStrasse); put("kundenOrt", k.kundenOrt)
             put("leistung", k.leistung); put("stunden", k.stunden); put("material", k.material)
-            put("fahrt", k.fahrt); put("stundensatz", k.stundensatz); put("materialBonUri", k.materialBonUri)
+            put("fahrt", k.fahrt); put("fahrtKm", k.fahrtKm); put("fahrtKostenProKm", k.fahrtKostenProKm); put("stundensatz", k.stundensatz); put("materialBonUri", k.materialBonUri)
             put("fotosVorher", JSONArray(k.fotosVorher))
             put("erstellungskosten", k.erstellungskosten)
         })
@@ -350,7 +358,9 @@ private fun ladeAuftraege(context: Context): List<Auftrag> {
             o.optLong("arbeitsEnde", 0L),
             o.optLong("arbeitsSekunden", 0L),
             o.optBoolean("arbeitszeitUebernommen", false),
-            o.optDouble("erstellungskosten", 0.0)
+            o.optDouble("erstellungskosten", 0.0),
+            fahrtKm = o.optDouble("fahrtKm", 0.0),
+            fahrtKostenProKm = o.optDouble("fahrtKostenProKm", context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE).getString(FAHRTKOSTEN_PRO_KM_KEY, "0.40")?.replace(",", ".")?.toDoubleOrNull() ?: 0.40)
         )
     }
 }
@@ -409,6 +419,8 @@ private fun speichereAuftraege(context: Context, liste: List<Auftrag>) {
             put("material", a.material)
             put("materialBonUri", a.materialBonUri)
             put("fahrt", a.fahrt)
+            put("fahrtKm", a.fahrtKm)
+            put("fahrtKostenProKm", a.fahrtKostenProKm)
             put("stundensatz", a.stundensatz)
             put("status", a.status)
             put("zahlungsstatus", a.zahlungsstatus)
@@ -649,7 +661,9 @@ private fun erstellePdf(
     fotosVorher: List<String> = emptyList(),
     fotosNachher: List<String> = emptyList(),
     dokumentTitel: String = "ANGEBOT",
-    erstellungskosten: Double = 0.0
+    erstellungskosten: Double = 0.0,
+    fahrtKm: Double = 0.0,
+    fahrtSatz: Double = 0.40
 ): PdfDocument {
     val pdf = PdfDocument()
     val page = pdf.startPage(PdfDocument.PageInfo.Builder(595, 842, 1).create())
@@ -681,40 +695,63 @@ private fun erstellePdf(
     c.drawText("Straße: $strasse", 40f, 348f, p)
     c.drawText("PLZ und Ort: $ort", 40f, 368f, p)
     c.drawText("Leistung: $leistung", 40f, 398f, p)
-    c.drawLine(40f, 423f, 550f, 423f, p)
-    c.drawText("Arbeitszeit", 40f, 448f, p)
-    c.drawText("%.2f Std.".format(Locale.GERMANY, stunden), 250f, 448f, p)
-    c.drawText(euro(arbeitsbetrag(stunden, stundensatz)), 450f, 448f, p)
-    c.drawText("Material", 40f, 473f, p)
-    c.drawText(euro(material), 450f, 473f, p)
-    c.drawText("Fahrtkosten", 40f, 498f, p)
-    c.drawText(euro(fahrt), 450f, 498f, p)
+    // Saubere Leistungstabelle: Leistung | Menge/Details | Einzelpreis | Gesamt
+    p.style = Paint.Style.STROKE
+    p.strokeWidth = 1f
+    c.drawRect(40f, 420f, 550f, if (erstellungskosten > 0.0) 545f else 520f, p)
+    p.style = Paint.Style.FILL
+    p.isFakeBoldText = true
+    c.drawText("Leistung", 50f, 442f, p)
+    c.drawText("Menge / Details", 255f, 442f, p)
+    c.drawText("Einzelpreis", 385f, 442f, p)
+    c.drawText("Gesamt", 490f, 442f, p)
+    p.isFakeBoldText = false
+    p.style = Paint.Style.STROKE
+    c.drawLine(40f, 450f, 550f, 450f, p)
+    c.drawLine(245f, 420f, 245f, if (erstellungskosten > 0.0) 545f else 520f, p)
+    c.drawLine(375f, 420f, 375f, if (erstellungskosten > 0.0) 545f else 520f, p)
+    c.drawLine(480f, 420f, 480f, if (erstellungskosten > 0.0) 545f else 520f, p)
+    p.style = Paint.Style.FILL
+    c.drawText("Arbeitszeit", 50f, 472f, p)
+    c.drawText("%.2f Std.".format(Locale.GERMANY, stunden), 255f, 472f, p)
+    c.drawText(euro(stundensatz) + " / Std.", 385f, 472f, p)
+    c.drawText(euro(arbeitsbetrag(stunden, stundensatz)), 490f, 472f, p)
+    c.drawText("Material", 50f, 497f, p)
+    c.drawText("—", 255f, 497f, p)
+    c.drawText("—", 385f, 497f, p)
+    c.drawText(euro(material), 490f, 497f, p)
+    c.drawText("Fahrtkosten", 50f, 522f, p)
+    c.drawText(if (fahrtKm > 0.0) String.format(Locale.GERMANY, "%.2f km", fahrtKm) else "—", 255f, 522f, p)
+    c.drawText(if (fahrtKm > 0.0) String.format(Locale.GERMANY, "%.2f €/km", fahrtSatz) else "—", 385f, 522f, p)
+    c.drawText(euro(fahrt), 490f, 522f, p)
     if (erstellungskosten > 0.0) {
-        c.drawText("Erstellungskosten", 40f, 523f, p)
-        c.drawText(euro(erstellungskosten), 450f, 523f, p)
+        c.drawText("Erstellungskosten", 50f, 540f, p)
+        c.drawText("—", 255f, 540f, p)
+        c.drawText("—", 385f, 540f, p)
+        c.drawText(euro(erstellungskosten), 490f, 540f, p)
     }
-    c.drawLine(40f, if (erstellungskosten > 0.0) 538f else 513f, 550f, if (erstellungskosten > 0.0) 538f else 513f, p)
+    p.style = Paint.Style.FILL
     val gesamt = gesamtbetrag(stunden, material, fahrt, stundensatz, erstellungskosten)
     p.textSize = 11f
     val steuerArt = prefs.getString(STEUERART_KEY, "") ?: ""
-    val steuerZeileY = if (erstellungskosten > 0.0) 603f else 578f
+    val steuerZeileY = if (erstellungskosten > 0.0) 615f else 590f
     if (steuerArt == STEUERART_KLEINUNTERNEHMER) {
         p.textSize = 18f
-        c.drawText("Gesamtsumme: ${euro(gesamt)}", 40f, if (erstellungskosten > 0.0) 573f else 548f, p)
+        c.drawText("Gesamtsumme: ${euro(gesamt)}", 40f, if (erstellungskosten > 0.0) 585f else 560f, p)
         p.textSize = 11f
         c.drawText("Gemäß § 19 UStG wird keine Umsatzsteuer berechnet.", 40f, steuerZeileY, p)
     } else if (steuerArt == STEUERART_REGELBESTEUERUNG) {
         val ust = umsatzsteuerBetrag(gesamt)
         p.textSize = 16f
-        c.drawText("Netto: ${euro(gesamt)}", 40f, if (erstellungskosten > 0.0) 573f else 548f, p)
+        c.drawText("Netto: ${euro(gesamt)}", 40f, if (erstellungskosten > 0.0) 585f else 560f, p)
         p.textSize = 11f
         c.drawText("Umsatzsteuer 19 %: ${euro(ust)}", 40f, steuerZeileY, p)
         c.drawText("Gesamt inkl. Umsatzsteuer: ${euro(runde2(gesamt + ust))}", 40f, steuerZeileY + 16f, p)
     }
-    val unterschriftTitelY = if (dokumentTitel.contains("KOSTENVORANSCHLAG", ignoreCase = true) && erstellungskosten > 0.0) 650f else 628f
+    val unterschriftTitelY = if (dokumentTitel.contains("KOSTENVORANSCHLAG", ignoreCase = true) && erstellungskosten > 0.0) 675f else 650f
     if (dokumentTitel.contains("KOSTENVORANSCHLAG", ignoreCase = true) && erstellungskosten > 0.0) {
         p.textSize = 11f
-        c.drawText("Hinweis: Dieser Kostenvoranschlag ist kostenpflichtig.", 40f, 628f, p)
+        c.drawText("Hinweis: Dieser Kostenvoranschlag ist kostenpflichtig.", 40f, 650f, p)
     }
     c.drawText("Auftragserteilung / Unterschrift Kunde:", 40f, unterschriftTitelY, p)
     val signBitmap = ladeUnterschriftBitmap(unterschriftPfad)
@@ -759,7 +796,9 @@ private fun erstelleRechnungPdf(
     unterschriftDatum: String = "",
     fotosVorher: List<String> = emptyList(),
     fotosNachher: List<String> = emptyList(),
-    erstellungskosten: Double = 0.0
+    erstellungskosten: Double = 0.0,
+    fahrtKm: Double = 0.0,
+    fahrtSatz: Double = 0.40
 ): PdfDocument {
     val pdf = PdfDocument()
     val page = pdf.startPage(PdfDocument.PageInfo.Builder(595, 842, 1).create())
@@ -796,21 +835,43 @@ private fun erstelleRechnungPdf(
     c.drawText("PLZ und Ort: $ort", 40f, 405f, p)
     c.drawText("Leistung: $leistung", 40f, 435f, p)
 
-    c.drawLine(40f, 460f, 550f, 460f, p)
-    c.drawText("Arbeitszeit", 40f, 485f, p)
-    c.drawText("%.2f Std.".format(Locale.GERMANY, stunden), 250f, 485f, p)
-    c.drawText(euro(arbeitsbetrag(stunden, stundensatz)), 450f, 485f, p)
-    c.drawText("Material", 40f, 510f, p)
-    c.drawText(euro(material), 450f, 510f, p)
-    c.drawText("Fahrtkosten", 40f, 535f, p)
-    c.drawText(euro(fahrt), 450f, 535f, p)
-    var rechnungY = 560f
+    p.style = Paint.Style.STROKE
+    p.strokeWidth = 1f
+    val tabellenEnde = if (erstellungskosten > 0.0) 590f else 565f
+    c.drawRect(40f, 458f, 550f, tabellenEnde, p)
+    p.style = Paint.Style.FILL
+    p.isFakeBoldText = true
+    c.drawText("Leistung", 50f, 480f, p)
+    c.drawText("Menge / Details", 255f, 480f, p)
+    c.drawText("Einzelpreis", 385f, 480f, p)
+    c.drawText("Gesamt", 490f, 480f, p)
+    p.isFakeBoldText = false
+    p.style = Paint.Style.STROKE
+    c.drawLine(40f, 488f, 550f, 488f, p)
+    c.drawLine(245f, 458f, 245f, tabellenEnde, p)
+    c.drawLine(375f, 458f, 375f, tabellenEnde, p)
+    c.drawLine(480f, 458f, 480f, tabellenEnde, p)
+    p.style = Paint.Style.FILL
+    c.drawText("Arbeitszeit", 50f, 510f, p)
+    c.drawText("%.2f Std.".format(Locale.GERMANY, stunden), 255f, 510f, p)
+    c.drawText(euro(stundensatz) + " / Std.", 385f, 510f, p)
+    c.drawText(euro(arbeitsbetrag(stunden, stundensatz)), 490f, 510f, p)
+    c.drawText("Material", 50f, 535f, p)
+    c.drawText("—", 255f, 535f, p)
+    c.drawText("—", 385f, 535f, p)
+    c.drawText(euro(material), 490f, 535f, p)
+    c.drawText("Fahrtkosten", 50f, 560f, p)
+    c.drawText(if (fahrtKm > 0.0) String.format(Locale.GERMANY, "%.2f km", fahrtKm) else "—", 255f, 560f, p)
+    c.drawText(if (fahrtKm > 0.0) String.format(Locale.GERMANY, "%.2f €/km", fahrtSatz) else "—", 385f, 560f, p)
+    c.drawText(euro(fahrt), 490f, 560f, p)
+    var rechnungY = 565f
     if (erstellungskosten > 0.0) {
-        c.drawText("Erstellungskosten", 40f, 560f, p)
-        c.drawText(euro(erstellungskosten), 450f, 560f, p)
-        rechnungY = 585f
+        c.drawText("Erstellungskosten", 50f, 585f, p)
+        c.drawText("—", 255f, 585f, p)
+        c.drawText("—", 385f, 585f, p)
+        c.drawText(euro(erstellungskosten), 490f, 585f, p)
+        rechnungY = 590f
     }
-    c.drawLine(40f, rechnungY, 550f, rechnungY, p)
 
     val gesamt = gesamtbetrag(stunden, material, fahrt, stundensatz, erstellungskosten)
     val steuerArt = prefs.getString(STEUERART_KEY, "") ?: ""
@@ -818,22 +879,22 @@ private fun erstelleRechnungPdf(
     val rechnungsEndbetrag = if (steuerArt == STEUERART_REGELBESTEUERUNG) runde2(gesamt + ust) else gesamt
     p.textSize = 16f
     if (steuerArt == STEUERART_REGELBESTEUERUNG) {
-        c.drawText("Netto: ${euro(gesamt)}", 40f, rechnungY + 38f, p)
-        c.drawText("Umsatzsteuer 19 %: ${euro(ust)}", 40f, rechnungY + 58f, p)
+        c.drawText("Netto: ${euro(gesamt)}", 40f, rechnungY + 45f, p)
+        c.drawText("Umsatzsteuer 19 %: ${euro(ust)}", 40f, rechnungY + 65f, p)
         p.textSize = 18f
-        c.drawText("Gesamtbetrag: ${euro(rechnungsEndbetrag)}", 40f, rechnungY + 82f, p)
+        c.drawText("Gesamtbetrag: ${euro(rechnungsEndbetrag)}", 40f, rechnungY + 90f, p)
         p.textSize = 11f
-        c.drawText("Umsatzsteuer 19 % ist im Gesamtbetrag enthalten.", 40f, rechnungY + 108f, p)
-        c.drawText("Bitte überweisen Sie den Rechnungsbetrag bis zum $faelligAm.", 40f, rechnungY + 130f, p)
-        c.drawText("Vielen Dank für Ihr Vertrauen.", 40f, rechnungY + 155f, p)
+        c.drawText("Umsatzsteuer 19 % ist im Gesamtbetrag enthalten.", 40f, rechnungY + 116f, p)
+        c.drawText("Bitte überweisen Sie den Rechnungsbetrag bis zum $faelligAm.", 40f, rechnungY + 138f, p)
+        c.drawText("Vielen Dank für Ihr Vertrauen.", 40f, rechnungY + 163f, p)
     } else {
         p.textSize = 18f
-        c.drawText("Gesamtbetrag: ${euro(rechnungsEndbetrag)}", 40f, rechnungY + 40f, p)
+        c.drawText("Gesamtbetrag: ${euro(rechnungsEndbetrag)}", 40f, rechnungY + 50f, p)
         p.textSize = 11f
-        c.drawText("Steuerbefreiung für Kleinunternehmer gemäß § 19 UStG.", 40f, rechnungY + 68f, p)
-        c.drawText("Es wird keine Umsatzsteuer berechnet.", 40f, rechnungY + 83f, p)
-        c.drawText("Bitte überweisen Sie den Rechnungsbetrag bis zum $faelligAm.", 40f, rechnungY + 105f, p)
-        c.drawText("Vielen Dank für Ihr Vertrauen.", 40f, rechnungY + 130f, p)
+        c.drawText("Steuerbefreiung für Kleinunternehmer gemäß § 19 UStG.", 40f, rechnungY + 78f, p)
+        c.drawText("Es wird keine Umsatzsteuer berechnet.", 40f, rechnungY + 93f, p)
+        c.drawText("Bitte überweisen Sie den Rechnungsbetrag bis zum $faelligAm.", 40f, rechnungY + 115f, p)
+        c.drawText("Vielen Dank für Ihr Vertrauen.", 40f, rechnungY + 138f, p)
     }
     pdf.finishPage(page)
 
@@ -1073,7 +1134,7 @@ private fun druckeRechnungPdf(context: Context, auftrag: Auftrag) {
                 auftrag.terminDatum.ifBlank { auftrag.datum },
                 auftrag.kunde, auftrag.kundenStrasse, auftrag.kundenOrt, auftrag.leistung,
                 auftrag.stunden, auftrag.material, auftrag.fahrt, auftrag.stundensatz,
-                auftrag.unterschriftPfad, auftrag.unterschriftDatum, auftrag.fotosVorher, auftrag.fotosNachher, auftrag.erstellungskosten
+                auftrag.unterschriftPfad, auftrag.unterschriftDatum, auftrag.fotosVorher, auftrag.fotosNachher, auftrag.erstellungskosten, auftrag.fahrtKm, auftrag.fahrtKostenProKm
             )
             val info = PrintDocumentInfo.Builder("KÜMMERO-Rechnung-$nummer.pdf")
                 .setContentType(PrintDocumentInfo.CONTENT_TYPE_DOCUMENT)
@@ -1152,7 +1213,7 @@ private fun druckePdf(
                 context, nummer, datum, gueltigBis,
                 auftrag.kunde, auftrag.kundenStrasse, auftrag.kundenOrt, auftrag.leistung,
                 auftrag.stunden, auftrag.material, auftrag.fahrt, auftrag.stundensatz,
-                auftrag.unterschriftPfad, auftrag.unterschriftDatum, auftrag.fotosVorher, auftrag.fotosNachher, dokumentTitel, auftrag.erstellungskosten
+                auftrag.unterschriftPfad, auftrag.unterschriftDatum, auftrag.fotosVorher, auftrag.fotosNachher, dokumentTitel, auftrag.erstellungskosten, auftrag.fahrtKm, auftrag.fahrtKostenProKm
             )
             val info = PrintDocumentInfo.Builder(dateiname)
                 .setContentType(PrintDocumentInfo.CONTENT_TYPE_DOCUMENT)
@@ -1466,7 +1527,8 @@ fun KuemmeroApp() {
     var stunden by remember { mutableStateOf("") }
     var material by remember { mutableStateOf("") }
     var materialBonUri by remember { mutableStateOf("") }
-    var fahrt by remember { mutableStateOf("") }
+    var fahrtKm by remember { mutableStateOf("") }
+    var fahrtKostenProKm by remember { mutableStateOf(context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE).getString(FAHRTKOSTEN_PRO_KM_KEY, "0.40") ?: "0.40") }
     var stundensatz by remember {
         mutableStateOf(
             context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
@@ -1553,7 +1615,7 @@ fun KuemmeroApp() {
     var kvMaterial by remember { mutableStateOf("") }
     var kvMaterialBonUri by remember { mutableStateOf("") }
     var kvFotosVorher by remember { mutableStateOf<List<String>>(emptyList()) }
-    var kvFahrt by remember { mutableStateOf("") }
+    var kvFahrtKm by remember { mutableStateOf("") }
     var kvStundensatz by remember { mutableStateOf(context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE).getString(STUNDENSATZ_KEY, "42.00") ?: "42.00") }
     var kvErstellungskosten by remember { mutableStateOf("") }
     var kvLoeschIndex by remember { mutableStateOf<Int?>(null) }
@@ -2152,13 +2214,13 @@ fun KuemmeroApp() {
                     context, nummer, datum, gueltigBis,
                     a.kunde, a.kundenStrasse, a.kundenOrt, a.leistung,
                     a.stunden, a.material, a.fahrt, a.stundensatz, a.unterschriftPfad, a.unterschriftDatum,
-                    a.fotosVorher, a.fotosNachher
+                    a.fotosVorher, a.fotosNachher, "ANGEBOT", a.erstellungskosten, a.fahrtKm, a.fahrtKostenProKm
                 )
             } else {
                 erstellePdf(
                     context, nummer, datum, gueltigBis, kunde, strasse, ort, leistung,
-                    zahl(stunden), zahl(material), zahl(fahrt), zahl(stundensatz, 42.0), unterschriftPfad, unterschriftDatum,
-                    fotosVorher, fotosNachher
+                    zahl(stunden), zahl(material), fahrtKosten, zahl(stundensatz, 42.0), unterschriftPfad, unterschriftDatum,
+                    fotosVorher, fotosNachher, "ANGEBOT", zahl(erstellungskosten), fahrtKm = zahl(fahrtKm), fahrtSatz = fahrtSatz
                 )
             }
             context.contentResolver.openOutputStream(uri)?.use { out -> pdf.writeTo(out) }
@@ -2205,7 +2267,7 @@ fun KuemmeroApp() {
                         a.stundensatz,
                         a.unterschriftPfad,
                         a.unterschriftDatum,
-                        a.fotosVorher, a.fotosNachher, a.erstellungskosten
+                        a.fotosVorher, a.fotosNachher, a.erstellungskosten, a.fahrtKm, a.fahrtKostenProKm
                     )
                     context.contentResolver.openOutputStream(uri)?.use { out -> pdf.writeTo(out) }
                     pdf.close()
@@ -2233,7 +2295,8 @@ fun KuemmeroApp() {
 
     val arbeitsstunden = zahl(stunden)
     val materialKosten = zahl(material)
-    val fahrtKosten = zahl(fahrt)
+    val fahrtSatz = zahl(fahrtKostenProKm, 0.40)
+    val fahrtKosten = runde2(zahl(fahrtKm) * fahrtSatz)
     val rate = zahl(stundensatz, 42.0)
     val gesamt = gesamtbetrag(arbeitsstunden, materialKosten, fahrtKosten, rate)
     val umsatz = auftraege.sumOf { gesamtbetrag(it.stunden, it.material, it.fahrt, it.stundensatz, it.erstellungskosten) }
@@ -3176,36 +3239,18 @@ fun KuemmeroApp() {
         )
     }
 
+    val seiten = listOf("Heute", "Aufträge", "Kostenvoranschläge", "Kunden", "Mahnungen", "Mehr")
+    fun wischSeite(delta: Float) {
+        val index = seiten.indexOf(hauptseite)
+        if (index < 0) return
+        val neuerIndex = if (delta < 0) (index + 1).coerceAtMost(seiten.lastIndex) else (index - 1).coerceAtLeast(0)
+        if (neuerIndex != index) hauptseite = seiten[neuerIndex]
+    }
+
     Scaffold(
             modifier = Modifier.pointerInput(hauptseite) {
-                var gesamterWegX = 0f
                 detectHorizontalDragGestures(
-                    onHorizontalDrag = { change, dragAmount ->
-                        change.consume()
-                        gesamterWegX += dragAmount
-                    },
-                    onDragStart = { gesamterWegX = 0f },
-                    onDragEnd = {
-                        val schwelle = 100f
-                        if (kotlin.math.abs(gesamterWegX) >= schwelle) {
-                            val seiten = listOf(
-                                "Heute", "Aufträge", "Kostenvoranschläge",
-                                "Kunden", "Mahnungen", "Mehr"
-                            )
-                            val index = seiten.indexOf(hauptseite)
-                            val neuerIndex = if (gesamterWegX < 0) index + 1 else index - 1
-                            if (index >= 0 && neuerIndex in seiten.indices) {
-                                hauptseite = seiten[neuerIndex]
-                                if (hauptseite == "Aufträge") {
-                                    auftragDetailIndex = null
-                                    auftragFormOffen = false
-                                    bearbeiteIndex = null
-                                    loeschIndex = null
-                                }
-                            }
-                        }
-                    },
-                    onDragCancel = { gesamterWegX = 0f }
+                    onHorizontalDrag = { change, dragAmount -> change.consume(); if (kotlin.math.abs(dragAmount) > 100f) { wischSeite(dragAmount); } }
                 )
             },
             topBar = {
@@ -3553,12 +3598,13 @@ fun KuemmeroApp() {
                 }
                 item {
                     OutlinedTextField(
-                        fahrt, { fahrt = it },
-                        label = { Text("Fahrtkosten (€)") },
+                        fahrtKm, { fahrtKm = it },
+                        label = { Text("Kilometer") },
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
                         colors = feldFarben,
                         modifier = Modifier.fillMaxWidth()
                     )
+                    Text("Fahrkosten: ${euro(fahrtKosten)} (${zahl(fahrtKm)} km × ${euro(fahrtSatz)}/km)", color = KuemmeroText, fontSize = 12.sp)
                 }
                 item {
                     OutlinedTextField(
@@ -3692,7 +3738,9 @@ fun KuemmeroApp() {
                                     bearbeiteIndex?.let { auftraege.getOrNull(it)?.arbeitsEnde } ?: 0L,
                                     bearbeiteIndex?.let { auftraege.getOrNull(it)?.arbeitsSekunden } ?: 0L,
                                     erstellungskosten = bearbeiteIndex?.let { auftraege.getOrNull(it)?.erstellungskosten } ?: 0.0,
-                                    leistungsdatum = leistungsdatum.trim().ifBlank { datum.trim() }
+                                    leistungsdatum = leistungsdatum.trim().ifBlank { datum.trim() },
+                                    fahrtKm = zahl(fahrtKm),
+                                    fahrtKostenProKm = fahrtSatz
                                 )
                                 val index = bearbeiteIndex
                                 if (index != null) {
@@ -3714,7 +3762,7 @@ fun KuemmeroApp() {
                                 stunden = ""
                                 material = ""
                                 materialBonUri = ""
-                                fahrt = ""
+                                fahrtKm = ""
                                 status = "Offen"
                                 zahlungsstatus = "Offen"
                                 bezahltAm = ""
@@ -3750,7 +3798,7 @@ fun KuemmeroApp() {
                                 leistung = ""
                                 stunden = ""
                                 material = ""
-                                fahrt = ""
+                                fahrtKm = ""
                                 status = "Offen"
                                 zahlungsstatus = "Offen"
                                 bezahltAm = ""
@@ -3910,7 +3958,7 @@ fun KuemmeroApp() {
                                 stunden = ""
                                 material = ""
                                 materialBonUri = ""
-                                fahrt = ""
+                                fahrtKm = ""
                                 status = "Offen"
                                 zahlungsstatus = "Offen"
                                 bezahltAm = ""
@@ -4273,7 +4321,7 @@ fun KuemmeroApp() {
                                     stunden = a.stunden.toString().replace(".", ",")
                                     material = a.material.toString().replace(".", ",")
                                     materialBonUri = a.materialBonUri
-                                    fahrt = a.fahrt.toString().replace(".", ",")
+                                    fahrtKm = if (a.fahrtKm > 0.0) a.fahrtKm.toString().replace(".", ",") else ""
                                     stundensatz = a.stundensatz.toString().replace(".", ",")
                                     status = a.status
                                     zahlungsstatus = a.zahlungsstatus
@@ -4598,7 +4646,7 @@ fun KuemmeroApp() {
                                         leistungsdatum = datumJetzt
                                         gueltigBis = ""
                                         kunde = ""; strasse = ""; ort = ""; leistung = ""
-                                        stunden = ""; material = ""; materialBonUri = ""; fahrt = ""
+                                        stunden = ""; material = ""; materialBonUri = ""; fahrtKm = ""
                                         status = "Offen"; zahlungsstatus = "Offen"; bezahltAm = ""
                                         terminDatum = ""; terminUhrzeit = ""; notiz = ""
                                         fotosVorher = emptyList(); fotosNachher = emptyList()
@@ -4800,7 +4848,7 @@ fun KuemmeroApp() {
                                         kvMaterial = ""
                                         kvMaterialBonUri = ""
                                         kvFotosVorher = emptyList()
-                                        kvFahrt = ""
+                                        kvFahrtKm = ""
                                         kvFormOffen = true
                                     },
                                     modifier = Modifier.fillMaxWidth().heightIn(min = 54.dp),
@@ -4858,7 +4906,7 @@ fun KuemmeroApp() {
                                                     kvMaterial = k.material.toString().replace(".", ",")
                                                     kvMaterialBonUri = k.materialBonUri
                                                     kvFotosVorher = k.fotosVorher
-                                                    kvFahrt = k.fahrt.toString().replace(".", ",")
+                                                    kvFahrtKm = if (k.fahrtKm > 0.0) k.fahrtKm.toString().replace(".", ",") else ""
                                                     kvStundensatz = k.stundensatz.toString().replace(".", ",")
                                                     kvErstellungskosten = k.erstellungskosten.toString().replace(".", ",")
                                                     kvFormOffen = true
@@ -4892,7 +4940,9 @@ fun KuemmeroApp() {
                                                         zahlungsstatus = "Offen",
                                                         fotosVorher = k.fotosVorher,
                                                         erstellungskosten = k.erstellungskosten,
-                                                        leistungsdatum = k.datum
+                                                        leistungsdatum = k.datum,
+                                                        fahrtKm = k.fahrtKm,
+                                                        fahrtKostenProKm = k.fahrtKostenProKm
                                                     )
                                                     auftraege = auftraege + a
                                                     speichereAuftraege(context, auftraege)
@@ -5031,7 +5081,7 @@ fun KuemmeroApp() {
                                                 }
                                             }
                                         }
-                                        OutlinedTextField(kvFahrt, { kvFahrt = it }, label = { Text("Fahrtkosten (€)") }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal), colors = feldFarben, modifier = Modifier.fillMaxWidth())
+                                        OutlinedTextField(kvFahrtKm, { kvFahrtKm = it }, label = { Text("Kilometer") }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal), colors = feldFarben, modifier = Modifier.fillMaxWidth())
                                         OutlinedTextField(kvStundensatz, { kvStundensatz = it }, label = { Text("Stundensatz (€ / Stunde)") }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal), colors = feldFarben, modifier = Modifier.fillMaxWidth())
                                         OutlinedTextField(kvErstellungskosten, { kvErstellungskosten = it }, label = { Text("Erstellungskosten (€)") }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal), colors = feldFarben, modifier = Modifier.fillMaxWidth())
                                         if (zahl(kvErstellungskosten) > 0.0) {
@@ -5043,7 +5093,7 @@ fun KuemmeroApp() {
                                             )
                                         }
                                         Text(
-                                            "Gesamtsumme: ${euro(gesamtbetrag(zahl(kvStunden), zahl(kvMaterial), zahl(kvFahrt), zahl(kvStundensatz, 42.0), zahl(kvErstellungskosten)))}",
+                                            "Gesamtsumme: ${euro(gesamtbetrag(zahl(kvStunden), zahl(kvMaterial), runde2(zahl(kvFahrtKm) * fahrtSatz), zahl(kvStundensatz, 42.0), zahl(kvErstellungskosten)))}",
                                             style = MaterialTheme.typography.titleLarge,
                                             color = KuemmeroGreen,
                                             fontWeight = FontWeight.Bold
@@ -5056,8 +5106,10 @@ fun KuemmeroApp() {
                                                     val k = Kostenvoranschlag(
                                                         kvNummer.trim(), kvDatum.trim(), kvGueltigBis.trim(),
                                                         kvKunde.trim(), kvStrasse.trim(), kvOrt.trim(), kvLeistung.trim(),
-                                                        zahl(kvStunden), zahl(kvMaterial), zahl(kvFahrt), zahl(kvStundensatz, 42.0),
-                                                        kvMaterialBonUri, kvFotosVorher, zahl(kvErstellungskosten)
+                                                        zahl(kvStunden), zahl(kvMaterial), runde2(zahl(kvFahrtKm) * fahrtSatz), zahl(kvStundensatz, 42.0),
+                                                        kvMaterialBonUri, kvFotosVorher, zahl(kvErstellungskosten),
+                                                        fahrtKm = zahl(kvFahrtKm),
+                                                        fahrtKostenProKm = fahrtSatz
                                                     )
                                                     val list = kostenvoranschlaege.toMutableList()
                                                     if (kvBearbeiteIndex != null) list[kvBearbeiteIndex!!] = k else list.add(k)
@@ -5315,6 +5367,31 @@ fun KuemmeroApp() {
                     }
                     "Mehr" -> {
                         item { Text("Mehr", style = MaterialTheme.typography.headlineSmall, color = KuemmeroGreen, fontWeight = FontWeight.Bold) }
+                        item {
+                            Card(Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = KuemmeroSurface), shape = RoundedCornerShape(18.dp)) {
+                                Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                    Text("🚗 Fahrkosten", style = MaterialTheme.typography.titleMedium, color = KuemmeroGreen, fontWeight = FontWeight.Bold)
+                                    OutlinedTextField(
+                                        value = fahrtKostenProKm,
+                                        onValueChange = { fahrtKostenProKm = it },
+                                        label = { Text("Fahrkosten pro km (€)") },
+                                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                                        colors = feldFarben,
+                                        modifier = Modifier.fillMaxWidth()
+                                    )
+                                    Button(
+                                        onClick = {
+                                            val wert = zahl(fahrtKostenProKm, 0.40)
+                                            fahrtKostenProKm = String.format(Locale.GERMANY, "%.2f", wert)
+                                            context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE).edit().putString(FAHRTKOSTEN_PRO_KM_KEY, wert.toString()).apply()
+                                            android.widget.Toast.makeText(context, "Fahrkosten gespeichert: ${euro(wert)}/km", 0).show()
+                                        },
+                                        modifier = Modifier.fillMaxWidth()
+                                    ) { Text("Fahrkosten speichern", fontWeight = FontWeight.Bold) }
+                                    Text("Im Auftrag und Kostenvoranschlag wird nur die Kilometerzahl eingetragen.", color = KuemmeroText, fontSize = 12.sp)
+                                }
+                            }
+                        }
                         item {
                             OutlinedButton(
                                 onClick = { hauptseite = "Kalender" },
