@@ -2220,7 +2220,7 @@ fun KuemmeroApp() {
                 erstellePdf(
                     context, nummer, datum, gueltigBis, kunde, strasse, ort, leistung,
                     zahl(stunden), zahl(material), fahrtKosten, zahl(stundensatz, 42.0), unterschriftPfad, unterschriftDatum,
-                    fotosVorher, fotosNachher, "ANGEBOT", zahl(erstellungskosten), fahrtKm = zahl(fahrtKm), fahrtSatz = fahrtSatz
+                    fotosVorher, fotosNachher, "ANGEBOT", zahl(erstellungskosten), zahl(fahrtKm), zahl(fahrtKostenProKm, 0.40)
                 )
             }
             context.contentResolver.openOutputStream(uri)?.use { out -> pdf.writeTo(out) }
