@@ -1909,6 +1909,18 @@ fun KuemmeroApp() {
 
     var auftragFuerPdf by remember { mutableStateOf<Auftrag?>(null) }
     var rechnungFuerIndex by remember { mutableStateOf<Int?>(null) }
+
+    // Auftragsnummer immer automatisch vorhanden halten. Auch ältere/leere Aufträge
+    // bekommen beim Öffnen des Formulars eine eindeutige Nummer.
+    LaunchedEffect(auftragFormOffen, bearbeiteIndex) {
+        if (auftragFormOffen && nummer.isBlank()) {
+            nummer = kuemmeroNaechsteDokumentNummer(
+                "AUF",
+                Calendar.getInstance().get(Calendar.YEAR),
+                auftraege.map { it.nummer }
+            )
+        }
+    }
     var rechnungNummerEditIndex by remember { mutableStateOf<Int?>(null) }
     var rechnungNummerEditText by remember { mutableStateOf("") }
     var rechnungVorgangIndex by remember { mutableStateOf<Int?>(null) }
@@ -3760,6 +3772,102 @@ fun KuemmeroApp() {
                 passtSuche && passtStatus && passtZahlung
             }
 
+        if (hauptseite == "Rechnung") {
+            val rechnungIndex = rechnungFuerIndex
+            val rechnungAuftrag = rechnungIndex?.let { auftraege.getOrNull(it) }
+            LazyColumn(
+                modifier = Modifier.padding(padding).padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                item {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        TextButton(onClick = { rechnungFuerIndex = null; hauptseite = "Aufträge" }) {
+                            Text("← Zurück", color = KuemmeroGreen, fontWeight = FontWeight.Bold)
+                        }
+                        Text(
+                            "Rechnung",
+                            style = MaterialTheme.typography.headlineSmall,
+                            color = KuemmeroGreen,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                }
+
+                if (rechnungAuftrag == null) {
+                    item {
+                        Text("Kein Auftrag für die Rechnung ausgewählt.", color = KuemmeroText)
+                    }
+                } else {
+                    item {
+                        Card(
+                            Modifier.fillMaxWidth(),
+                            colors = CardDefaults.cardColors(containerColor = KuemmeroSurface),
+                            shape = RoundedCornerShape(20.dp),
+                            border = BorderStroke(1.5.dp, KuemmeroGreenLight)
+                        ) {
+                            Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(7.dp)) {
+                                Text("Rechnung aus Auftrag", color = KuemmeroGreen, fontWeight = FontWeight.Bold)
+                                Text("Auftragsnummer: ${rechnungAuftrag.nummer.ifBlank { "—" }}", color = KuemmeroText)
+                                Text("Kunde: ${rechnungAuftrag.kunde.ifBlank { "—" }}", color = KuemmeroText)
+                                Text("Adresse: ${rechnungAuftrag.kundenStrasse.ifBlank { "—" }}", color = KuemmeroText)
+                                Text("PLZ und Ort: ${rechnungAuftrag.kundenOrt.ifBlank { "—" }}", color = KuemmeroText)
+                                Text("Leistung: ${rechnungAuftrag.leistung.ifBlank { "—" }}", color = KuemmeroText)
+                                Text("Leistungsdatum: ${rechnungAuftrag.leistungsdatum.ifBlank { rechnungAuftrag.terminDatum.ifBlank { rechnungAuftrag.datum } }}", color = KuemmeroText)
+                                HorizontalDivider(color = KuemmeroGreenLight)
+                                Text(
+                                    "Gesamtbetrag: ${euro(gesamtbetrag(rechnungAuftrag.stunden, rechnungAuftrag.material, rechnungAuftrag.fahrt, rechnungAuftrag.stundensatz, rechnungAuftrag.erstellungskosten))}",
+                                    style = MaterialTheme.typography.titleLarge,
+                                    color = KuemmeroGreen,
+                                    fontWeight = FontWeight.Bold
+                                )
+                            }
+                        }
+                    }
+
+                    item {
+                        Button(
+                            onClick = {
+                                val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+                                val steuer = prefs.getString(STEUERNUMMER_KEY, "")?.trim().orEmpty()
+                                val firmenStrasse = prefs.getString(FIRMENSTRASSE_KEY, "")?.trim().orEmpty()
+                                val firmenPlzOrt = prefs.getString(FIRMENPLZORT_KEY, "")?.trim().orEmpty()
+                                when {
+                                    firmenStrasse.isBlank() -> android.widget.Toast.makeText(context, "Bitte unter Mehr die Firmenstraße / Hausnummer eintragen.", android.widget.Toast.LENGTH_LONG).show()
+                                    firmenPlzOrt.isBlank() -> android.widget.Toast.makeText(context, "Bitte unter Mehr PLZ / Ort eintragen.", android.widget.Toast.LENGTH_LONG).show()
+                                    steuer.isBlank() -> android.widget.Toast.makeText(context, "Bitte unter Mehr Steuernummer / USt-ID / KU-IdNr. eintragen.", android.widget.Toast.LENGTH_LONG).show()
+                                    !steuerartIstAusgewaehlt(context) -> android.widget.Toast.makeText(context, "Bitte unter Mehr die Steuerart auswählen.", android.widget.Toast.LENGTH_LONG).show()
+                                    else -> {
+                                        val name = rechnungAuftrag.kunde.ifBlank { "Kunde" }.replace("/", "-")
+                                        rechnungLauncher.launch(dokumentSpeicherIntent("application/pdf", "KÜMMERO-Rechnung-$name.pdf"))
+                                    }
+                                }
+                            },
+                            modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp),
+                            shape = RoundedCornerShape(28.dp),
+                            colors = ButtonDefaults.buttonColors(containerColor = KuemmeroGreen)
+                        ) {
+                            Text("🧾 Rechnung als PDF erstellen & speichern", fontWeight = FontWeight.Bold)
+                        }
+                    }
+
+                    item {
+                        OutlinedButton(
+                            onClick = { rechnungFuerIndex = null; hauptseite = "Aufträge" },
+                            modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp),
+                            shape = RoundedCornerShape(26.dp),
+                            border = BorderStroke(2.dp, KuemmeroGreen),
+                            colors = ButtonDefaults.outlinedButtonColors(contentColor = KuemmeroGreen)
+                        ) {
+                            Text("Abbrechen", fontWeight = FontWeight.Bold)
+                        }
+                    }
+                }
+            }
+        }
+
         if (hauptseite == "Aufträge") {
             LazyColumn(
                 state = listeState,
@@ -4146,8 +4254,16 @@ fun KuemmeroApp() {
                                     Kunde(kunde.trim(), strasse.trim(), ort.trim())
                                 )
                                 kunden = ladeKunden(context)
+                                val sichereAuftragsnummer = nummer.trim().ifBlank {
+                                    kuemmeroNaechsteDokumentNummer(
+                                        "AUF",
+                                        Calendar.getInstance().get(Calendar.YEAR),
+                                        auftraege.map { it.nummer }
+                                    )
+                                }
+                                nummer = sichereAuftragsnummer
                                 val a = Auftrag(
-                                    nummer.trim(), datum.trim(), gueltigBis.trim(),
+                                    sichereAuftragsnummer, datum.trim(), gueltigBis.trim(),
                                     kunde.trim(), strasse.trim(), ort.trim(), leistung.trim(),
                                     arbeitsstunden, materialKosten, materialBonUri, fahrtKosten, rate, status, zahlungsstatus, bezahltAm,
                                     terminDatum.trim(), terminUhrzeit.trim(), notiz.trim(), fotosVorher, fotosNachher, unterschriftPfad, unterschriftDatum,
@@ -4876,8 +4992,7 @@ fun KuemmeroApp() {
                                             android.widget.Toast.makeText(context, fehlend, android.widget.Toast.LENGTH_LONG).show()
                                         } else {
                                             rechnungFuerIndex = index
-                                            val name = a.kunde.ifBlank { "Kunde" }.replace("/", "-")
-                                            rechnungLauncher.launch(dokumentSpeicherIntent("application/pdf", "KÜMMERO-Rechnung-$name.pdf"))
+                                            hauptseite = "Rechnung"
                                         }
                                     },
                                     modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp),
