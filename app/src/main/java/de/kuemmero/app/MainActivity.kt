@@ -2179,7 +2179,9 @@ fun KuemmeroApp() {
             } else {
                 erstellePdf(
                     context, nummer, datum, gueltigBis, kunde, strasse, ort, leistung,
-                    arbeitsstunden, materialKosten, fahrtKosten, rate, unterschriftPfad, unterschriftDatum,
+                    zahl(stunden), zahl(material),
+                    runde2(zahl(fahrtKm) * zahl(fahrtKostenProKm, 0.40)),
+                    zahl(stundensatz, 42.0), unterschriftPfad, unterschriftDatum,
                     fotosVorher, fotosNachher, "AUFTRAG"
                 )
             }
