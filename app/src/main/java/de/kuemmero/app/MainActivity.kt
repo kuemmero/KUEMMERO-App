@@ -73,6 +73,17 @@ import kotlinx.coroutines.launch
 
 private const val RECHNUNG_SCAN_PREFIX = "rechnung_scan_"
 private const val RECHNUNGSNUMMER_COUNTER_KEY = "rechnungsnummer_counter"
+private const val STORNO_NUMMER_COUNTER_KEY = "storno_nummer_counter"
+
+private fun naechsteStornonummer(context: Context): String {
+    val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+    val jahr = SimpleDateFormat("yyyy", Locale.GERMANY).format(Date())
+    val key = STORNO_NUMMER_COUNTER_KEY + "_" + jahr
+    val nummer = (prefs.getInt(key, 0) + 1).coerceAtLeast(1)
+    prefs.edit().putInt(key, nummer).apply()
+    return "ST-$jahr-${nummer.toString().padStart(4, '0')}"
+}
+
 
 private fun naechsteRechnungsnummer(context: Context): String {
     val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
@@ -184,7 +195,11 @@ data class Auftrag(
     val leistungsdatum: String = "",
     // Fahrkosten werden zusätzlich zu Legacy-"fahrt" dauerhaft als km und damaliger Satz gespeichert.
     val fahrtKm: Double = 0.0,
-    val fahrtKostenProKm: Double = 0.40
+    val fahrtKostenProKm: Double = 0.40,
+    val rechnungUrsprungsnummer: String = "",
+    val rechnungsstatus: String = "",
+    val rechnungKorrekturHinweis: String = "",
+    val stornoNummer: String = ""
 )
 
 private const val PREFS_NAME = "kuemmero_speicher"
@@ -379,7 +394,11 @@ private fun ladeAuftraege(context: Context): List<Auftrag> {
             o.optBoolean("arbeitszeitUebernommen", false),
             o.optDouble("erstellungskosten", 0.0),
             fahrtKm = o.optDouble("fahrtKm", 0.0),
-            fahrtKostenProKm = o.optDouble("fahrtKostenProKm", context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE).getString(FAHRTKOSTEN_PRO_KM_KEY, "0.40")?.replace(",", ".")?.toDoubleOrNull() ?: 0.40)
+            fahrtKostenProKm = o.optDouble("fahrtKostenProKm", context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE).getString(FAHRTKOSTEN_PRO_KM_KEY, "0.40")?.replace(",", ".")?.toDoubleOrNull() ?: 0.40),
+            rechnungUrsprungsnummer = o.optString("rechnungUrsprungsnummer", ""),
+            rechnungsstatus = o.optString("rechnungsstatus", ""),
+            rechnungKorrekturHinweis = o.optString("rechnungKorrekturHinweis", ""),
+            stornoNummer = o.optString("stornoNummer", "")
         )
     }
 }
@@ -453,6 +472,10 @@ private fun speichereAuftraege(context: Context, liste: List<Auftrag>) {
             put("unterschriftDatum", a.unterschriftDatum)
             put("rechnungsnummer", a.rechnungsnummer)
             put("rechnungsdatum", a.rechnungsdatum)
+            put("rechnungUrsprungsnummer", a.rechnungUrsprungsnummer)
+            put("rechnungsstatus", a.rechnungsstatus)
+            put("rechnungKorrekturHinweis", a.rechnungKorrekturHinweis)
+            put("stornoNummer", a.stornoNummer)
             put("faelligAm", a.faelligAm)
             put("mahnung1Datum", a.mahnung1Datum)
             put("mahnung1Frist", a.mahnung1Frist)
@@ -688,8 +711,16 @@ private fun erstellePdf(
     val page = pdf.startPage(PdfDocument.PageInfo.Builder(595, 842, 1).create())
     val c = page.canvas
     val p = Paint()
+    val kuemmeroGruen = android.graphics.Color.rgb(47, 143, 87)
+    val kuemmeroMint = android.graphics.Color.rgb(232, 246, 238)
+    p.color = kuemmeroGruen
     p.textSize = 28f
+    p.isFakeBoldText = true
     c.drawText("KÜMMERO", 40f, 60f, p)
+    p.isFakeBoldText = false
+    p.strokeWidth = 2f
+    c.drawLine(40f, 68f, 550f, 68f, p)
+    p.color = android.graphics.Color.BLACK
     p.textSize = 13f
     c.drawText("Haus & Alltag – wir kümmern uns.", 40f, 88f, p)
     c.drawText("Hausmeisterservice & Seniorenbetreuung", 40f, 108f, p)
@@ -751,6 +782,7 @@ private fun erstellePdf(
     }
     p.style = Paint.Style.FILL
     val gesamt = gesamtbetrag(stunden, material, fahrt, stundensatz, erstellungskosten)
+    p.color = android.graphics.Color.BLACK
     p.textSize = 11f
     val steuerArt = prefs.getString(STEUERART_KEY, "") ?: ""
     val steuerZeileY = if (erstellungskosten > 0.0) 615f else 590f
@@ -821,7 +853,9 @@ private fun erstelleRechnungPdf(
     fotosNachher: List<String> = emptyList(),
     erstellungskosten: Double = 0.0,
     fahrtKm: Double = 0.0,
-    fahrtSatz: Double = 0.40
+    fahrtSatz: Double = 0.40,
+    dokumentTitel: String = "RECHNUNG",
+    referenzRechnung: String = ""
 ): PdfDocument {
     val pdf = PdfDocument()
     val page = pdf.startPage(PdfDocument.PageInfo.Builder(595, 842, 1).create())
@@ -845,25 +879,43 @@ private fun erstelleRechnungPdf(
     c.drawText("Telefon: ${firmenTelefon.ifBlank { "bitte eintragen" }}", 40f, 186f, p)
     c.drawText("E-Mail: ${firmenEmail.ifBlank { "bitte eintragen" }}", 40f, 204f, p)
 
+    p.color = kuemmeroGruen
     p.textSize = 18f
-    c.drawText("RECHNUNG", 40f, 230f, p)
+    p.isFakeBoldText = true
+    c.drawText(dokumentTitel, 40f, 230f, p)
+    p.isFakeBoldText = false
+    p.color = android.graphics.Color.BLACK
+    if (referenzRechnung.isNotBlank()) {
+        p.color = kuemmeroGruen
+        p.textSize = 10f
+        p.isFakeBoldText = true
+        c.drawText("Bezug auf ursprüngliche Rechnung: $referenzRechnung", 40f, 245f, p)
+        p.isFakeBoldText = false
+        p.color = android.graphics.Color.BLACK
+    }
     p.textSize = 12f
-    c.drawText("Rechnungsnummer: $nummer", 40f, 255f, p)
-    c.drawText("Rechnungsdatum: $rechnungsdatum", 40f, 275f, p)
-    c.drawText("Fällig am: $faelligAm", 40f, 295f, p)
-    c.drawText("Steuer-/USt-ID/KU-IdNr.: ${steuernummer.ifBlank { "BITTE IN MEHR EINTRAGEN" }}", 40f, 315f, p)
-    c.drawText("Leistungsdatum: ${leistungsdatum.ifBlank { rechnungsdatum }}", 40f, 335f, p)
-    c.drawText("Kunde: $kunde", 40f, 365f, p)
-    c.drawText("Adresse: $strasse", 40f, 385f, p)
-    c.drawText("PLZ und Ort: $ort", 40f, 405f, p)
-    c.drawText("Leistung: $leistung", 40f, 435f, p)
+    c.drawText("Rechnungsnummer: $nummer", 40f, if (referenzRechnung.isNotBlank()) 268f else 255f, p)
+    c.drawText("Rechnungsdatum: $rechnungsdatum", 40f, if (referenzRechnung.isNotBlank()) 288f else 275f, p)
+    c.drawText("Fällig am: $faelligAm", 40f, if (referenzRechnung.isNotBlank()) 308f else 295f, p)
+    c.drawText("Steuer-/USt-ID/KU-IdNr.: ${steuernummer.ifBlank { "BITTE IN MEHR EINTRAGEN" }}", 40f, if (referenzRechnung.isNotBlank()) 328f else 315f, p)
+    c.drawText("Leistungsdatum: ${leistungsdatum.ifBlank { rechnungsdatum }}", 40f, if (referenzRechnung.isNotBlank()) 348f else 335f, p)
+    c.drawText("Kunde: $kunde", 40f, if (referenzRechnung.isNotBlank()) 378f else 365f, p)
+    c.drawText("Adresse: $strasse", 40f, if (referenzRechnung.isNotBlank()) 398f else 385f, p)
+    c.drawText("PLZ und Ort: $ort", 40f, if (referenzRechnung.isNotBlank()) 418f else 405f, p)
+    c.drawText("Leistung: $leistung", 40f, if (referenzRechnung.isNotBlank()) 448f else 435f, p)
 
     p.style = Paint.Style.STROKE
     p.strokeWidth = 1f
+    p.color = kuemmeroGruen
     val tabellenEnde = if (erstellungskosten > 0.0) 590f else 565f
     c.drawRect(40f, 458f, 550f, tabellenEnde, p)
     p.style = Paint.Style.FILL
+    p.color = kuemmeroMint
+    c.drawRect(41f, 459f, 549f, 487f, p)
+    p.color = android.graphics.Color.BLACK
+    p.style = Paint.Style.FILL
     p.isFakeBoldText = true
+    p.color = kuemmeroGruen
     c.drawText("Leistung", 50f, 480f, p)
     c.drawText("Menge / Details", 255f, 480f, p)
     c.drawText("Einzelpreis", 385f, 480f, p)
@@ -1703,6 +1755,8 @@ fun KuemmeroApp() {
     var rechnungFuerIndex by remember { mutableStateOf<Int?>(null) }
     var rechnungNummerEditIndex by remember { mutableStateOf<Int?>(null) }
     var rechnungNummerEditText by remember { mutableStateOf("") }
+    var rechnungVorgangIndex by remember { mutableStateOf<Int?>(null) }
+    var rechnungVorgangTyp by remember { mutableStateOf("") } // BERICHTIGUNG oder STORNO
     var rechnungScanIndex by remember { mutableStateOf<Int?>(null) }
     var rechnungScanUri by remember { mutableStateOf<Uri?>(null) }
     var mahnung1Index by remember { mutableStateOf<Int?>(null) }
@@ -1873,6 +1927,59 @@ fun KuemmeroApp() {
                 android.widget.Toast.makeText(context, "Test-Mahnung erstellt – echte Rechnungsdaten wurden nicht verändert.", android.widget.Toast.LENGTH_LONG).show()
             } catch (_: Exception) {
                 android.widget.Toast.makeText(context, "Test-Mahnung konnte nicht erstellt werden.", android.widget.Toast.LENGTH_LONG).show()
+            }
+        }
+    }
+
+    val rechnungVorgangLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.StartActivityForResult()
+    ) { result ->
+        result.data?.data?.let { uri ->
+            val index = rechnungVorgangIndex
+            val a = index?.let { auftraege.getOrNull(it) }
+            if (a != null) {
+                try {
+                    val typ = rechnungVorgangTyp
+                    val original = a.rechnungsnummer.ifBlank { a.rechnungUrsprungsnummer }
+                    if (original.isBlank()) {
+                        android.widget.Toast.makeText(context, "Keine gültige Originalrechnung vorhanden.", android.widget.Toast.LENGTH_LONG).show()
+                    } else {
+                        val datum = datumFormat.format(Date())
+                        val faellig = a.faelligAm.ifBlank { datumFormat.format(Calendar.getInstance().apply { add(Calendar.DAY_OF_YEAR, 14) }.time) }
+                        // Bei einer Rechnungsberichtigung wird die ursprüngliche Rechnungsnummer
+                        // nicht überschrieben. Das BMF verlangt eine eindeutige Bezugnahme auf die
+                        // ursprüngliche Rechnung; eine neue Rechnungsnummer ist für die Berichtigung
+                        // nicht erforderlich. Die Originalrechnung bleibt damit nachvollziehbar erhalten.
+                        val neueNummer = if (typ == "STORNO") naechsteStornonummer(context) else original
+                        val pdf = erstelleRechnungPdf(
+                            context, neueNummer, datum, faellig,
+                            a.leistungsdatum.ifBlank { a.terminDatum.ifBlank { a.datum } },
+                            a.kunde, a.kundenStrasse, a.kundenOrt, a.leistung,
+                            a.stunden, a.material, a.fahrt, a.stundensatz,
+                            a.unterschriftPfad, a.unterschriftDatum, a.fotosVorher, a.fotosNachher, a.erstellungskosten,
+                            a.fahrtKm, a.fahrtKostenProKm,
+                            if (typ == "STORNO") "STORNO" else "BERICHTIGTE RECHNUNG", original
+                        )
+                        context.contentResolver.openOutputStream(uri)?.use { out -> pdf.writeTo(out); out.flush() } ?: throw IllegalStateException("Datei konnte nicht gespeichert werden")
+                        pdf.close()
+                        val updated = a.copy(
+                            rechnungUrsprungsnummer = original,
+                            rechnungsstatus = if (typ == "STORNO") "Storniert" else "Berichtigt",
+                            rechnungKorrekturHinweis = if (typ == "STORNO") "Storniert durch $neueNummer am $datum" else "Berichtigt am $datum – Originalrechnung $original bleibt erhalten",
+                            stornoNummer = if (typ == "STORNO") neueNummer else a.stornoNummer,
+                            // Die Original-Rechnungsnummer und das ursprüngliche Rechnungsdatum
+                            // werden nicht überschrieben.
+                            rechnungsnummer = a.rechnungsnummer,
+                            rechnungsdatum = a.rechnungsdatum
+                        )
+                        auftraege = auftraege.toMutableList().apply { set(index, updated) }
+                        speichereAuftraege(context, auftraege)
+                        rechnungVorgangIndex = null; rechnungVorgangTyp = ""
+                        android.widget.Toast.makeText(context, if (typ == "STORNO") "Stornorechnung $neueNummer erstellt." else "Berichtigte Rechnung $neueNummer erstellt.", android.widget.Toast.LENGTH_LONG).show()
+                    }
+                } catch (e: Exception) {
+                    android.widget.Toast.makeText(context, "Rechnungsvorgang fehlgeschlagen: ${e.message ?: "unbekannter Fehler"}", android.widget.Toast.LENGTH_LONG).show()
+                }
             }
         }
     }
@@ -2819,6 +2926,31 @@ fun KuemmeroApp() {
             },
             dismissButton = { TextButton(onClick = { mahnung2Index = null }) { Text("Abbrechen") } }
         )
+    }
+
+    if (rechnungVorgangIndex != null) {
+        val vorgang = rechnungVorgangIndex?.let { auftraege.getOrNull(it) }
+        if (vorgang != null) {
+            val istStorno = rechnungVorgangTyp == "STORNO"
+            AlertDialog(
+                onDismissRequest = { rechnungVorgangIndex = null; rechnungVorgangTyp = "" },
+                title = { Text(if (istStorno) "Rechnung stornieren" else "Rechnung berichtigen") },
+                text = {
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Text("Originalrechnung: ${vorgang.rechnungsnummer}", fontWeight = FontWeight.Bold, color = KuemmeroGreen)
+                        Text(if (istStorno) "Die ursprüngliche Rechnung bleibt unverändert. Es wird eine eigenständige Stornorechnung mit Bezug auf die Originalrechnung erstellt." else "Die ursprüngliche Rechnung bleibt unverändert. Es wird eine neue berichtigte Rechnung mit eindeutiger Bezugnahme erstellt.", style = MaterialTheme.typography.bodySmall)
+                    }
+                },
+                confirmButton = {
+                    TextButton(onClick = {
+                        val name = vorgang.kunde.ifBlank { "Kunde" }.replace("/", "-")
+                        val dateiname = if (istStorno) "KÜMMERO-Storno-${vorgang.rechnungsnummer}-$name.pdf" else "KÜMMERO-Berichtigung-${vorgang.rechnungsnummer}-$name.pdf"
+                        rechnungVorgangLauncher.launch(dokumentSpeicherIntent("application/pdf", dateiname))
+                    }) { Text(if (istStorno) "Storno-PDF erstellen" else "Berichtigung-PDF erstellen") }
+                },
+                dismissButton = { TextButton(onClick = { rechnungVorgangIndex = null; rechnungVorgangTyp = "" }) { Text("Abbrechen") } }
+            )
+        }
     }
 
     if (rechnungNummerEditIndex != null) {
@@ -5839,6 +5971,12 @@ fun KuemmeroApp() {
                                         Text(a.rechnungsnummer, color = KuemmeroGreen, fontWeight = FontWeight.Bold)
                                         Text(a.kunde.ifBlank { "Kunde" }, color = KuemmeroText, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
                                         Text("${a.rechnungsdatum.ifBlank { "ohne Rechnungsdatum" }} · ${euro(gesamtbetrag(a.stunden, a.material, a.fahrt, a.stundensatz, a.erstellungskosten))}", color = KuemmeroText)
+                                        if (a.rechnungsstatus.isNotBlank()) Text("Status: ${a.rechnungsstatus}", color = if (a.rechnungsstatus == "Storniert") KuemmeroError else KuemmeroGreen, fontWeight = FontWeight.SemiBold)
+                                        if (a.rechnungUrsprungsnummer.isNotBlank()) Text("Bezug: ${a.rechnungUrsprungsnummer}", color = KuemmeroText, fontSize = 12.sp)
+                                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                            OutlinedButton(onClick = { rechnungVorgangIndex = index; rechnungVorgangTyp = "BERICHTIGUNG" }, modifier = Modifier.weight(1f)) { Text("Berichtigen") }
+                                            OutlinedButton(onClick = { rechnungVorgangIndex = index; rechnungVorgangTyp = "STORNO" }, modifier = Modifier.weight(1f)) { Text("Storno") }
+                                        }
                                         Text("Auftrag öffnen →", color = KuemmeroGreen, fontWeight = FontWeight.Bold)
                                     }
                                 }
