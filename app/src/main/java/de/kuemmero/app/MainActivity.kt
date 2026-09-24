@@ -753,6 +753,10 @@ private fun erstellePdf(
         p.textSize = 11f
         c.drawText("Hinweis: Dieser Kostenvoranschlag ist kostenpflichtig.", 40f, 650f, p)
     }
+    // Kontaktdaten zusätzlich im PDF-Footer, damit sie auf Angebot/Kostenvoranschlag sicher sichtbar sind.
+    p.textSize = 9f
+    c.drawText("Telefon: ${firmenTelefon.ifBlank { "bitte eintragen" }}   |   E-Mail: ${firmenEmail.ifBlank { "bitte eintragen" }}", 40f, 810f, p)
+    p.textSize = 12f
     c.drawText("Auftragserteilung / Unterschrift Kunde:", 40f, unterschriftTitelY, p)
     val signBitmap = ladeUnterschriftBitmap(unterschriftPfad)
     if (signBitmap != null) {
@@ -896,6 +900,10 @@ private fun erstelleRechnungPdf(
         c.drawText("Bitte überweisen Sie den Rechnungsbetrag bis zum $faelligAm.", 40f, rechnungY + 115f, p)
         c.drawText("Vielen Dank für Ihr Vertrauen.", 40f, rechnungY + 138f, p)
     }
+    // Kontaktdaten zusätzlich im PDF-Footer, damit sie auf der Rechnung sicher sichtbar sind.
+    p.textSize = 9f
+    c.drawText("Telefon: ${firmenTelefon.ifBlank { "bitte eintragen" }}   |   E-Mail: ${firmenEmail.ifBlank { "bitte eintragen" }}", 40f, 810f, p)
+    p.textSize = 12f
     pdf.finishPage(page)
 
     if (unterschriftPfad.isNotBlank()) {
