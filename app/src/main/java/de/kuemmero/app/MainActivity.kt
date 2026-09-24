@@ -3,6 +3,7 @@ package de.kuemmero.app
 import android.content.Context
 import android.content.ContentValues
 import android.graphics.Paint
+import android.graphics.Typeface
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.graphics.pdf.PdfDocument
