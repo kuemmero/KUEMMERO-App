@@ -3159,24 +3159,29 @@ fun KuemmeroApp() {
     }
 
     loeschIndex?.let { index ->
+        val zuLoeschenderAuftrag = auftraege.getOrNull(index)
+        val hatRechnung = !zuLoeschenderAuftrag?.rechnungsnummer.isNullOrBlank()
+
         AlertDialog(
             onDismissRequest = { loeschIndex = null },
-            title = { Text("Auftrag löschen?") },
-            text = { Text("Soll der Auftrag wirklich gelöscht werden?") },
+            title = { Text(if (hatRechnung) "Auftrag kann nicht gelöscht werden" else "Auftrag endgültig löschen?") },
+            text = { Text(if (hatRechnung) "Für diesen Auftrag wurde bereits eine Rechnung erstellt. Der Auftrag bleibt zur Dokumentation erhalten." else "Dieser Auftrag wird vollständig aus der KÜMMERO-Auftragsliste entfernt. Die Löschung kann nicht rückgängig gemacht werden.") },
             confirmButton = {
-                TextButton(onClick = {
-                    auftraege = auftraege.toMutableList().apply { removeAt(index) }
-                    speichereAuftraege(context, auftraege)
-                    timerIndex = null
-                    timerSekunden = 0L
-                    // Nach dem Löschen immer zurück zur Auftragsübersicht.
-                    auftragDetailIndex = null
-                    auftragFormOffen = false
-                    bearbeiteIndex = null
-                    loeschIndex = null
-                }) { Text("Löschen") }
+                if (!hatRechnung) {
+                    TextButton(onClick = {
+                        auftraege = auftraege.toMutableList().apply { removeAt(index) }
+                        speichereAuftraege(context, auftraege)
+                        timerIndex = null
+                        timerSekunden = 0L
+                        auftragDetailIndex = null
+                        auftragFormOffen = false
+                        bearbeiteIndex = null
+                        loeschIndex = null
+                        android.widget.Toast.makeText(context, "Auftrag endgültig gelöscht.", android.widget.Toast.LENGTH_SHORT).show()
+                    }) { Text("ENDGÜLTIG LÖSCHEN") }
+                }
             },
-            dismissButton = { TextButton(onClick = { loeschIndex = null }) { Text("Abbrechen") } }
+            dismissButton = { TextButton(onClick = { loeschIndex = null }) { Text(if (hatRechnung) "OK" else "Abbrechen") } }
         )
     }
 
