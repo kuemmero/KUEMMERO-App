@@ -1515,6 +1515,7 @@ fun KuemmeroApp() {
         mutableStateOf(datumFormat.format(cal.time))
     }
     var loeschIndex by remember { mutableStateOf<Int?>(null) }
+    var hilfeThema by remember { mutableStateOf<String?>(null) }
     var bearbeiteIndex by remember { mutableStateOf<Int?>(null) }
     var status by remember { mutableStateOf("Offen") }
     var zahlungsstatus by remember { mutableStateOf("Offen") }
@@ -3178,10 +3179,31 @@ fun KuemmeroApp() {
                         bearbeiteIndex = null
                         loeschIndex = null
                         android.widget.Toast.makeText(context, "Auftrag endgültig gelöscht.", android.widget.Toast.LENGTH_SHORT).show()
-                    }) { Text("ENDGÜLTIG LÖSCHEN") }
+                    }) { Row(verticalAlignment = Alignment.CenterVertically) { Text("ENDGÜLTIG LÖSCHEN"); Spacer(Modifier.width(6.dp)); Text("ⓘ") } }
                 }
             },
             dismissButton = { TextButton(onClick = { loeschIndex = null }) { Text(if (hatRechnung) "OK" else "Abbrechen") } }
+        )
+    }
+
+    hilfeThema?.let { thema ->
+        val hilfeText = when (thema) {
+            "Speichern" -> "Speichert die eingegebenen Daten dauerhaft in der KÜMMERO-App."
+            "Löschen" -> "Entfernt den ausgewählten Auftrag dauerhaft. Diese Aktion kann nicht rückgängig gemacht werden."
+            "Bearbeiten" -> "Ändere die Daten und tippe anschließend auf Speichern."
+            "Nummer" -> "Die Nummer dient zur eindeutigen Zuordnung des Dokuments. Bereits vergebene Nummern können nicht doppelt verwendet werden."
+            "Rechnung" -> "Erstellt eine Rechnung aus den gespeicherten Auftragsdaten. Bereits erstellte Rechnungen sollten nicht einfach gelöscht werden."
+            "PDF" -> "Erstellt eine PDF-Datei, die du speichern, drucken oder weitergeben kannst."
+            "Backup" -> "Sichert deine KÜMMERO-Daten, damit du sie später wiederherstellen kannst."
+            else -> "Hier findest du eine kurze Erklärung zu dieser Funktion."
+        }
+        AlertDialog(
+            onDismissRequest = { hilfeThema = null },
+            title = { Text("ⓘ Hilfe: $thema") },
+            text = { Text(hilfeText) },
+            confirmButton = {
+                TextButton(onClick = { hilfeThema = null }) { Text("OK") }
+            }
         )
     }
 
@@ -3256,7 +3278,7 @@ fun KuemmeroApp() {
                                 drawLine(Color.White, Offset(w * 0.50f, h * 0.72f), Offset(w * 0.50f, h * 0.90f), strokeWidth = 3.2f)
                             }
                             Column {
-                                Text("KÜMMERO", fontWeight = FontWeight.Bold, color = Color.White)
+                                Row(verticalAlignment = Alignment.CenterVertically) { Text("KÜMMERO", fontWeight = FontWeight.Bold, color = Color.White); Spacer(Modifier.width(8.dp)); TextButton(onClick = { hilfeThema = "Speichern" }) { Text("ⓘ", color = Color.White) } }
                                 Text(
                                     "Haus & Alltag – wir kümmern uns.",
                                     style = MaterialTheme.typography.labelMedium,
