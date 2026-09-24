@@ -28,6 +28,7 @@ import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.gestures.detectDragGestures
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.foundation.clickable
@@ -3176,6 +3177,37 @@ fun KuemmeroApp() {
     }
 
     Scaffold(
+            modifier = Modifier.pointerInput(hauptseite) {
+                var gesamterWegX = 0f
+                detectHorizontalDragGestures(
+                    onHorizontalDrag = { change, dragAmount ->
+                        change.consume()
+                        gesamterWegX += dragAmount
+                    },
+                    onDragStart = { gesamterWegX = 0f },
+                    onDragEnd = {
+                        val schwelle = 100f
+                        if (kotlin.math.abs(gesamterWegX) >= schwelle) {
+                            val seiten = listOf(
+                                "Heute", "Aufträge", "Kostenvoranschläge",
+                                "Kunden", "Mahnungen", "Mehr"
+                            )
+                            val index = seiten.indexOf(hauptseite)
+                            val neuerIndex = if (gesamterWegX < 0) index + 1 else index - 1
+                            if (index >= 0 && neuerIndex in seiten.indices) {
+                                hauptseite = seiten[neuerIndex]
+                                if (hauptseite == "Aufträge") {
+                                    auftragDetailIndex = null
+                                    auftragFormOffen = false
+                                    bearbeiteIndex = null
+                                    loeschIndex = null
+                                }
+                            }
+                        }
+                    },
+                    onDragCancel = { gesamterWegX = 0f }
+                )
+            },
             topBar = {
                 TopAppBar(
                     title = {
