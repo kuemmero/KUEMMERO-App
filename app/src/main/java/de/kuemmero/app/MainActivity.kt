@@ -1589,6 +1589,8 @@ fun KuemmeroApp() {
     var steuernummer by remember { mutableStateOf(context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE).getString(STEUERNUMMER_KEY, "") ?: "") }
     var auftragDetailIndex by remember { mutableStateOf<Int?>(null) }
     var auftragFormOffen by remember { mutableStateOf(false) }
+    var ungespeicherteAenderungen by remember { mutableStateOf(false) }
+    var ausstehendeSeite by remember { mutableStateOf<String?>(null) }
     val listeState = rememberLazyListState()
 
     // Laufende Arbeitszeit
@@ -3248,6 +3250,34 @@ fun KuemmeroApp() {
         )
     }
 
+    fun versucheSeitenwechsel(ziel: String) {
+        if (auftragFormOffen && ungespeicherteAenderungen) ausstehendeSeite = ziel else hauptseite = ziel
+    }
+
+    ausstehendeSeite?.let { ziel ->
+        AlertDialog(
+            onDismissRequest = { ausstehendeSeite = null },
+            title = { Text("Änderungen noch nicht gespeichert") },
+            text = { Text("Du hast Änderungen am Auftrag vorgenommen. Was möchtest du tun?") },
+            confirmButton = {
+                TextButton(onClick = { ausstehendeSeite = null }) { Text("Speichern") }
+            },
+            dismissButton = {
+                Row {
+                    TextButton(onClick = {
+                        ungespeicherteAenderungen = false
+                        auftragFormOffen = false
+                        bearbeiteIndex = null
+                        val zielSeite = ausstehendeSeite
+                        ausstehendeSeite = null
+                        if (zielSeite != null) hauptseite = zielSeite
+                    }) { Text("Verwerfen") }
+                    TextButton(onClick = { ausstehendeSeite = null }) { Text("Abbrechen") }
+                }
+            }
+        )
+    }
+
     Scaffold(
             topBar = {
                 TopAppBar(
@@ -3311,8 +3341,8 @@ fun KuemmeroApp() {
                         NavigationBarItem(
                             selected = hauptseite == page,
                             onClick = {
-                                hauptseite = page
-                                if (page == "Aufträge") {
+                                versucheSeitenwechsel(page)
+                                if (page == "Aufträge" && !(auftragFormOffen && ungespeicherteAenderungen)) {
                                     // Beim Öffnen von „Aufträge“ immer die Übersicht zeigen.
                                     auftragDetailIndex = null
                                     auftragFormOffen = false
@@ -3352,7 +3382,7 @@ fun KuemmeroApp() {
                 modifier = Modifier
                     .padding(padding)
                     .padding(16.dp)
-                    .kuemmeroHauptseitenWischen(hauptseite) { hauptseite = it },
+                    .kuemmeroHauptseitenWischen(hauptseite) { versucheSeitenwechsel(it) },
                 verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
                 if (auftragFormOffen) {
@@ -3460,7 +3490,7 @@ fun KuemmeroApp() {
 
                 item {
                     OutlinedTextField(
-                        nummer, { nummer = it },
+                        nummer, { nummer = it; ungespeicherteAenderungen = true },
                         label = { Text("Auftragsnummer *") },
                         colors = feldFarben,
                         modifier = Modifier.fillMaxWidth()
@@ -3468,7 +3498,7 @@ fun KuemmeroApp() {
                 }
                 item {
                     OutlinedTextField(
-                        strasse, { strasse = it },
+                        strasse, { strasse = it; ungespeicherteAenderungen = true },
                         label = { Text("Adresse *") },
                         colors = feldFarben,
                         modifier = Modifier.fillMaxWidth()
@@ -3476,7 +3506,7 @@ fun KuemmeroApp() {
                 }
                 item {
                     OutlinedTextField(
-                        datum, { datum = it },
+                        datum, { datum = it; ungespeicherteAenderungen = true },
                         label = { Text("Datum *") },
                         colors = feldFarben,
                         modifier = Modifier.fillMaxWidth()
@@ -3484,7 +3514,7 @@ fun KuemmeroApp() {
                 }
                 item {
                     OutlinedTextField(
-                        leistungsdatum, { leistungsdatum = it },
+                        leistungsdatum, { leistungsdatum = it; ungespeicherteAenderungen = true },
                         label = { Text("Leistungsdatum *") },
                         placeholder = { Text("TT.MM.JJJJ") },
                         colors = feldFarben,
@@ -3493,7 +3523,7 @@ fun KuemmeroApp() {
                 }
                 item {
                     OutlinedTextField(
-                        kunde, { kunde = it },
+                        kunde, { kunde = it; ungespeicherteAenderungen = true },
                         label = { Text("Kunde *") },
                         colors = feldFarben,
                         modifier = Modifier.fillMaxWidth()
@@ -3501,7 +3531,7 @@ fun KuemmeroApp() {
                 }
                 item {
                     OutlinedTextField(
-                        ort, { ort = it },
+                        ort, { ort = it; ungespeicherteAenderungen = true },
                         label = { Text("PLZ und Ort *") },
                         colors = feldFarben,
                         modifier = Modifier.fillMaxWidth()
@@ -3520,7 +3550,7 @@ fun KuemmeroApp() {
                             Text(if (leistung.isBlank()) "Position auswählen" else "Ausgewählt: $leistung", fontWeight = FontWeight.Bold)
                         }
                         OutlinedTextField(
-                            leistung, { leistung = it },
+                            leistung, { leistung = it; ungespeicherteAenderungen = true },
                             label = { Text("Leistung / eigene Beschreibung *") },
                             colors = feldFarben,
                             modifier = Modifier.fillMaxWidth()
@@ -3537,7 +3567,7 @@ fun KuemmeroApp() {
                 }
                 item {
                     OutlinedTextField(
-                        stunden, { stunden = it },
+                        stunden, { stunden = it; ungespeicherteAenderungen = true },
                         label = { Text("Arbeitsstunden") },
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
                         colors = feldFarben,
@@ -3546,7 +3576,7 @@ fun KuemmeroApp() {
                 }
                 item {
                     OutlinedTextField(
-                        material, { material = it },
+                        material, { material = it; ungespeicherteAenderungen = true },
                         label = { Text("Material (€)") },
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
                         colors = feldFarben,
@@ -3594,7 +3624,7 @@ fun KuemmeroApp() {
                 }
                 item {
                     OutlinedTextField(
-                        fahrt, { fahrt = it },
+                        fahrt, { fahrt = it; ungespeicherteAenderungen = true },
                         label = { Text("Fahrtkosten (€)") },
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
                         colors = feldFarben,
@@ -3605,7 +3635,7 @@ fun KuemmeroApp() {
                     OutlinedTextField(
                         stundensatz,
                         {
-                            stundensatz = it
+                            stundensatz = it; ungespeicherteAenderungen = true
                             context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE).edit()
                                 .putString(STUNDENSATZ_KEY, it).apply()
                         },
@@ -3655,15 +3685,15 @@ fun KuemmeroApp() {
                 item {
                     KlappBereich("📅 Termin", terminBereichOffen, { terminBereichOffen = !terminBereichOffen }) {
                         Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
-                            OutlinedTextField(terminDatum, { terminDatum = it }, label = { Text("Datum") }, placeholder = { Text(datumJetzt) }, colors = feldFarben, modifier = Modifier.weight(1f))
-                            OutlinedTextField(terminUhrzeit, { terminUhrzeit = it }, label = { Text("Uhrzeit") }, placeholder = { Text("09:00") }, colors = feldFarben, modifier = Modifier.weight(1f))
+                            OutlinedTextField(terminDatum, { terminDatum = it; ungespeicherteAenderungen = true }, label = { Text("Datum") }, placeholder = { Text(datumJetzt) }, colors = feldFarben, modifier = Modifier.weight(1f))
+                            OutlinedTextField(terminUhrzeit, { terminUhrzeit = it; ungespeicherteAenderungen = true }, label = { Text("Uhrzeit") }, placeholder = { Text("09:00") }, colors = feldFarben, modifier = Modifier.weight(1f))
                         }
                     }
                 }
 
                 item {
                     KlappBereich("📝 Notiz zum Auftrag", notizBereichOffen, { notizBereichOffen = !notizBereichOffen }) {
-                        OutlinedTextField(notiz, { notiz = it }, label = { Text("Notiz zum Auftrag") }, minLines = 3, colors = feldFarben, modifier = Modifier.fillMaxWidth())
+                        OutlinedTextField(notiz, { notiz = it; ungespeicherteAenderungen = true }, label = { Text("Notiz zum Auftrag") }, minLines = 3, colors = feldFarben, modifier = Modifier.fillMaxWidth())
                     }
                 }
 
@@ -3761,6 +3791,7 @@ fun KuemmeroApp() {
                                     android.widget.Toast.makeText(context, "Auftrag gespeichert.", 0).show()
                                     auftragFormOffen = false
                                 }
+                                ungespeicherteAenderungen = false
                                 leistungsdatum = datumFormat.format(Date())
                                 kunde = ""
                                 strasse = ""
@@ -3962,6 +3993,7 @@ fun KuemmeroApp() {
                                 bearbeiteIndex = null
                                 auftragDetailIndex = null
                                 auftragFormOffen = true
+                                ungespeicherteAenderungen = false
                                 nummer = kuemmeroNaechsteDokumentNummer("AUF", Calendar.getInstance().get(Calendar.YEAR), auftraege.map { it.nummer })
                                 datum = datumJetzt
                                 leistungsdatum = datumJetzt
@@ -4325,6 +4357,7 @@ fun KuemmeroApp() {
                                     bearbeiteIndex = index
                                     auftragDetailIndex = index
                                     auftragFormOffen = true
+                                    ungespeicherteAenderungen = false
                                     nummer = a.nummer.ifBlank { nummer }
                                     datum = a.datum.ifBlank { datum }
                                     leistungsdatum = a.leistungsdatum.ifBlank { a.terminDatum.ifBlank { a.datum.ifBlank { datum } } }
@@ -4529,7 +4562,7 @@ fun KuemmeroApp() {
                 modifier = Modifier
                     .padding(padding)
                     .padding(16.dp)
-                    .kuemmeroHauptseitenWischen(hauptseite) { hauptseite = it },
+                    .kuemmeroHauptseitenWischen(hauptseite) { versucheSeitenwechsel(it) },
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
                 when (hauptseite) {
