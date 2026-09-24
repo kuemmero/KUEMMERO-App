@@ -291,6 +291,25 @@ private fun zahl(text: String, standard: Double = 0.0): Double =
     text.replace("€", "").replace(" ", "").replace(",", ".").trim()
         .toDoubleOrNull() ?: standard
 
+private fun gespeicherterStundensatz(context: Context): String {
+    val gespeichert = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        .getString(STUNDENSATZ_KEY, "42.00")
+        ?.replace(",", ".")
+        ?.toDoubleOrNull()
+    val wert = if (gespeichert != null && gespeichert > 0.0 && gespeichert <= 1000.0) gespeichert else 42.0
+    return String.format(Locale.GERMANY, "%.2f", wert)
+}
+
+private fun speichereStundensatz(context: Context, eingabe: String): Double? {
+    val wert = eingabe.replace("€", "").replace(" ", "").replace(",", ".").trim().toDoubleOrNull()
+    if (wert == null || wert <= 0.0 || wert > 1000.0) return null
+    context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        .edit()
+        .putString(STUNDENSATZ_KEY, String.format(Locale.US, "%.2f", wert))
+        .apply()
+    return wert
+}
+
 private fun runde2(value: Double): Double =
     kotlin.math.round(value * 100.0) / 100.0
 
@@ -1537,12 +1556,7 @@ fun KuemmeroApp() {
     var materialBonUri by remember { mutableStateOf("") }
     var fahrtKm by remember { mutableStateOf("") }
     var fahrtKostenProKm by remember { mutableStateOf(context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE).getString(FAHRTKOSTEN_PRO_KM_KEY, "0.40") ?: "0.40") }
-    var stundensatz by remember {
-        mutableStateOf(
-            context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-                .getString(STUNDENSATZ_KEY, "42.00") ?: "42.00"
-        )
-    }
+    var stundensatz by remember { mutableStateOf(gespeicherterStundensatz(context)) }
     var auftraege by remember { mutableStateOf(ladeAuftraege(context)) }
     var kunden by remember { mutableStateOf(ladeKunden(context)) }
     var kundenSuche by remember { mutableStateOf("") }
@@ -1624,7 +1638,7 @@ fun KuemmeroApp() {
     var kvMaterialBonUri by remember { mutableStateOf("") }
     var kvFotosVorher by remember { mutableStateOf<List<String>>(emptyList()) }
     var kvFahrtKm by remember { mutableStateOf("") }
-    var kvStundensatz by remember { mutableStateOf(context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE).getString(STUNDENSATZ_KEY, "42.00") ?: "42.00") }
+    var kvStundensatz by remember { mutableStateOf(gespeicherterStundensatz(context)) }
     var kvErstellungskosten by remember { mutableStateOf("") }
     var kvLoeschIndex by remember { mutableStateOf<Int?>(null) }
     var arbeitszeitAendernIndex by remember { mutableStateOf<Int?>(null) }
@@ -2227,7 +2241,7 @@ fun KuemmeroApp() {
             } else {
                 erstellePdf(
                     context, nummer, datum, gueltigBis, kunde, strasse, ort, leistung,
-                    zahl(stunden), zahl(material), runde2(zahl(fahrtKm) * zahl(fahrtKostenProKm, 0.40)), zahl(stundensatz, 42.0), unterschriftPfad, unterschriftDatum,
+                    zahl(stunden), zahl(material), runde2(zahl(fahrtKm) * zahl(fahrtKostenProKm, 0.40)), zahl(stundensatz, zahl(gespeicherterStundensatz(context))), unterschriftPfad, unterschriftDatum,
                     fotosVorher, fotosNachher, "ANGEBOT", 0.0, zahl(fahrtKm), zahl(fahrtKostenProKm, 0.40)
                 )
             }
@@ -2305,7 +2319,7 @@ fun KuemmeroApp() {
     val materialKosten = zahl(material)
     val fahrtSatz = zahl(fahrtKostenProKm, 0.40)
     val fahrtKosten = runde2(zahl(fahrtKm) * fahrtSatz)
-    val rate = zahl(stundensatz, 42.0)
+    val rate = zahl(stundensatz, zahl(gespeicherterStundensatz(context)))
     val gesamt = gesamtbetrag(arbeitsstunden, materialKosten, fahrtKosten, rate)
     val umsatz = auftraege.sumOf { gesamtbetrag(it.stunden, it.material, it.fahrt, it.stundensatz, it.erstellungskosten) }
 
@@ -3634,11 +3648,7 @@ fun KuemmeroApp() {
                 item {
                     OutlinedTextField(
                         stundensatz,
-                        {
-                            stundensatz = it
-                            context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE).edit()
-                                .putString(STUNDENSATZ_KEY, it).apply()
-                        },
+                        { stundensatz = it },
                         label = { Text("Stundensatz (€ / Stunde)") },
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
                         colors = feldFarben,
@@ -3788,6 +3798,7 @@ fun KuemmeroApp() {
                                 material = ""
                                 materialBonUri = ""
                                 fahrtKm = ""
+                                stundensatz = gespeicherterStundensatz(context)
                                 status = "Offen"
                                 zahlungsstatus = "Offen"
                                 bezahltAm = ""
@@ -3824,6 +3835,7 @@ fun KuemmeroApp() {
                                 stunden = ""
                                 material = ""
                                 fahrtKm = ""
+                                stundensatz = gespeicherterStundensatz(context)
                                 status = "Offen"
                                 zahlungsstatus = "Offen"
                                 bezahltAm = ""
@@ -4672,6 +4684,7 @@ fun KuemmeroApp() {
                                         gueltigBis = ""
                                         kunde = ""; strasse = ""; ort = ""; leistung = ""
                                         stunden = ""; material = ""; materialBonUri = ""; fahrtKm = ""
+                                        stundensatz = gespeicherterStundensatz(context)
                                         status = "Offen"; zahlungsstatus = "Offen"; bezahltAm = ""
                                         terminDatum = ""; terminUhrzeit = ""; notiz = ""
                                         fotosVorher = emptyList(); fotosNachher = emptyList()
@@ -5118,7 +5131,7 @@ fun KuemmeroApp() {
                                             )
                                         }
                                         Text(
-                                            "Gesamtsumme: ${euro(gesamtbetrag(zahl(kvStunden), zahl(kvMaterial), runde2(zahl(kvFahrtKm) * fahrtSatz), zahl(kvStundensatz, 42.0), zahl(kvErstellungskosten)))}",
+                                            "Gesamtsumme: ${euro(gesamtbetrag(zahl(kvStunden), zahl(kvMaterial), runde2(zahl(kvFahrtKm) * fahrtSatz), zahl(kvStundensatz, zahl(gespeicherterStundensatz(context))), zahl(kvErstellungskosten)))}",
                                             style = MaterialTheme.typography.titleLarge,
                                             color = KuemmeroGreen,
                                             fontWeight = FontWeight.Bold
@@ -5131,7 +5144,7 @@ fun KuemmeroApp() {
                                                     val k = Kostenvoranschlag(
                                                         kvNummer.trim(), kvDatum.trim(), kvGueltigBis.trim(),
                                                         kvKunde.trim(), kvStrasse.trim(), kvOrt.trim(), kvLeistung.trim(),
-                                                        zahl(kvStunden), zahl(kvMaterial), runde2(zahl(kvFahrtKm) * fahrtSatz), zahl(kvStundensatz, 42.0),
+                                                        zahl(kvStunden), zahl(kvMaterial), runde2(zahl(kvFahrtKm) * fahrtSatz), zahl(kvStundensatz, zahl(gespeicherterStundensatz(context))),
                                                         kvMaterialBonUri, kvFotosVorher, zahl(kvErstellungskosten),
                                                         fahrtKm = zahl(kvFahrtKm),
                                                         fahrtKostenProKm = fahrtSatz
@@ -5435,18 +5448,22 @@ fun KuemmeroApp() {
                                     )
                                     Button(
                                         onClick = {
-                                            val wert = zahl(stundensatz, 42.0)
-                                            stundensatz = String.format(Locale.GERMANY, "%.2f", wert)
-                                            context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-                                                .edit()
-                                                .putString(STUNDENSATZ_KEY, String.format(Locale.US, "%.2f", wert))
-                                                .apply()
-                                            android.widget.Toast.makeText(context, "Stundensatz gespeichert: ${euro(wert)}/Stunde", 0).show()
+                                            val wert = speichereStundensatz(context, stundensatz)
+                                            if (wert == null) {
+                                                android.widget.Toast.makeText(
+                                                    context,
+                                                    "Bitte einen gültigen Stundensatz zwischen 0,01 € und 1.000,00 € eingeben.",
+                                                    android.widget.Toast.LENGTH_LONG
+                                                ).show()
+                                            } else {
+                                                stundensatz = String.format(Locale.GERMANY, "%.2f", wert)
+                                                android.widget.Toast.makeText(context, "Stundensatz gespeichert: ${euro(wert)}/Stunde", 0).show()
+                                            }
                                         },
                                         modifier = Modifier.fillMaxWidth()
                                     ) { Text("Stundensatz speichern", fontWeight = FontWeight.Bold) }
                                     Text(
-                                        "Der gespeicherte Satz wird für neue Aufträge und Kostenvoranschläge als Standard verwendet. Bereits gespeicherte Aufträge bleiben unverändert.",
+                                        "Der gespeicherte Satz wird für neue Aufträge und Kostenvoranschläge vorgeschlagen. Beim Bearbeiten bleibt der bereits gespeicherte Satz erhalten.",
                                         color = KuemmeroText,
                                         fontSize = 12.sp
                                     )
