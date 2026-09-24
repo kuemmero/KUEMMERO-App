@@ -2219,8 +2219,8 @@ fun KuemmeroApp() {
             } else {
                 erstellePdf(
                     context, nummer, datum, gueltigBis, kunde, strasse, ort, leistung,
-                    zahl(stunden), zahl(material), fahrtKosten, zahl(stundensatz, 42.0), unterschriftPfad, unterschriftDatum,
-                    fotosVorher, fotosNachher, "ANGEBOT", 0.0, zahl(fahrtKm), zahl(fahrtKostenProKm, 0.40)
+                    zahl(stunden), zahl(material), runde2(zahl(fahrtKm) * zahl(fahrtKostenProKm, 0.40)), zahl(stundensatz, 42.0), unterschriftPfad, unterschriftDatum,
+                    fotosVorher, fotosNachher, "ANGEBOT", 0.0, runde2(zahl(fahrtKm) * zahl(fahrtKostenProKm, 0.40)), zahl(fahrtKm), zahl(fahrtKostenProKm, 0.40)
                 )
             }
             context.contentResolver.openOutputStream(uri)?.use { out -> pdf.writeTo(out) }
