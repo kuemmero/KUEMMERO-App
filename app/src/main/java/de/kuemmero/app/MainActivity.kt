@@ -202,7 +202,10 @@ data class Auftrag(
     val rechnungKorrekturHinweis: String = "",
     val stornoNummer: String = "",
     // Eigenes Auftragsprotokoll: Verlauf/Arbeitsschritte/Bemerkungen zum Auftrag.
-    val protokoll: String = ""
+    val protokoll: String = "",
+    // Zum Zeitpunkt des Auftrags festgehaltener Wochenend-/Feiertagszuschlag.
+    val zuschlagBezeichnung: String = "",
+    val zuschlagBetrag: Double = 0.0
 )
 
 private const val PREFS_NAME = "kuemmero_speicher"
@@ -210,6 +213,12 @@ private const val AUFTRAEGE_KEY = "auftraege"
 private const val KUNDEN_KEY = "kunden"
 private const val STUNDENSATZ_KEY = "stundensatz"
 private const val FAHRTKOSTEN_PRO_KM_KEY = "fahrtkosten_pro_km"
+private const val ZUSCHLAG_SAMSTAG_PREIS_KEY = "zuschlag_samstag_preis"
+private const val ZUSCHLAG_SONNTAG_PREIS_KEY = "zuschlag_sonntag_preis"
+private const val ZUSCHLAG_FEIERTAG_PREIS_KEY = "zuschlag_feiertag_preis"
+private const val ZUSCHLAG_SAMSTAG_AKTIV_KEY = "zuschlag_samstag_aktiv"
+private const val ZUSCHLAG_SONNTAG_AKTIV_KEY = "zuschlag_sonntag_aktiv"
+private const val ZUSCHLAG_FEIERTAG_AKTIV_KEY = "zuschlag_feiertag_aktiv"
 private const val BACKUP_URI_KEY = "backup_uri"
 private const val BACKUP_LAST_SUCCESS_KEY = "backup_last_success"
 private const val BACKUP_PRE_RESTORE_FILE = "kuemmero_vor_restore_backup.json"
@@ -233,6 +242,44 @@ private const val DOKUMENTE_KOSTENVORANSCHLAEGE_URI_KEY = "dokumente_kostenvoran
 private const val DOKUMENTE_MAHNUNGEN_URI_KEY = "dokumente_mahnungen_uri"
 private const val DOKUMENTE_SONSTIGE_PDF_URI_KEY = "dokumente_sonstige_pdf_uri"
 private const val DOKUMENTE_DATENEXPORT_URI_KEY = "dokumente_datenexport_uri"
+private fun parseDeDatum(text: String): Date? = try {
+    SimpleDateFormat("dd.MM.yyyy", Locale.GERMANY).apply { isLenient = false }.parse(text)
+} catch (_: Exception) { null }
+
+private fun ostersonntag(jahr: Int): Calendar {
+    val a = jahr % 19; val b = jahr / 100; val c = jahr % 100; val d = b / 4; val e = b % 4
+    val f = (b + 8) / 25; val g = (b - f + 1) / 3; val h = (19*a + b - d - g + 15) % 30
+    val i = c / 4; val k = c % 4; val l = (32 + 2*e + 2*i - h - k) % 7; val m = (a + 11*h + 22*l) / 451
+    val monat = (h + l - 7*m + 114) / 31; val tag = ((h + l - 7*m + 114) % 31) + 1
+    return Calendar.getInstance().apply { clear(); set(jahr, monat - 1, tag) }
+}
+
+private fun nrwFeiertag(datum: Date): Boolean {
+    val cal = Calendar.getInstance().apply { time = datum }
+    val jahr = cal.get(Calendar.YEAR)
+    val m = cal.get(Calendar.MONTH) + 1; val t = cal.get(Calendar.DAY_OF_MONTH)
+    if ((m == 1 && t == 1) || (m == 5 && t == 1) || (m == 10 && t == 3) || (m == 11 && t == 1) || (m == 12 && t == 25) || (m == 12 && t == 26)) return true
+    val ostern = ostersonntag(jahr)
+    fun offset(days: Int): Pair<Int, Int> = Calendar.getInstance().apply { time = ostern.time; add(Calendar.DAY_OF_YEAR, days) }.let { it.get(Calendar.MONTH)+1 to it.get(Calendar.DAY_OF_MONTH) }
+    val beweglich = setOf(offset(-2), offset(1), offset(39), offset(50), offset(60))
+    return (m to t) in beweglich
+}
+
+private fun leistungsZuschlag(context: Context, leistungsdatum: String): Pair<String, Double> {
+    val d = parseDeDatum(leistungsdatum) ?: return "" to 0.0
+    val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+    val cal = Calendar.getInstance().apply { time = d }
+    val (keyPreis, keyAktiv, name) = when {
+        nrwFeiertag(d) -> Triple(ZUSCHLAG_FEIERTAG_PREIS_KEY, ZUSCHLAG_FEIERTAG_AKTIV_KEY, "Feiertagszuschlag")
+        cal.get(Calendar.DAY_OF_WEEK) == Calendar.SUNDAY -> Triple(ZUSCHLAG_SONNTAG_PREIS_KEY, ZUSCHLAG_SONNTAG_AKTIV_KEY, "Sonntagszuschlag")
+        cal.get(Calendar.DAY_OF_WEEK) == Calendar.SATURDAY -> Triple(ZUSCHLAG_SAMSTAG_PREIS_KEY, ZUSCHLAG_SAMSTAG_AKTIV_KEY, "Samstagszuschlag")
+        else -> return "" to 0.0
+    }
+    if (!prefs.getBoolean(keyAktiv, false)) return "" to 0.0
+    val preis = prefs.getString(keyPreis, "0.00")?.replace(",", ".")?.toDoubleOrNull() ?: 0.0
+    return name to runde2(preis.coerceAtLeast(0.0))
+}
+
 private fun standardMahnung1Frist(context: Context, basisDatum: Date = Date()): String {
     val tage = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
         .getInt(MAHNUNG1_FRIST_TAGE_KEY, 7)
@@ -271,7 +318,10 @@ data class Kostenvoranschlag(
     val fotosVorher: List<String> = emptyList(),
     val erstellungskosten: Double = 0.0,
     val fahrtKm: Double = 0.0,
-    val fahrtKostenProKm: Double = 0.40
+    val fahrtKostenProKm: Double = 0.40,
+    // Zum Zeitpunkt des Kostenvoranschlags festgehaltener Zuschlag.
+    val zuschlagBezeichnung: String = "",
+    val zuschlagBetrag: Double = 0.0
 )
 
 private fun ladeKostenvoranschlaege(context: Context): List<Kostenvoranschlag> {
@@ -288,7 +338,9 @@ private fun ladeKostenvoranschlaege(context: Context): List<Kostenvoranschlag> {
             run { val a = o.optJSONArray("fotosVorher") ?: JSONArray(); List(a.length()) { j -> a.optString(j) } },
             o.optDouble("erstellungskosten", 0.0),
             fahrtKm = o.optDouble("fahrtKm", 0.0),
-            fahrtKostenProKm = o.optDouble("fahrtKostenProKm", context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE).getString(FAHRTKOSTEN_PRO_KM_KEY, "0.40")?.replace(",", ".")?.toDoubleOrNull() ?: 0.40)
+            fahrtKostenProKm = o.optDouble("fahrtKostenProKm", context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE).getString(FAHRTKOSTEN_PRO_KM_KEY, "0.40")?.replace(",", ".")?.toDoubleOrNull() ?: 0.40),
+            zuschlagBezeichnung = o.optString("zuschlagBezeichnung", ""),
+            zuschlagBetrag = o.optDouble("zuschlagBetrag", 0.0)
         )
     }
 }
@@ -303,6 +355,8 @@ private fun speichereKostenvoranschlaege(context: Context, liste: List<Kostenvor
             put("fahrt", k.fahrt); put("fahrtKm", k.fahrtKm); put("fahrtKostenProKm", k.fahrtKostenProKm); put("stundensatz", k.stundensatz); put("materialBonUri", k.materialBonUri)
             put("fotosVorher", JSONArray(k.fotosVorher))
             put("erstellungskosten", k.erstellungskosten)
+            put("zuschlagBezeichnung", k.zuschlagBezeichnung)
+            put("zuschlagBetrag", k.zuschlagBetrag)
         })
     }
     context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
@@ -407,7 +461,9 @@ private fun ladeAuftraege(context: Context): List<Auftrag> {
             rechnungsstatus = o.optString("rechnungsstatus", ""),
             rechnungKorrekturHinweis = o.optString("rechnungKorrekturHinweis", ""),
             stornoNummer = o.optString("stornoNummer", ""),
-            protokoll = o.optString("protokoll", "")
+            protokoll = o.optString("protokoll", ""),
+            zuschlagBezeichnung = o.optString("zuschlagBezeichnung", ""),
+            zuschlagBetrag = o.optDouble("zuschlagBetrag", 0.0)
         )
     }
 }
@@ -503,6 +559,8 @@ private fun speichereAuftraege(context: Context, liste: List<Auftrag>) {
             put("arbeitszeitUebernommen", a.arbeitszeitUebernommen)
             put("erstellungskosten", a.erstellungskosten)
             put("leistungsdatum", a.leistungsdatum)
+            put("zuschlagBezeichnung", a.zuschlagBezeichnung)
+            put("zuschlagBetrag", a.zuschlagBetrag)
         })
     }
     context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
@@ -520,6 +578,12 @@ private fun backupText(context: Context): String {
         put("firmenEmail", p.getString(FIRMENEMAIL_KEY, "kuemmero@web.de") ?: "kuemmero@web.de")
         put("steuernummer", p.getString(STEUERNUMMER_KEY, "") ?: "")
         put("steuerart", p.getString(STEUERART_KEY, "") ?: "")
+        put("zuschlagSamstagPreis", p.getString(ZUSCHLAG_SAMSTAG_PREIS_KEY, "0.00") ?: "0.00")
+        put("zuschlagSonntagPreis", p.getString(ZUSCHLAG_SONNTAG_PREIS_KEY, "0.00") ?: "0.00")
+        put("zuschlagFeiertagPreis", p.getString(ZUSCHLAG_FEIERTAG_PREIS_KEY, "0.00") ?: "0.00")
+        put("zuschlagSamstagAktiv", p.getBoolean(ZUSCHLAG_SAMSTAG_AKTIV_KEY, false))
+        put("zuschlagSonntagAktiv", p.getBoolean(ZUSCHLAG_SONNTAG_AKTIV_KEY, false))
+        put("zuschlagFeiertagAktiv", p.getBoolean(ZUSCHLAG_FEIERTAG_AKTIV_KEY, false))
         put("auftraege", JSONArray(p.getString(AUFTRAEGE_KEY, "[]") ?: "[]"))
         put("kunden", JSONArray(p.getString(KUNDEN_KEY, "[]") ?: "[]"))
         put("kostenvoranschlaege", JSONArray(p.getString(KOSTENVORANSCHLAEGE_KEY, "[]") ?: "[]"))
@@ -715,7 +779,9 @@ private fun erstellePdf(
     dokumentTitel: String = "ANGEBOT",
     erstellungskosten: Double = 0.0,
     fahrtKm: Double = 0.0,
-    fahrtSatz: Double = 0.40
+    fahrtSatz: Double = 0.40,
+    zuschlagBezeichnung: String = "",
+    zuschlagBetrag: Double = 0.0
 ): PdfDocument {
     val pdf = PdfDocument()
     val page = pdf.startPage(PdfDocument.PageInfo.Builder(595, 842, 1).create())
@@ -760,7 +826,8 @@ private fun erstellePdf(
     p.strokeWidth = 1f
     // Tabellenrahmen: Untere Linie immer unterhalb der letzten Textzeile.
     // Dadurch wird "Fahrtkosten" nicht von der Rahmenlinie durchschnitten.
-    val tabellenEnde = if (erstellungskosten > 0.0) 570f else 545f
+    val zusatzZeilen = (if (erstellungskosten > 0.0) 1 else 0) + (if (zuschlagBetrag > 0.0) 1 else 0)
+    val tabellenEnde = 545f + 25f * zusatzZeilen
     c.drawRect(40f, 420f, 550f, tabellenEnde, p)
     p.style = Paint.Style.FILL
     p.isFakeBoldText = true
@@ -778,9 +845,9 @@ private fun erstellePdf(
     c.drawLine(40f, 480f, 550f, 480f, p)
     c.drawLine(40f, 505f, 550f, 505f, p)
     c.drawLine(40f, 530f, 550f, 530f, p)
-    if (erstellungskosten > 0.0) {
-        c.drawLine(40f, 555f, 550f, 555f, p)
-    }
+    var naechsteZeileY = 547f
+    if (erstellungskosten > 0.0) { c.drawLine(40f, naechsteZeileY + 8f, 550f, naechsteZeileY + 8f, p); naechsteZeileY += 25f }
+    if (zuschlagBetrag > 0.0) { c.drawLine(40f, naechsteZeileY + 8f, 550f, naechsteZeileY + 8f, p) }
     p.style = Paint.Style.FILL
     c.drawText("Arbeitszeit", 50f, 472f, p)
     c.drawText("%.2f Std.".format(Locale.GERMANY, stunden), 255f, 472f, p)
@@ -794,32 +861,34 @@ private fun erstellePdf(
     c.drawText(if (fahrtKm > 0.0) String.format(Locale.GERMANY, "%.2f km", fahrtKm) else "—", 255f, 522f, p)
     c.drawText(if (fahrtKm > 0.0) String.format(Locale.GERMANY, "%.2f €/km", fahrtSatz) else "—", 385f, 522f, p)
     c.drawText(euro(fahrt), 490f, 522f, p)
+    var zeileY = 547f
     if (erstellungskosten > 0.0) {
-        c.drawText("Erstellungskosten", 50f, 547f, p)
-        c.drawText("—", 255f, 547f, p)
-        c.drawText("—", 385f, 547f, p)
-        c.drawText(euro(erstellungskosten), 490f, 547f, p)
+        c.drawText("Erstellungskosten", 50f, zeileY, p); c.drawText("—", 255f, zeileY, p); c.drawText("—", 385f, zeileY, p); c.drawText(euro(erstellungskosten), 490f, zeileY, p); zeileY += 25f
+    }
+    if (zuschlagBetrag > 0.0) {
+        c.drawText(zuschlagBezeichnung.ifBlank { "Wochenend-/Feiertagszuschlag" }, 50f, zeileY, p); c.drawText("—", 255f, zeileY, p); c.drawText("—", 385f, zeileY, p); c.drawText(euro(zuschlagBetrag), 490f, zeileY, p)
     }
     p.style = Paint.Style.FILL
-    val gesamt = gesamtbetrag(stunden, material, fahrt, stundensatz, erstellungskosten)
+    val gesamt = runde2(gesamtbetrag(stunden, material, fahrt, stundensatz, erstellungskosten) + zuschlagBetrag)
     p.color = android.graphics.Color.BLACK
     p.textSize = 11f
     val steuerArt = prefs.getString(STEUERART_KEY, "") ?: ""
-    val steuerZeileY = if (erstellungskosten > 0.0) 615f else 590f
+    val steuerZeileY = 590f + 25f * zusatzZeilen
+    val gesamtY = 560f + 25f * zusatzZeilen
     if (steuerArt == STEUERART_KLEINUNTERNEHMER) {
         p.textSize = 18f
-        c.drawText("Gesamtsumme: ${euro(gesamt)}", 40f, if (erstellungskosten > 0.0) 585f else 560f, p)
+        c.drawText("Gesamtsumme: ${euro(gesamt)}", 40f, gesamtY, p)
         p.textSize = 11f
         c.drawText("Gemäß § 19 UStG wird keine Umsatzsteuer berechnet.", 40f, steuerZeileY, p)
     } else if (steuerArt == STEUERART_REGELBESTEUERUNG) {
         val ust = umsatzsteuerBetrag(gesamt)
         p.textSize = 16f
-        c.drawText("Netto: ${euro(gesamt)}", 40f, if (erstellungskosten > 0.0) 585f else 560f, p)
+        c.drawText("Netto: ${euro(gesamt)}", 40f, gesamtY, p)
         p.textSize = 11f
         c.drawText("Umsatzsteuer 19 %: ${euro(ust)}", 40f, steuerZeileY, p)
         c.drawText("Gesamt inkl. Umsatzsteuer: ${euro(runde2(gesamt + ust))}", 40f, steuerZeileY + 16f, p)
     }
-    val unterschriftTitelY = if (dokumentTitel.contains("KOSTENVORANSCHLAG", ignoreCase = true) && erstellungskosten > 0.0) 675f else 650f
+    val unterschriftTitelY = 650f + 25f * zusatzZeilen
     if (dokumentTitel.contains("KOSTENVORANSCHLAG", ignoreCase = true) && erstellungskosten > 0.0) {
         p.textSize = 11f
         c.drawText("Hinweis: Dieser Kostenvoranschlag ist kostenpflichtig.", 40f, 650f, p)
@@ -836,12 +905,12 @@ private fun erstellePdf(
         val scale = minOf(maxW / signBitmap.width.toFloat(), maxH / signBitmap.height.toFloat())
         val drawW = signBitmap.width * scale
         val drawH = signBitmap.height * scale
-        val signTop = if (dokumentTitel.contains("KOSTENVORANSCHLAG", ignoreCase = true) && erstellungskosten > 0.0) 670f else 648f
+        val signTop = unterschriftTitelY + 18f
         val dst = android.graphics.RectF(40f, signTop, 40f + drawW, signTop + drawH)
         c.drawBitmap(signBitmap, null, dst, null)
         signBitmap.recycle()
     }
-    val signLineY = if (dokumentTitel.contains("KOSTENVORANSCHLAG", ignoreCase = true) && erstellungskosten > 0.0) 715f else 693f
+    val signLineY = 693f + 25f * zusatzZeilen
     c.drawLine(40f, signLineY, 280f, signLineY, p)
     c.drawText("Unterschrift", 40f, signLineY + 18f, p)
     c.drawLine(330f, signLineY, 550f, signLineY, p)
@@ -875,7 +944,9 @@ private fun erstelleRechnungPdf(
     fahrtKm: Double = 0.0,
     fahrtSatz: Double = 0.40,
     dokumentTitel: String = "RECHNUNG",
-    referenzRechnung: String = ""
+    referenzRechnung: String = "",
+    zuschlagBezeichnung: String = "",
+    zuschlagBetrag: Double = 0.0
 ): PdfDocument {
     val pdf = PdfDocument()
     val page = pdf.startPage(PdfDocument.PageInfo.Builder(595, 842, 1).create())
@@ -929,7 +1000,8 @@ private fun erstelleRechnungPdf(
     p.style = Paint.Style.STROKE
     p.strokeWidth = 1f
     p.color = kuemmeroGruen
-    val tabellenEnde = if (erstellungskosten > 0.0) 590f else 565f
+    val zusatzZeilen = (if (erstellungskosten > 0.0) 1 else 0) + (if (zuschlagBetrag > 0.0) 1 else 0)
+    val tabellenEnde = 565f + 25f * zusatzZeilen
     c.drawRect(40f, 458f, 550f, tabellenEnde, p)
     p.style = Paint.Style.FILL
     p.color = kuemmeroMint
@@ -963,14 +1035,13 @@ private fun erstelleRechnungPdf(
     c.drawText(euro(fahrt), 490f, 560f, p)
     var rechnungY = 565f
     if (erstellungskosten > 0.0) {
-        c.drawText("Erstellungskosten", 50f, 585f, p)
-        c.drawText("—", 255f, 585f, p)
-        c.drawText("—", 385f, 585f, p)
-        c.drawText(euro(erstellungskosten), 490f, 585f, p)
-        rechnungY = 590f
+        c.drawText("Erstellungskosten", 50f, rechnungY + 20f, p); c.drawText("—", 255f, rechnungY + 20f, p); c.drawText("—", 385f, rechnungY + 20f, p); c.drawText(euro(erstellungskosten), 490f, rechnungY + 20f, p); rechnungY += 25f
+    }
+    if (zuschlagBetrag > 0.0) {
+        c.drawText(zuschlagBezeichnung.ifBlank { "Wochenend-/Feiertagszuschlag" }, 50f, rechnungY + 20f, p); c.drawText("—", 255f, rechnungY + 20f, p); c.drawText("—", 385f, rechnungY + 20f, p); c.drawText(euro(zuschlagBetrag), 490f, rechnungY + 20f, p); rechnungY += 25f
     }
 
-    val gesamt = gesamtbetrag(stunden, material, fahrt, stundensatz, erstellungskosten)
+    val gesamt = runde2(gesamtbetrag(stunden, material, fahrt, stundensatz, erstellungskosten) + zuschlagBetrag)
     val steuerArt = prefs.getString(STEUERART_KEY, "") ?: ""
     val ust = if (steuerArt == STEUERART_REGELBESTEUERUNG) umsatzsteuerBetrag(gesamt) else 0.0
     val rechnungsEndbetrag = if (steuerArt == STEUERART_REGELBESTEUERUNG) runde2(gesamt + ust) else gesamt
@@ -1107,7 +1178,7 @@ private fun erstelleMahnungPdf(
     c.drawText(auftrag.kundenOrt.ifBlank { "—" }, 300f, y + 42f, p)
 
     y += 100f
-    val rechnungsbetrag = gesamtbetrag(auftrag.stunden, auftrag.material, auftrag.fahrt, auftrag.stundensatz, auftrag.erstellungskosten)
+    val rechnungsbetrag = runde2(gesamtbetrag(auftrag.stunden, auftrag.material, auftrag.fahrt, auftrag.stundensatz, auftrag.erstellungskosten) + auftrag.zuschlagBetrag)
     val gesamt = runde2(rechnungsbetrag + mahngebuehr)
     p.color = gruen
     p.textSize = 13f
@@ -1199,7 +1270,7 @@ private fun druckeRechnungPdf(context: Context, auftrag: Auftrag) {
                 auftrag.terminDatum.ifBlank { auftrag.datum },
                 auftrag.kunde, auftrag.kundenStrasse, auftrag.kundenOrt, auftrag.leistung,
                 auftrag.stunden, auftrag.material, auftrag.fahrt, auftrag.stundensatz,
-                auftrag.unterschriftPfad, auftrag.unterschriftDatum, auftrag.fotosVorher, auftrag.fotosNachher, auftrag.erstellungskosten, auftrag.fahrtKm, auftrag.fahrtKostenProKm
+                auftrag.unterschriftPfad, auftrag.unterschriftDatum, auftrag.fotosVorher, auftrag.fotosNachher, auftrag.erstellungskosten, auftrag.fahrtKm, auftrag.fahrtKostenProKm, "RECHNUNG", "", auftrag.zuschlagBezeichnung, auftrag.zuschlagBetrag
             )
             val info = PrintDocumentInfo.Builder("KÜMMERO-Rechnung-$nummer.pdf")
                 .setContentType(PrintDocumentInfo.CONTENT_TYPE_DOCUMENT)
@@ -1310,7 +1381,7 @@ private fun erstelleProtokollPdf(context: Context, auftrag: Auftrag): PdfDocumen
         "Leistung: ${auftrag.leistung.ifBlank { "—" }}",
         "Status: ${auftrag.status}",
         "Arbeitszeit: ${zeitText(auftrag.arbeitsSekunden)}",
-        "Gesamtbetrag: ${euro(gesamtbetrag(auftrag.stunden, auftrag.material, auftrag.fahrt, auftrag.stundensatz, auftrag.erstellungskosten))}"
+        "Gesamtbetrag: ${euro(runde2(gesamtbetrag(auftrag.stunden, auftrag.material, auftrag.fahrt, auftrag.stundensatz, auftrag.erstellungskosten) + auftrag.zuschlagBetrag))}"
     )
     infos.forEach { info ->
         c.drawText(info, 36f, y, p)
@@ -1446,7 +1517,7 @@ private fun druckePdf(
                 context, nummer, datum, gueltigBis,
                 auftrag.kunde, auftrag.kundenStrasse, auftrag.kundenOrt, auftrag.leistung,
                 auftrag.stunden, auftrag.material, auftrag.fahrt, auftrag.stundensatz,
-                auftrag.unterschriftPfad, auftrag.unterschriftDatum, auftrag.fotosVorher, auftrag.fotosNachher, dokumentTitel, auftrag.erstellungskosten, auftrag.fahrtKm, auftrag.fahrtKostenProKm
+                auftrag.unterschriftPfad, auftrag.unterschriftDatum, auftrag.fotosVorher, auftrag.fotosNachher, dokumentTitel, auftrag.erstellungskosten, auftrag.fahrtKm, auftrag.fahrtKostenProKm, auftrag.zuschlagBezeichnung, auftrag.zuschlagBetrag
             )
             val info = PrintDocumentInfo.Builder(dateiname)
                 .setContentType(PrintDocumentInfo.CONTENT_TYPE_DOCUMENT)
@@ -1848,6 +1919,14 @@ fun KuemmeroApp() {
     var kvFahrtKm by remember { mutableStateOf("") }
     var kvStundensatz by remember { mutableStateOf(gespeicherterStundensatz(context)) }
     var kvErstellungskosten by remember { mutableStateOf("") }
+    var kvZuschlagBezeichnung by remember { mutableStateOf("") }
+    var kvZuschlagBetrag by remember { mutableStateOf(0.0) }
+    var zuschlagSamstagPreis by remember { mutableStateOf(context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE).getString(ZUSCHLAG_SAMSTAG_PREIS_KEY, "0.00") ?: "0.00") }
+    var zuschlagSonntagPreis by remember { mutableStateOf(context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE).getString(ZUSCHLAG_SONNTAG_PREIS_KEY, "0.00") ?: "0.00") }
+    var zuschlagFeiertagPreis by remember { mutableStateOf(context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE).getString(ZUSCHLAG_FEIERTAG_PREIS_KEY, "0.00") ?: "0.00") }
+    var zuschlagSamstagAktiv by remember { mutableStateOf(context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE).getBoolean(ZUSCHLAG_SAMSTAG_AKTIV_KEY, false)) }
+    var zuschlagSonntagAktiv by remember { mutableStateOf(context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE).getBoolean(ZUSCHLAG_SONNTAG_AKTIV_KEY, false)) }
+    var zuschlagFeiertagAktiv by remember { mutableStateOf(context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE).getBoolean(ZUSCHLAG_FEIERTAG_AKTIV_KEY, false)) }
     var kvLoeschIndex by remember { mutableStateOf<Int?>(null) }
     var arbeitszeitAendernIndex by remember { mutableStateOf<Int?>(null) }
     var arbeitszeitNeu by remember { mutableStateOf("") }
@@ -2214,7 +2293,7 @@ fun KuemmeroApp() {
                             a.stunden, a.material, a.fahrt, a.stundensatz,
                             a.unterschriftPfad, a.unterschriftDatum, a.fotosVorher, a.fotosNachher, a.erstellungskosten,
                             a.fahrtKm, a.fahrtKostenProKm,
-                            if (typ == "STORNO") "STORNO" else "BERICHTIGTE RECHNUNG", original
+                            if (typ == "STORNO") "STORNO" else "BERICHTIGTE RECHNUNG", original, a.zuschlagBezeichnung, a.zuschlagBetrag
                         )
                         context.contentResolver.openOutputStream(uri)?.use { out -> pdf.writeTo(out); out.flush() } ?: throw IllegalStateException("Datei konnte nicht gespeichert werden")
                         pdf.close()
@@ -2392,7 +2471,7 @@ fun KuemmeroApp() {
                         append(listOf(
                             a.nummer, a.datum, a.leistungsdatum, a.kunde, a.kundenStrasse, a.kundenOrt,
                             a.leistung, a.stunden.toString(), a.material.toString(), a.fahrt.toString(), a.stundensatz.toString(),
-                            gesamtbetrag(a.stunden, a.material, a.fahrt, a.stundensatz, a.erstellungskosten).toString(),
+                            runde2(gesamtbetrag(a.stunden, a.material, a.fahrt, a.stundensatz, a.erstellungskosten) + a.zuschlagBetrag).toString(),
                             a.status, a.zahlungsstatus, a.rechnungsnummer, a.rechnungsdatum, a.faelligAm
                         ).joinToString(";") { csvFeld(it) })
                         append("\n")
@@ -2506,6 +2585,12 @@ fun KuemmeroApp() {
                 val firmenEmailBackup = obj.optString("firmenEmail", "kuemmero@web.de")
                 val steuernummerBackup = obj.optString("steuernummer", "")
                 val steuerartBackup = obj.optString("steuerart", "")
+                val zuschlagSamstagPreisBackup = obj.optString("zuschlagSamstagPreis", "0.00")
+                val zuschlagSonntagPreisBackup = obj.optString("zuschlagSonntagPreis", "0.00")
+                val zuschlagFeiertagPreisBackup = obj.optString("zuschlagFeiertagPreis", "0.00")
+                val zuschlagSamstagAktivBackup = obj.optBoolean("zuschlagSamstagAktiv", false)
+                val zuschlagSonntagAktivBackup = obj.optBoolean("zuschlagSonntagAktiv", false)
+                val zuschlagFeiertagAktivBackup = obj.optBoolean("zuschlagFeiertagAktiv", false)
                 val arr = obj.optJSONArray("auftraege") ?: JSONArray()
                 val kundenArr = obj.optJSONArray("kunden") ?: JSONArray()
                 val kvArr = obj.optJSONArray("kostenvoranschlaege") ?: JSONArray()
@@ -2519,6 +2604,12 @@ fun KuemmeroApp() {
                     .putString(FIRMENEMAIL_KEY, firmenEmailBackup)
                     .putString(STEUERNUMMER_KEY, steuernummerBackup)
                     .putString(STEUERART_KEY, steuerartBackup)
+                    .putString(ZUSCHLAG_SAMSTAG_PREIS_KEY, zuschlagSamstagPreisBackup)
+                    .putString(ZUSCHLAG_SONNTAG_PREIS_KEY, zuschlagSonntagPreisBackup)
+                    .putString(ZUSCHLAG_FEIERTAG_PREIS_KEY, zuschlagFeiertagPreisBackup)
+                    .putBoolean(ZUSCHLAG_SAMSTAG_AKTIV_KEY, zuschlagSamstagAktivBackup)
+                    .putBoolean(ZUSCHLAG_SONNTAG_AKTIV_KEY, zuschlagSonntagAktivBackup)
+                    .putBoolean(ZUSCHLAG_FEIERTAG_AKTIV_KEY, zuschlagFeiertagAktivBackup)
                     .putString(AUFTRAEGE_KEY, arr.toString())
                     .putString(KUNDEN_KEY, kundenArr.toString())
                     .putString(KOSTENVORANSCHLAEGE_KEY, kvArr.toString())
@@ -2599,13 +2690,13 @@ fun KuemmeroApp() {
                     context, nummer, datum, gueltigBis,
                     a.kunde, a.kundenStrasse, a.kundenOrt, a.leistung,
                     a.stunden, a.material, a.fahrt, a.stundensatz, a.unterschriftPfad, a.unterschriftDatum,
-                    a.fotosVorher, a.fotosNachher, "ANGEBOT", a.erstellungskosten, a.fahrtKm, a.fahrtKostenProKm
+                    a.fotosVorher, a.fotosNachher, "ANGEBOT", a.erstellungskosten, a.fahrtKm, a.fahrtKostenProKm, a.zuschlagBezeichnung, a.zuschlagBetrag
                 )
             } else {
                 erstellePdf(
                     context, nummer, datum, gueltigBis, kunde, strasse, ort, leistung,
                     zahl(stunden), zahl(material), runde2(zahl(fahrtKm) * zahl(fahrtKostenProKm, 0.40)), zahl(stundensatz, zahl(gespeicherterStundensatz(context))), unterschriftPfad, unterschriftDatum,
-                    fotosVorher, fotosNachher, "ANGEBOT", 0.0, zahl(fahrtKm), zahl(fahrtKostenProKm, 0.40)
+                    fotosVorher, fotosNachher, "ANGEBOT", 0.0, zahl(fahrtKm), zahl(fahrtKostenProKm, 0.40), "", 0.0
                 )
             }
             context.contentResolver.openOutputStream(uri)?.use { out -> pdf.writeTo(out) }
@@ -2652,7 +2743,7 @@ fun KuemmeroApp() {
                         a.stundensatz,
                         a.unterschriftPfad,
                         a.unterschriftDatum,
-                        a.fotosVorher, a.fotosNachher, a.erstellungskosten, a.fahrtKm, a.fahrtKostenProKm
+                        a.fotosVorher, a.fotosNachher, a.erstellungskosten, a.fahrtKm, a.fahrtKostenProKm, "RECHNUNG", "", a.zuschlagBezeichnung, a.zuschlagBetrag
                     )
                     context.contentResolver.openOutputStream(uri)?.use { out -> pdf.writeTo(out) }
                     pdf.close()
@@ -2683,15 +2774,19 @@ fun KuemmeroApp() {
     val fahrtSatz = zahl(fahrtKostenProKm, 0.40)
     val fahrtKosten = runde2(zahl(fahrtKm) * fahrtSatz)
     val rate = zahl(stundensatz, zahl(gespeicherterStundensatz(context)))
-    val gesamt = gesamtbetrag(arbeitsstunden, materialKosten, fahrtKosten, rate)
-    val umsatz = auftraege.sumOf { gesamtbetrag(it.stunden, it.material, it.fahrt, it.stundensatz, it.erstellungskosten) }
+    val formularZuschlag = bearbeiteIndex?.let { old ->
+        val alt = auftraege.getOrNull(old)
+        if (alt != null && alt.leistungsdatum == leistungsdatum.trim().ifBlank { datum.trim() }) alt.zuschlagBetrag else leistungsZuschlag(context, leistungsdatum.trim().ifBlank { datum.trim() }).second
+    } ?: leistungsZuschlag(context, leistungsdatum.trim().ifBlank { datum.trim() }).second
+    val gesamt = runde2(gesamtbetrag(arbeitsstunden, materialKosten, fahrtKosten, rate) + formularZuschlag)
+    val umsatz = auftraege.sumOf { runde2(gesamtbetrag(it.stunden, it.material, it.fahrt, it.stundensatz, it.erstellungskosten) + it.zuschlagBetrag) }
 
     val heuteText = datumFormat.format(Date())
     val termineHeute = auftraege.filter { it.terminDatum == heuteText }
         .sortedBy { it.terminUhrzeit }
     val offeneAuftraege = auftraege.count { it.status != "Abgerechnet" }
     val offeneZahlungen = auftraege.filter { it.zahlungsstatus != "Bezahlt" }
-    val offeneZahlungSumme = offeneZahlungen.sumOf { gesamtbetrag(it.stunden, it.material, it.fahrt, it.stundensatz, it.erstellungskosten) }
+    val offeneZahlungSumme = offeneZahlungen.sumOf { runde2(gesamtbetrag(it.stunden, it.material, it.fahrt, it.stundensatz, it.erstellungskosten) + it.zuschlagBetrag) }
     val ueberfaelligeRechnungen = auftraege.count { rechnungIstUeberfaellig(it, heuteText) }
     val naechsteTermine = auftraege.filter { it.terminDatum.isNotBlank() }
         .sortedWith(compareBy<Auftrag> {
@@ -2763,7 +2858,7 @@ fun KuemmeroApp() {
             val arbeitszeitOk = a.stunden > 0.0 || a.arbeitsSekunden > 0L
             val kundeOk = a.kunde.isNotBlank() && a.kundenStrasse.isNotBlank() && a.kundenOrt.isNotBlank()
             val leistungOk = a.leistung.isNotBlank()
-            val betragOk = gesamtbetrag(a.stunden, a.material, a.fahrt, a.stundensatz, a.erstellungskosten) > 0.0
+            val betragOk = runde2(gesamtbetrag(a.stunden, a.material, a.fahrt, a.stundensatz, a.erstellungskosten) + a.zuschlagBetrag) > 0.0
             val leistungsdatumOk = a.leistungsdatum.isNotBlank() || a.terminDatum.isNotBlank() || a.datum.isNotBlank()
 
             AlertDialog(
@@ -3521,9 +3616,9 @@ fun KuemmeroApp() {
                     if (kundeAkte?.email?.isNotBlank() == true) Text("E-Mail: ${kundeAkte.email}")
                     HorizontalDivider()
                     Text("Aufträge: ${kundenAuftraege.size}", fontWeight = FontWeight.Bold)
-                    Text("Umsatz: ${euro(kundenAuftraege.sumOf { gesamtbetrag(it.stunden, it.material, it.fahrt, it.stundensatz, it.erstellungskosten) })}")
+                    Text("Umsatz: ${euro(kundenAuftraege.sumOf { runde2(gesamtbetrag(it.stunden, it.material, it.fahrt, it.stundensatz, it.erstellungskosten) + it.zuschlagBetrag) })}")
                     val offen = kundenAuftraege.filter { it.zahlungsstatus != "Bezahlt" }
-                    Text("Offene Zahlungen: ${euro(offen.sumOf { gesamtbetrag(it.stunden, it.material, it.fahrt, it.stundensatz, it.erstellungskosten) })}", color = if (offen.isEmpty()) KuemmeroGreen else KuemmeroError, fontWeight = FontWeight.Bold)
+                    Text("Offene Zahlungen: ${euro(offen.sumOf { runde2(gesamtbetrag(it.stunden, it.material, it.fahrt, it.stundensatz, it.erstellungskosten) + it.zuschlagBetrag) })}", color = if (offen.isEmpty()) KuemmeroGreen else KuemmeroError, fontWeight = FontWeight.Bold)
                     val kundenKVs = kostenvoranschlaege.filter { it.kunde.equals(name, ignoreCase = true) }
                     Text("Kostenvoranschläge: ${kundenKVs.size}", fontWeight = FontWeight.Bold)
                     val rechnungen = kundenAuftraege.filter { it.rechnungsnummer.isNotBlank() }
@@ -3545,7 +3640,7 @@ fun KuemmeroApp() {
                             else -> "keine Mahnung"
                         }
                         Text(
-                            "${r.rechnungsnummer} · ${euro(gesamtbetrag(r.stunden, r.material, r.fahrt, r.stundensatz, r.erstellungskosten))} · ${if (r.zahlungsstatus == "Bezahlt") "Bezahlt" else "Offen"} · $mahnstatus",
+                            "${r.rechnungsnummer} · ${euro(runde2(gesamtbetrag(r.stunden, r.material, r.fahrt, r.stundensatz, r.erstellungskosten) + r.zuschlagBetrag))} · ${if (r.zahlungsstatus == "Bezahlt") "Bezahlt" else "Offen"} · $mahnstatus",
                             color = if (r.zahlungsstatus == "Bezahlt") KuemmeroGreen else if (r.mahnung2Erstellt || r.mahnung1Erstellt) KuemmeroError else KuemmeroText,
                             style = MaterialTheme.typography.bodySmall
                         )
@@ -3818,7 +3913,7 @@ fun KuemmeroApp() {
                                 Text("Leistungsdatum: ${rechnungAuftrag.leistungsdatum.ifBlank { rechnungAuftrag.terminDatum.ifBlank { rechnungAuftrag.datum } }}", color = KuemmeroText)
                                 HorizontalDivider(color = KuemmeroGreenLight)
                                 Text(
-                                    "Gesamtbetrag: ${euro(gesamtbetrag(rechnungAuftrag.stunden, rechnungAuftrag.material, rechnungAuftrag.fahrt, rechnungAuftrag.stundensatz, rechnungAuftrag.erstellungskosten))}",
+                                    "Gesamtbetrag: ${euro(runde2(gesamtbetrag(rechnungAuftrag.stunden, rechnungAuftrag.material, rechnungAuftrag.fahrt, rechnungAuftrag.stundensatz, rechnungAuftrag.erstellungskosten) + rechnungAuftrag.zuschlagBetrag))}",
                                     style = MaterialTheme.typography.titleLarge,
                                     color = KuemmeroGreen,
                                     fontWeight = FontWeight.Bold
@@ -3932,7 +4027,7 @@ fun KuemmeroApp() {
                                 }
                                 if (a.leistung.isNotBlank()) Text("Leistung: ${a.leistung}", color = KuemmeroText)
                                 Text(
-                                    "Gesamt: ${euro(gesamtbetrag(a.stunden, a.material, a.fahrt, a.stundensatz, a.erstellungskosten))}",
+                                    "Gesamt: ${euro(runde2(gesamtbetrag(a.stunden, a.material, a.fahrt, a.stundensatz, a.erstellungskosten) + a.zuschlagBetrag))}",
                                     style = MaterialTheme.typography.titleLarge,
                                     color = KuemmeroGreen,
                                     fontWeight = FontWeight.Bold
@@ -4042,6 +4137,8 @@ fun KuemmeroApp() {
                                 kvFahrtKm = if (a.fahrtKm > 0.0) a.fahrtKm.toString().replace(".", ",") else ""
                                 kvStundensatz = a.stundensatz.toString().replace(".", ",")
                                 kvErstellungskosten = ""
+                                kvZuschlagBezeichnung = a.zuschlagBezeichnung
+                                kvZuschlagBetrag = a.zuschlagBetrag
                                 kvFormOffen = true
                                 auftragDetailIndex = null
                                 hauptseite = "Kostenvoranschläge"
@@ -4502,7 +4599,9 @@ fun KuemmeroApp() {
                                     leistungsdatum = leistungsdatum.trim().ifBlank { datum.trim() },
                                     fahrtKm = zahl(fahrtKm),
                                     fahrtKostenProKm = fahrtSatz,
-                                    protokoll = protokoll.trim()
+                                    protokoll = protokoll.trim(),
+                                    zuschlagBezeichnung = bearbeiteIndex?.let { old -> val alt = auftraege.getOrNull(old); if (alt != null && alt.leistungsdatum == leistungsdatum.trim().ifBlank { datum.trim() }) alt.zuschlagBezeichnung else leistungsZuschlag(context, leistungsdatum.trim().ifBlank { datum.trim() }).first } ?: leistungsZuschlag(context, leistungsdatum.trim().ifBlank { datum.trim() }).first,
+                                    zuschlagBetrag = bearbeiteIndex?.let { old -> val alt = auftraege.getOrNull(old); if (alt != null && alt.leistungsdatum == leistungsdatum.trim().ifBlank { datum.trim() }) alt.zuschlagBetrag else leistungsZuschlag(context, leistungsdatum.trim().ifBlank { datum.trim() }).second } ?: leistungsZuschlag(context, leistungsdatum.trim().ifBlank { datum.trim() }).second
                                 )
                                 val index = bearbeiteIndex
                                 if (index != null) {
@@ -4656,7 +4755,7 @@ fun KuemmeroApp() {
 
                 item {
                     val offeneAuftraege = auftraege.filter { it.zahlungsstatus != "Bezahlt" }
-                    val offeneSumme = offeneAuftraege.sumOf { gesamtbetrag(it.stunden, it.material, it.fahrt, it.stundensatz, it.erstellungskosten) }
+                    val offeneSumme = offeneAuftraege.sumOf { runde2(gesamtbetrag(it.stunden, it.material, it.fahrt, it.stundensatz, it.erstellungskosten) + it.zuschlagBetrag) }
                     Card(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -4837,7 +4936,7 @@ fun KuemmeroApp() {
                                 Text(a.leistung)
                             }
                             Text(
-                                euro(gesamtbetrag(a.stunden, a.material, a.fahrt, a.stundensatz, a.erstellungskosten)),
+                                euro(runde2(gesamtbetrag(a.stunden, a.material, a.fahrt, a.stundensatz, a.erstellungskosten) + a.zuschlagBetrag)),
                                 style = MaterialTheme.typography.titleMedium,
                                 color = KuemmeroGreen,
                                 fontWeight = FontWeight.Bold
@@ -5627,6 +5726,8 @@ fun KuemmeroApp() {
                                         kvMaterialBonUri = ""
                                         kvFotosVorher = emptyList()
                                         kvFahrtKm = ""
+                                        kvZuschlagBezeichnung = ""
+                                        kvZuschlagBetrag = 0.0
                                         kvFormOffen = true
                                     },
                                     modifier = Modifier.fillMaxWidth().heightIn(min = 54.dp),
@@ -5656,7 +5757,7 @@ fun KuemmeroApp() {
                                         Text("${k.nummer} · ${k.datum}", color = KuemmeroText)
                                         if (k.leistung.isNotBlank()) Text(k.leistung, color = KuemmeroText)
                                         Text(
-                                            euro(gesamtbetrag(k.stunden, k.material, k.fahrt, k.stundensatz, k.erstellungskosten)),
+                                            euro(runde2(gesamtbetrag(k.stunden, k.material, k.fahrt, k.stundensatz, k.erstellungskosten) + k.zuschlagBetrag)),
                                             color = KuemmeroGreen,
                                             fontWeight = FontWeight.Bold
                                         )
@@ -5687,6 +5788,8 @@ fun KuemmeroApp() {
                                                     kvFahrtKm = if (k.fahrtKm > 0.0) k.fahrtKm.toString().replace(".", ",") else ""
                                                     kvStundensatz = k.stundensatz.toString().replace(".", ",")
                                                     kvErstellungskosten = k.erstellungskosten.toString().replace(".", ",")
+                                                    kvZuschlagBezeichnung = k.zuschlagBezeichnung
+                                                    kvZuschlagBetrag = k.zuschlagBetrag
                                                     kvFormOffen = true
                                                 },
                                                 modifier = Modifier.weight(1f)
@@ -5720,7 +5823,9 @@ fun KuemmeroApp() {
                                                         erstellungskosten = k.erstellungskosten,
                                                         leistungsdatum = k.datum,
                                                         fahrtKm = k.fahrtKm,
-                                                        fahrtKostenProKm = k.fahrtKostenProKm
+                                                        fahrtKostenProKm = k.fahrtKostenProKm,
+                                                        zuschlagBezeichnung = k.zuschlagBezeichnung,
+                                                        zuschlagBetrag = k.zuschlagBetrag
                                                     )
                                                     auftraege = auftraege + a
                                                     speichereAuftraege(context, auftraege)
@@ -5745,7 +5850,9 @@ fun KuemmeroApp() {
                                                         k.kundenStrasse, k.kundenOrt, k.leistung,
                                                         k.stunden, k.material, k.materialBonUri, k.fahrt, k.stundensatz,
                                                         fotosVorher = k.fotosVorher,
-                                                        erstellungskosten = k.erstellungskosten
+                                                        erstellungskosten = k.erstellungskosten,
+                                                        zuschlagBezeichnung = k.zuschlagBezeichnung,
+                                                        zuschlagBetrag = k.zuschlagBetrag
                                                     )
                                                     druckePdf(
                                                         context,
@@ -5871,7 +5978,7 @@ fun KuemmeroApp() {
                                             )
                                         }
                                         Text(
-                                            "Gesamtsumme: ${euro(gesamtbetrag(zahl(kvStunden), zahl(kvMaterial), runde2(zahl(kvFahrtKm) * fahrtSatz), zahl(kvStundensatz, zahl(gespeicherterStundensatz(context))), zahl(kvErstellungskosten)))}",
+                                            "Gesamtsumme: ${euro(runde2(gesamtbetrag(zahl(kvStunden), zahl(kvMaterial), runde2(zahl(kvFahrtKm) * fahrtSatz), zahl(kvStundensatz, zahl(gespeicherterStundensatz(context))), zahl(kvErstellungskosten)) + if (kvBearbeiteIndex != null && kvZuschlagBezeichnung.isNotBlank()) kvZuschlagBetrag else leistungsZuschlag(context, kvDatum).second))}",
                                             style = MaterialTheme.typography.titleLarge,
                                             color = KuemmeroGreen,
                                             fontWeight = FontWeight.Bold
@@ -5887,7 +5994,9 @@ fun KuemmeroApp() {
                                                         zahl(kvStunden), zahl(kvMaterial), runde2(zahl(kvFahrtKm) * fahrtSatz), zahl(kvStundensatz, zahl(gespeicherterStundensatz(context))),
                                                         kvMaterialBonUri, kvFotosVorher, zahl(kvErstellungskosten),
                                                         fahrtKm = zahl(kvFahrtKm),
-                                                        fahrtKostenProKm = fahrtSatz
+                                                        fahrtKostenProKm = fahrtSatz,
+                                                        zuschlagBezeichnung = if (kvBearbeiteIndex != null && kvZuschlagBezeichnung.isNotBlank()) kvZuschlagBezeichnung else leistungsZuschlag(context, kvDatum).first,
+                                                        zuschlagBetrag = if (kvBearbeiteIndex != null && kvZuschlagBezeichnung.isNotBlank()) kvZuschlagBetrag else leistungsZuschlag(context, kvDatum).second
                                                     )
                                                     val list = kostenvoranschlaege.toMutableList()
                                                     if (kvBearbeiteIndex != null) list[kvBearbeiteIndex!!] = k else list.add(k)
@@ -6062,7 +6171,7 @@ fun KuemmeroApp() {
                                                     }
                                                     .padding(vertical = 4.dp)
                                             )
-                                            Text("Betrag: ${euro(gesamtbetrag(a.stunden, a.material, a.fahrt, a.stundensatz, a.erstellungskosten))}", color = KuemmeroText)
+                                            Text("Betrag: ${euro(runde2(gesamtbetrag(a.stunden, a.material, a.fahrt, a.stundensatz, a.erstellungskosten) + a.zuschlagBetrag))}", color = KuemmeroText)
                                             Text("Fällig am: ${a.faelligAm.ifBlank { "nicht angegeben" }}", color = KuemmeroText)
 
                                             if (rechnungIstUeberfaellig(a, heuteText)) {
@@ -6207,6 +6316,28 @@ fun KuemmeroApp() {
                                         color = KuemmeroText,
                                         fontSize = 12.sp
                                     )
+                                }
+                            }
+                        }
+                        item {
+                            Card(Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = KuemmeroSurface), shape = RoundedCornerShape(18.dp)) {
+                                Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                    Text("📅 Wochenend- & Feiertagszuschläge", style = MaterialTheme.typography.titleMedium, color = KuemmeroGreen, fontWeight = FontWeight.Bold)
+                                    Text("Nur bei aktivem Zuschlag wird die Position automatisch anhand des Leistungsdatums übernommen. Der Zuschlag wird im Dokument immer als eigene Position ausgewiesen.", color = KuemmeroText, fontSize = 12.sp)
+                                    @Composable fun ZuschlagZeile(name: String, preis: String, aktiv: Boolean, onPreis: (String) -> Unit, onAktiv: (Boolean) -> Unit) {
+                                        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                            Column(Modifier.weight(1f)) { Text(name, fontWeight = FontWeight.Bold, color = KuemmeroText); OutlinedTextField(preis, onPreis, label = { Text("Preis (€)") }, singleLine = true, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal), colors = feldFarben, modifier = Modifier.fillMaxWidth()) }
+                                            Column(horizontalAlignment = Alignment.CenterHorizontally) { Text("Verwenden", fontSize = 11.sp); Switch(checked = aktiv, onCheckedChange = onAktiv) }
+                                        }
+                                    }
+                                    ZuschlagZeile("Samstag", zuschlagSamstagPreis, zuschlagSamstagAktiv, { zuschlagSamstagPreis = it }, { zuschlagSamstagAktiv = it })
+                                    ZuschlagZeile("Sonntag", zuschlagSonntagPreis, zuschlagSonntagAktiv, { zuschlagSonntagPreis = it }, { zuschlagSonntagAktiv = it })
+                                    ZuschlagZeile("Feiertag (NRW)", zuschlagFeiertagPreis, zuschlagFeiertagAktiv, { zuschlagFeiertagPreis = it }, { zuschlagFeiertagAktiv = it })
+                                    Button(onClick = {
+                                        val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+                                        prefs.edit().putString(ZUSCHLAG_SAMSTAG_PREIS_KEY, zuschlagSamstagPreis.replace(",", ".")).putString(ZUSCHLAG_SONNTAG_PREIS_KEY, zuschlagSonntagPreis.replace(",", ".")).putString(ZUSCHLAG_FEIERTAG_PREIS_KEY, zuschlagFeiertagPreis.replace(",", ".")).putBoolean(ZUSCHLAG_SAMSTAG_AKTIV_KEY, zuschlagSamstagAktiv).putBoolean(ZUSCHLAG_SONNTAG_AKTIV_KEY, zuschlagSonntagAktiv).putBoolean(ZUSCHLAG_FEIERTAG_AKTIV_KEY, zuschlagFeiertagAktiv).apply()
+                                        android.widget.Toast.makeText(context, "Zuschläge gespeichert.", 0).show()
+                                    }, modifier = Modifier.fillMaxWidth(), colors = ButtonDefaults.buttonColors(containerColor = KuemmeroGreen)) { Text("Zuschläge speichern", fontWeight = FontWeight.Bold) }
                                 }
                             }
                         }
@@ -6578,7 +6709,7 @@ fun KuemmeroApp() {
                                     Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(5.dp)) {
                                         Text(a.rechnungsnummer, color = KuemmeroGreen, fontWeight = FontWeight.Bold)
                                         Text(a.kunde.ifBlank { "Kunde" }, color = KuemmeroText, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-                                        Text("${a.rechnungsdatum.ifBlank { "ohne Rechnungsdatum" }} · ${euro(gesamtbetrag(a.stunden, a.material, a.fahrt, a.stundensatz, a.erstellungskosten))}", color = KuemmeroText)
+                                        Text("${a.rechnungsdatum.ifBlank { "ohne Rechnungsdatum" }} · ${euro(runde2(gesamtbetrag(a.stunden, a.material, a.fahrt, a.stundensatz, a.erstellungskosten) + a.zuschlagBetrag))}", color = KuemmeroText)
                                         if (a.rechnungsstatus.isNotBlank()) Text("Status: ${a.rechnungsstatus}", color = if (a.rechnungsstatus == "Storniert") KuemmeroError else KuemmeroGreen, fontWeight = FontWeight.SemiBold)
                                         if (a.rechnungUrsprungsnummer.isNotBlank()) Text("Bezug: ${a.rechnungUrsprungsnummer}", color = KuemmeroText, fontSize = 12.sp)
                                         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -6602,10 +6733,10 @@ fun KuemmeroApp() {
                             Card(Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = KuemmeroGreen), shape = RoundedCornerShape(18.dp)) {
                                 Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(5.dp)) {
                                     Text("Jahr $aktuellesJahr", color = Color.White, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleLarge)
-                                    Text("Umsatz: ${euro(jahrAuftraege.sumOf { gesamtbetrag(it.stunden, it.material, it.fahrt, it.stundensatz, it.erstellungskosten) })}", color = Color.White)
+                                    Text("Umsatz: ${euro(jahrAuftraege.sumOf { runde2(gesamtbetrag(it.stunden, it.material, it.fahrt, it.stundensatz, it.erstellungskosten) + it.zuschlagBetrag) })}", color = Color.White)
                                     Text("Aufträge: ${jahrAuftraege.size}", color = Color.White)
-                                    Text("Bezahlt: ${euro(jahrAuftraege.filter { it.zahlungsstatus == "Bezahlt" }.sumOf { gesamtbetrag(it.stunden, it.material, it.fahrt, it.stundensatz, it.erstellungskosten) })}", color = Color.White)
-                                    Text("Offen: ${euro(jahrAuftraege.filter { it.zahlungsstatus != "Bezahlt" }.sumOf { gesamtbetrag(it.stunden, it.material, it.fahrt, it.stundensatz, it.erstellungskosten) })}", color = Color.White)
+                                    Text("Bezahlt: ${euro(jahrAuftraege.filter { it.zahlungsstatus == "Bezahlt" }.sumOf { runde2(gesamtbetrag(it.stunden, it.material, it.fahrt, it.stundensatz, it.erstellungskosten) + it.zuschlagBetrag) })}", color = Color.White)
+                                    Text("Offen: ${euro(jahrAuftraege.filter { it.zahlungsstatus != "Bezahlt" }.sumOf { runde2(gesamtbetrag(it.stunden, it.material, it.fahrt, it.stundensatz, it.erstellungskosten) + it.zuschlagBetrag) })}", color = Color.White)
                                 }
                             }
                         }
@@ -6623,7 +6754,7 @@ fun KuemmeroApp() {
                                     Card(Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = KuemmeroSurface), shape = RoundedCornerShape(16.dp)) {
                                         Row(Modifier.fillMaxWidth().padding(14.dp), horizontalArrangement = Arrangement.SpaceBetween) {
                                             Column { Text(name, color = KuemmeroGreen, fontWeight = FontWeight.Bold); Text("${monatAuftraege.size} Aufträge", color = KuemmeroText) }
-                                            Text(euro(monatAuftraege.sumOf { gesamtbetrag(it.stunden, it.material, it.fahrt, it.stundensatz, it.erstellungskosten) }), color = KuemmeroText, fontWeight = FontWeight.Bold)
+                                            Text(euro(monatAuftraege.sumOf { runde2(gesamtbetrag(it.stunden, it.material, it.fahrt, it.stundensatz, it.erstellungskosten) + it.zuschlagBetrag) }), color = KuemmeroText, fontWeight = FontWeight.Bold)
                                         }
                                     }
                                 }
