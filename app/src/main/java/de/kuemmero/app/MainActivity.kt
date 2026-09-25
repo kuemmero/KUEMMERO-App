@@ -391,6 +391,17 @@ private fun speichereStundensatz(context: Context, eingabe: String): Double? {
 private fun runde2(value: Double): Double =
     kotlin.math.round(value * 100.0) / 100.0
 
+/** Euro-Eingabe für Einstellungsfelder: maximal eine Dezimaltrennstelle und 2 Nachkommastellen. */
+private fun euroEingabeMax2(text: String): String {
+    val roh = text.replace(',', '.').filter { it.isDigit() || it == '.' }
+    if (roh.isEmpty()) return ""
+    val punkt = roh.indexOf('.')
+    if (punkt < 0) return roh
+    val ganz = roh.substring(0, punkt).ifBlank { "0" }
+    val nachkomma = roh.substring(punkt + 1).take(2)
+    return "$ganz.$nachkomma"
+}
+
 private fun arbeitsbetrag(stunden: Double, stundensatz: Double): Double {
     // Für die Abrechnung zuerst beide Werte auf die angezeigten 2 Nachkommastellen bringen.
     // Dadurch wird z. B. 0,01 Std. bei 42,00 €/Std. immer zu 0,42 €.
@@ -1994,9 +2005,9 @@ fun KuemmeroApp() {
     var kvErstellungskosten by remember { mutableStateOf("") }
     var kvZuschlagBezeichnung by remember { mutableStateOf("") }
     var kvZuschlagBetrag by remember { mutableStateOf(0.0) }
-    var zuschlagSamstagPreis by remember { mutableStateOf(context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE).getString(ZUSCHLAG_SAMSTAG_PREIS_KEY, "0.00") ?: "0.00") }
-    var zuschlagSonntagPreis by remember { mutableStateOf(context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE).getString(ZUSCHLAG_SONNTAG_PREIS_KEY, "0.00") ?: "0.00") }
-    var zuschlagFeiertagPreis by remember { mutableStateOf(context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE).getString(ZUSCHLAG_FEIERTAG_PREIS_KEY, "0.00") ?: "0.00") }
+    var zuschlagSamstagPreis by remember { mutableStateOf(euroEingabeMax2(context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE).getString(ZUSCHLAG_SAMSTAG_PREIS_KEY, "0.00") ?: "0.00")) }
+    var zuschlagSonntagPreis by remember { mutableStateOf(euroEingabeMax2(context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE).getString(ZUSCHLAG_SONNTAG_PREIS_KEY, "0.00") ?: "0.00")) }
+    var zuschlagFeiertagPreis by remember { mutableStateOf(euroEingabeMax2(context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE).getString(ZUSCHLAG_FEIERTAG_PREIS_KEY, "0.00") ?: "0.00")) }
     var zuschlagSamstagAktiv by remember { mutableStateOf(context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE).getBoolean(ZUSCHLAG_SAMSTAG_AKTIV_KEY, false)) }
     var zuschlagSonntagAktiv by remember { mutableStateOf(context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE).getBoolean(ZUSCHLAG_SONNTAG_AKTIV_KEY, false)) }
     var zuschlagFeiertagAktiv by remember { mutableStateOf(context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE).getBoolean(ZUSCHLAG_FEIERTAG_AKTIV_KEY, false)) }
@@ -6471,7 +6482,18 @@ fun KuemmeroApp() {
                                     Text("Nur bei aktivem Zuschlag wird die Position automatisch anhand des Leistungsdatums übernommen. Der Zuschlag wird im Dokument immer als eigene Position ausgewiesen.", color = KuemmeroText, fontSize = 12.sp)
                                     @Composable fun ZuschlagZeile(name: String, preis: String, aktiv: Boolean, onPreis: (String) -> Unit, onAktiv: (Boolean) -> Unit) {
                                         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                            Column(Modifier.weight(1f)) { Text(name, fontWeight = FontWeight.Bold, color = KuemmeroText); OutlinedTextField(preis, onPreis, label = { Text("Preis (€)") }, singleLine = true, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal), colors = feldFarben, modifier = Modifier.fillMaxWidth()) }
+                                            Column(Modifier.weight(1f)) {
+                                                Text(name, fontWeight = FontWeight.Bold, color = KuemmeroText)
+                                                OutlinedTextField(
+                                                    value = preis,
+                                                    onValueChange = { onPreis(euroEingabeMax2(it)) },
+                                                    label = { Text("Preis (€)") },
+                                                    singleLine = true,
+                                                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                                                    colors = feldFarben,
+                                                    modifier = Modifier.fillMaxWidth()
+                                                )
+                                            }
                                             Column(horizontalAlignment = Alignment.CenterHorizontally) { Text("Verwenden", fontSize = 11.sp); Switch(checked = aktiv, onCheckedChange = onAktiv) }
                                         }
                                     }
@@ -6479,8 +6501,14 @@ fun KuemmeroApp() {
                                     ZuschlagZeile("Sonntag", zuschlagSonntagPreis, zuschlagSonntagAktiv, { zuschlagSonntagPreis = it }, { zuschlagSonntagAktiv = it })
                                     ZuschlagZeile("Feiertag (NRW)", zuschlagFeiertagPreis, zuschlagFeiertagAktiv, { zuschlagFeiertagPreis = it }, { zuschlagFeiertagAktiv = it })
                                     Button(onClick = {
+                                        val samstag = zahl(euroEingabeMax2(zuschlagSamstagPreis)).coerceAtLeast(0.0)
+                                        val sonntag = zahl(euroEingabeMax2(zuschlagSonntagPreis)).coerceAtLeast(0.0)
+                                        val feiertag = zahl(euroEingabeMax2(zuschlagFeiertagPreis)).coerceAtLeast(0.0)
+                                        zuschlagSamstagPreis = String.format(Locale.GERMANY, "%.2f", samstag)
+                                        zuschlagSonntagPreis = String.format(Locale.GERMANY, "%.2f", sonntag)
+                                        zuschlagFeiertagPreis = String.format(Locale.GERMANY, "%.2f", feiertag)
                                         val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-                                        prefs.edit().putString(ZUSCHLAG_SAMSTAG_PREIS_KEY, zuschlagSamstagPreis.replace(",", ".")).putString(ZUSCHLAG_SONNTAG_PREIS_KEY, zuschlagSonntagPreis.replace(",", ".")).putString(ZUSCHLAG_FEIERTAG_PREIS_KEY, zuschlagFeiertagPreis.replace(",", ".")).putBoolean(ZUSCHLAG_SAMSTAG_AKTIV_KEY, zuschlagSamstagAktiv).putBoolean(ZUSCHLAG_SONNTAG_AKTIV_KEY, zuschlagSonntagAktiv).putBoolean(ZUSCHLAG_FEIERTAG_AKTIV_KEY, zuschlagFeiertagAktiv).apply()
+                                        prefs.edit().putString(ZUSCHLAG_SAMSTAG_PREIS_KEY, String.format(Locale.US, "%.2f", samstag)).putString(ZUSCHLAG_SONNTAG_PREIS_KEY, String.format(Locale.US, "%.2f", sonntag)).putString(ZUSCHLAG_FEIERTAG_PREIS_KEY, String.format(Locale.US, "%.2f", feiertag)).putBoolean(ZUSCHLAG_SAMSTAG_AKTIV_KEY, zuschlagSamstagAktiv).putBoolean(ZUSCHLAG_SONNTAG_AKTIV_KEY, zuschlagSonntagAktiv).putBoolean(ZUSCHLAG_FEIERTAG_AKTIV_KEY, zuschlagFeiertagAktiv).apply()
                                         android.widget.Toast.makeText(context, "Zuschläge gespeichert.", 0).show()
                                     }, modifier = Modifier.fillMaxWidth(), colors = ButtonDefaults.buttonColors(containerColor = KuemmeroGreen)) { Text("Zuschläge speichern", fontWeight = FontWeight.Bold) }
                                 }
