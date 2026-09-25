@@ -3726,29 +3726,18 @@ fun KuemmeroApp() {
             },
             bottomBar = {
                 NavigationBar(containerColor = KuemmeroSurface) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
-                        horizontalArrangement = Arrangement.spacedBy(2.dp)
-                    ) {
-                        listOf(
-                            Triple("Heute", "⌂", "Heute"),
-                            Triple("Aufträge", "▤", "Aufträge"),
-                            Triple("Auftrag", "✓", "Auftrag"),
-                            Triple("KV", "€", "Kostenvoranschläge"),
-                            Triple("Kunden", "♙", "Kunden"),
-                            Triple("Mahnungen", "!", "Mahnungen"),
-                            Triple("Mehr", "⋯", "Mehr")
-                        ).forEach { (label, iconText, page) ->
+                    listOf(
+                        Triple("Heute", "⌂", "Heute"),
+                        Triple("Aufträge", "▤", "Aufträge"),
+                        Triple("KV", "€", "Kostenvoranschläge"),
+                        Triple("Kunden", "♙", "Kunden"),
+                        Triple("Mahnungen", "!", "Mahnungen"),
+                        Triple("Mehr", "⋯", "Mehr")
+                    ).forEach { (label, iconText, page) ->
                         NavigationBarItem(
                             selected = hauptseite == page,
                             onClick = {
                                 hauptseite = page
-                                if (page == "Auftrag") {
-                                    auftragFormOffen = false
-                                    bearbeiteIndex = null
-                                    loeschIndex = null
-                                    auftragDetailIndex = if (auftraege.isNotEmpty()) 0 else null
-                                }
                                 if (page == "Aufträge") {
                                     // Beim Öffnen von „Aufträge“ immer die Übersicht zeigen.
                                     auftragDetailIndex = null
@@ -3767,7 +3756,6 @@ fun KuemmeroApp() {
                                 unselectedTextColor = KuemmeroText
                             )
                         )
-                        }
                     }
                 }
             },
@@ -3783,46 +3771,6 @@ fun KuemmeroApp() {
                 val passtZahlung = !zahlungsFilterOffen || a.zahlungsstatus != "Bezahlt"
                 passtSuche && passtStatus && passtZahlung
             }
-
-        if (hauptseite == "Auftrag") {
-            val index = (auftragDetailIndex ?: 0).coerceIn(0, (auftraege.size - 1).coerceAtLeast(0))
-            val a = auftraege.getOrNull(index)
-            LazyColumn(
-                modifier = Modifier.padding(padding).padding(16.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                item {
-                    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                        TextButton(onClick = { hauptseite = "Aufträge" }) {
-                            Text("← Zurück", color = KuemmeroGreen, fontWeight = FontWeight.Bold)
-                        }
-                        Text("Auftrag", style = MaterialTheme.typography.headlineSmall, color = KuemmeroGreen, fontWeight = FontWeight.Bold)
-                    }
-                }
-                if (a == null) {
-                    item { Text("Noch keine Aufträge vorhanden.", color = KuemmeroText) }
-                } else {
-                    item {
-                        Card(Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = KuemmeroSurface), shape = RoundedCornerShape(22.dp)) {
-                            Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(9.dp)) {
-                                Text(a.kunde.ifBlank { "Kunde" }, fontWeight = FontWeight.Bold, fontSize = 20.sp, color = KuemmeroGreen)
-                                Text("Auftrag: ${a.nummer}", fontWeight = FontWeight.Bold)
-                                Text("Datum: ${a.datum}")
-                                if (a.terminDatum.isNotBlank()) Text("Termin: ${a.terminDatum}${if (a.terminUhrzeit.isNotBlank()) " · ${a.terminUhrzeit}" else ""}")
-                                Text("Leistung: ${a.leistung.ifBlank { "—" }}")
-                                Text("Betrag: ${euro(gesamtbetrag(a.stunden, a.material, a.fahrt, a.stundensatz, a.erstellungskosten))}", fontWeight = FontWeight.Bold)
-                                Text("Status: ${a.status}")
-                                Text("Zahlung: ${a.zahlungsstatus}")
-                                HorizontalDivider()
-                                Button(onClick = { auftragDetailIndex = index; hauptseite = "Aufträge" }, modifier = Modifier.fillMaxWidth(), colors = ButtonDefaults.buttonColors(containerColor = KuemmeroGreen)) {
-                                    Text("Auftrag öffnen / Info")
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        }
 
         if (hauptseite == "Rechnung") {
             val rechnungIndex = rechnungFuerIndex
