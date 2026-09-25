@@ -569,26 +569,64 @@ private fun speichereAuftraege(context: Context, liste: List<Auftrag>) {
 
 private fun backupText(context: Context): String {
     val p = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+    val einstellungen = JSONObject()
+    p.all.forEach { (key, value) ->
+        // Geräte-/Dateibezogene Backup-Metadaten niemals in eine Sicherung übernehmen.
+        if (key == BACKUP_URI_KEY || key == BACKUP_LAST_SUCCESS_KEY) return@forEach
+        when (value) {
+            is String -> einstellungen.put(key, value)
+            is Boolean -> einstellungen.put(key, value)
+            is Int -> einstellungen.put(key, value)
+            is Long -> einstellungen.put(key, value)
+            is Float -> einstellungen.put(key, value.toDouble())
+            is Double -> einstellungen.put(key, value)
+            is Set<*> -> einstellungen.put(key, JSONArray(value.filterIsInstance<String>()))
+        }
+    }
     return JSONObject().apply {
-        put("stundensatz", p.getString(STUNDENSATZ_KEY, "42.00") ?: "42.00")
-        put("firmenName", p.getString(FIRMENNAME_KEY, "Markus Becker") ?: "Markus Becker")
-        put("firmenStrasse", p.getString(FIRMENSTRASSE_KEY, "") ?: "")
-        put("firmenPlzOrt", p.getString(FIRMENPLZORT_KEY, "") ?: "")
-        put("firmenTelefon", p.getString(FIRMENTELEFON_KEY, "+49 176 16712509") ?: "+49 176 16712509")
-        put("firmenEmail", p.getString(FIRMENEMAIL_KEY, "kuemmero@web.de") ?: "kuemmero@web.de")
-        put("steuernummer", p.getString(STEUERNUMMER_KEY, "") ?: "")
-        put("steuerart", p.getString(STEUERART_KEY, "") ?: "")
-        put("zuschlagSamstagPreis", p.getString(ZUSCHLAG_SAMSTAG_PREIS_KEY, "0.00") ?: "0.00")
-        put("zuschlagSonntagPreis", p.getString(ZUSCHLAG_SONNTAG_PREIS_KEY, "0.00") ?: "0.00")
-        put("zuschlagFeiertagPreis", p.getString(ZUSCHLAG_FEIERTAG_PREIS_KEY, "0.00") ?: "0.00")
-        put("zuschlagSamstagAktiv", p.getBoolean(ZUSCHLAG_SAMSTAG_AKTIV_KEY, false))
-        put("zuschlagSonntagAktiv", p.getBoolean(ZUSCHLAG_SONNTAG_AKTIV_KEY, false))
-        put("zuschlagFeiertagAktiv", p.getBoolean(ZUSCHLAG_FEIERTAG_AKTIV_KEY, false))
+        put("backupVersion", 2)
+        put("einstellungen", einstellungen)
         put("auftraege", JSONArray(p.getString(AUFTRAEGE_KEY, "[]") ?: "[]"))
         put("kunden", JSONArray(p.getString(KUNDEN_KEY, "[]") ?: "[]"))
         put("kostenvoranschlaege", JSONArray(p.getString(KOSTENVORANSCHLAEGE_KEY, "[]") ?: "[]"))
         put("leistungspositionen", JSONArray(p.getString(LEISTUNGSPOSITIONEN_KEY, "[]") ?: "[]"))
     }.toString(2)
+}
+
+private fun restoreBackupSettings(context: Context, einstellungen: JSONObject) {
+    val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+    val editor = prefs.edit()
+    val uriKeys = setOf(
+        MAHNUNG_SPEICHERORDNER_URI_KEY,
+        DOKUMENTE_SPEICHERORDNER_URI_KEY,
+        DOKUMENTE_RECHNUNGEN_URI_KEY,
+        DOKUMENTE_KOSTENVORANSCHLAEGE_URI_KEY,
+        DOKUMENTE_MAHNUNGEN_URI_KEY,
+        DOKUMENTE_SONSTIGE_PDF_URI_KEY,
+        DOKUMENTE_DATENEXPORT_URI_KEY
+    )
+    for (key in einstellungen.keys()) {
+        if (key == BACKUP_URI_KEY || key == BACKUP_LAST_SUCCESS_KEY) continue
+        val value = einstellungen.opt(key)
+        if (value == null || value == JSONObject.NULL) continue
+        if (key in uriKeys) {
+            val uriText = value.toString()
+            val erlaubt = context.contentResolver.persistedUriPermissions.any { it.uri.toString() == uriText && it.isReadPermission && it.isWritePermission }
+            if (!erlaubt) continue
+            editor.putString(key, uriText)
+            continue
+        }
+        when (value) {
+            is Boolean -> editor.putBoolean(key, value)
+            is Int -> editor.putInt(key, value)
+            is Long -> editor.putLong(key, value)
+            is Double -> editor.putFloat(key, value.toFloat())
+            is String -> editor.putString(key, value)
+            is JSONArray -> editor.putStringSet(key, buildSet { for (i in 0 until value.length()) add(value.optString(i)) })
+            else -> editor.putString(key, value.toString())
+        }
+    }
+    editor.remove(BACKUP_URI_KEY).remove(BACKUP_LAST_SUCCESS_KEY).commit()
 }
 
 private fun sichereBackupAutomatisch(context: Context): Boolean {
@@ -2577,52 +2615,47 @@ fun KuemmeroApp() {
                 val text = context.contentResolver.openInputStream(it)?.bufferedReader()?.use { r -> r.readText() }
                     ?: throw Exception("Datei konnte nicht gelesen werden")
                 val obj = JSONObject(text)
-                val rate = obj.optString("stundensatz", "42.00")
-                val firmenNameBackup = obj.optString("firmenName", "Markus Becker")
-                val firmenStrasseBackup = obj.optString("firmenStrasse", "")
-                val firmenPlzOrtBackup = obj.optString("firmenPlzOrt", "")
-                val firmenTelefonBackup = obj.optString("firmenTelefon", "+49 176 16712509")
-                val firmenEmailBackup = obj.optString("firmenEmail", "kuemmero@web.de")
-                val steuernummerBackup = obj.optString("steuernummer", "")
-                val steuerartBackup = obj.optString("steuerart", "")
-                val zuschlagSamstagPreisBackup = obj.optString("zuschlagSamstagPreis", "0.00")
-                val zuschlagSonntagPreisBackup = obj.optString("zuschlagSonntagPreis", "0.00")
-                val zuschlagFeiertagPreisBackup = obj.optString("zuschlagFeiertagPreis", "0.00")
-                val zuschlagSamstagAktivBackup = obj.optBoolean("zuschlagSamstagAktiv", false)
-                val zuschlagSonntagAktivBackup = obj.optBoolean("zuschlagSonntagAktiv", false)
-                val zuschlagFeiertagAktivBackup = obj.optBoolean("zuschlagFeiertagAktiv", false)
+                val einstellungenBackup = obj.optJSONObject("einstellungen")
+                if (einstellungenBackup != null) {
+                    restoreBackupSettings(context, einstellungenBackup)
+                } else {
+                    // Abwärtskompatibilität mit älteren KÜMMERO-Sicherungen.
+                    context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE).edit()
+                        .putString(STUNDENSATZ_KEY, obj.optString("stundensatz", "42.00"))
+                        .putString(FIRMENNAME_KEY, obj.optString("firmenName", "Markus Becker"))
+                        .putString(FIRMENSTRASSE_KEY, obj.optString("firmenStrasse", ""))
+                        .putString(FIRMENPLZORT_KEY, obj.optString("firmenPlzOrt", ""))
+                        .putString(FIRMENTELEFON_KEY, obj.optString("firmenTelefon", "+49 176 16712509"))
+                        .putString(FIRMENEMAIL_KEY, obj.optString("firmenEmail", "kuemmero@web.de"))
+                        .putString(STEUERNUMMER_KEY, obj.optString("steuernummer", ""))
+                        .putString(STEUERART_KEY, obj.optString("steuerart", ""))
+                        .putString(ZUSCHLAG_SAMSTAG_PREIS_KEY, obj.optString("zuschlagSamstagPreis", "0.00"))
+                        .putString(ZUSCHLAG_SONNTAG_PREIS_KEY, obj.optString("zuschlagSonntagPreis", "0.00"))
+                        .putString(ZUSCHLAG_FEIERTAG_PREIS_KEY, obj.optString("zuschlagFeiertagPreis", "0.00"))
+                        .putBoolean(ZUSCHLAG_SAMSTAG_AKTIV_KEY, obj.optBoolean("zuschlagSamstagAktiv", false))
+                        .putBoolean(ZUSCHLAG_SONNTAG_AKTIV_KEY, obj.optBoolean("zuschlagSonntagAktiv", false))
+                        .putBoolean(ZUSCHLAG_FEIERTAG_AKTIV_KEY, obj.optBoolean("zuschlagFeiertagAktiv", false))
+                        .commit()
+                }
                 val arr = obj.optJSONArray("auftraege") ?: JSONArray()
                 val kundenArr = obj.optJSONArray("kunden") ?: JSONArray()
                 val kvArr = obj.optJSONArray("kostenvoranschlaege") ?: JSONArray()
                 val leistungsArr = obj.optJSONArray("leistungspositionen")
                 context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE).edit()
-                    .putString(STUNDENSATZ_KEY, rate)
-                    .putString(FIRMENNAME_KEY, firmenNameBackup)
-                    .putString(FIRMENSTRASSE_KEY, firmenStrasseBackup)
-                    .putString(FIRMENPLZORT_KEY, firmenPlzOrtBackup)
-                    .putString(FIRMENTELEFON_KEY, firmenTelefonBackup)
-                    .putString(FIRMENEMAIL_KEY, firmenEmailBackup)
-                    .putString(STEUERNUMMER_KEY, steuernummerBackup)
-                    .putString(STEUERART_KEY, steuerartBackup)
-                    .putString(ZUSCHLAG_SAMSTAG_PREIS_KEY, zuschlagSamstagPreisBackup)
-                    .putString(ZUSCHLAG_SONNTAG_PREIS_KEY, zuschlagSonntagPreisBackup)
-                    .putString(ZUSCHLAG_FEIERTAG_PREIS_KEY, zuschlagFeiertagPreisBackup)
-                    .putBoolean(ZUSCHLAG_SAMSTAG_AKTIV_KEY, zuschlagSamstagAktivBackup)
-                    .putBoolean(ZUSCHLAG_SONNTAG_AKTIV_KEY, zuschlagSonntagAktivBackup)
-                    .putBoolean(ZUSCHLAG_FEIERTAG_AKTIV_KEY, zuschlagFeiertagAktivBackup)
                     .putString(AUFTRAEGE_KEY, arr.toString())
                     .putString(KUNDEN_KEY, kundenArr.toString())
                     .putString(KOSTENVORANSCHLAEGE_KEY, kvArr.toString())
                     .apply { if (leistungsArr != null) putString(LEISTUNGSPOSITIONEN_KEY, leistungsArr.toString()) }
                     .commit()
-                stundensatz = rate
-                unternehmerName = firmenNameBackup
-                unternehmerStrasse = firmenStrasseBackup
-                unternehmerPlzOrt = firmenPlzOrtBackup
-                steuerart = steuerartBackup
-                unternehmerTelefon = firmenTelefonBackup
-                unternehmerEmail = firmenEmailBackup
-                steuernummer = steuernummerBackup
+                val prefsNachRestore = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+                stundensatz = prefsNachRestore.getString(STUNDENSATZ_KEY, "42.00") ?: "42.00"
+                unternehmerName = prefsNachRestore.getString(FIRMENNAME_KEY, "Markus Becker") ?: "Markus Becker"
+                unternehmerStrasse = prefsNachRestore.getString(FIRMENSTRASSE_KEY, "") ?: ""
+                unternehmerPlzOrt = prefsNachRestore.getString(FIRMENPLZORT_KEY, "") ?: ""
+                steuerart = prefsNachRestore.getString(STEUERART_KEY, "") ?: ""
+                unternehmerTelefon = prefsNachRestore.getString(FIRMENTELEFON_KEY, "") ?: ""
+                unternehmerEmail = prefsNachRestore.getString(FIRMENEMAIL_KEY, "") ?: ""
+                steuernummer = prefsNachRestore.getString(STEUERNUMMER_KEY, "") ?: ""
                 auftraege = ladeAuftraege(context)
                 kunden = ladeKunden(context)
                 kostenvoranschlaege = ladeKostenvoranschlaege(context)
@@ -2775,8 +2808,7 @@ fun KuemmeroApp() {
     val fahrtKosten = runde2(zahl(fahrtKm) * fahrtSatz)
     val rate = zahl(stundensatz, zahl(gespeicherterStundensatz(context)))
     val formularZuschlag = bearbeiteIndex?.let { old ->
-        val alt = auftraege.getOrNull(old)
-        if (alt != null && alt.leistungsdatum == leistungsdatum.trim().ifBlank { datum.trim() }) alt.zuschlagBetrag else leistungsZuschlag(context, leistungsdatum.trim().ifBlank { datum.trim() }).second
+        auftraege.getOrNull(old)?.zuschlagBetrag ?: 0.0
     } ?: leistungsZuschlag(context, leistungsdatum.trim().ifBlank { datum.trim() }).second
     val gesamt = runde2(gesamtbetrag(arbeitsstunden, materialKosten, fahrtKosten, rate) + formularZuschlag)
     val umsatz = auftraege.sumOf { runde2(gesamtbetrag(it.stunden, it.material, it.fahrt, it.stundensatz, it.erstellungskosten) + it.zuschlagBetrag) }
@@ -5977,8 +6009,9 @@ fun KuemmeroApp() {
                                                 fontSize = 12.sp
                                             )
                                         }
+                                        val kvFormularZuschlag = if (kvBearbeiteIndex != null) kvZuschlagBetrag else if (kvZuschlagBezeichnung.isNotBlank()) kvZuschlagBetrag else leistungsZuschlag(context, kvDatum).second
                                         Text(
-                                            "Gesamtsumme: ${euro(runde2(gesamtbetrag(zahl(kvStunden), zahl(kvMaterial), runde2(zahl(kvFahrtKm) * fahrtSatz), zahl(kvStundensatz, zahl(gespeicherterStundensatz(context))), zahl(kvErstellungskosten)) + if (kvBearbeiteIndex != null && kvZuschlagBezeichnung.isNotBlank()) kvZuschlagBetrag else leistungsZuschlag(context, kvDatum).second))}",
+                                            "Gesamtsumme: ${euro(runde2(gesamtbetrag(zahl(kvStunden), zahl(kvMaterial), runde2(zahl(kvFahrtKm) * fahrtSatz), zahl(kvStundensatz, zahl(gespeicherterStundensatz(context))), zahl(kvErstellungskosten)) + kvFormularZuschlag))}",
                                             style = MaterialTheme.typography.titleLarge,
                                             color = KuemmeroGreen,
                                             fontWeight = FontWeight.Bold
@@ -5995,8 +6028,8 @@ fun KuemmeroApp() {
                                                         kvMaterialBonUri, kvFotosVorher, zahl(kvErstellungskosten),
                                                         fahrtKm = zahl(kvFahrtKm),
                                                         fahrtKostenProKm = fahrtSatz,
-                                                        zuschlagBezeichnung = if (kvBearbeiteIndex != null && kvZuschlagBezeichnung.isNotBlank()) kvZuschlagBezeichnung else leistungsZuschlag(context, kvDatum).first,
-                                                        zuschlagBetrag = if (kvBearbeiteIndex != null && kvZuschlagBezeichnung.isNotBlank()) kvZuschlagBetrag else leistungsZuschlag(context, kvDatum).second
+                                                        zuschlagBezeichnung = if (kvBearbeiteIndex != null) kvZuschlagBezeichnung else if (kvZuschlagBezeichnung.isNotBlank()) kvZuschlagBezeichnung else leistungsZuschlag(context, kvDatum).first,
+                                                        zuschlagBetrag = if (kvBearbeiteIndex != null) kvZuschlagBetrag else if (kvZuschlagBezeichnung.isNotBlank()) kvZuschlagBetrag else leistungsZuschlag(context, kvDatum).second
                                                     )
                                                     val list = kostenvoranschlaege.toMutableList()
                                                     if (kvBearbeiteIndex != null) list[kvBearbeiteIndex!!] = k else list.add(k)
