@@ -222,6 +222,7 @@ private const val ZUSCHLAG_FEIERTAG_AKTIV_KEY = "zuschlag_feiertag_aktiv"
 private const val BACKUP_URI_KEY = "backup_uri"
 private const val BACKUP_LAST_SUCCESS_KEY = "backup_last_success"
 private const val BACKUP_PRE_RESTORE_FILE = "kuemmero_vor_restore_backup.json"
+private const val AUFTRAEGE_PAPIERKORB_KEY = "auftraege_papierkorb"
 private const val DROPBOX_PACKAGE = "com.dropbox.android"
 private const val KOSTENVORANSCHLAEGE_KEY = "kostenvoranschlaege"
 private const val FIRMENNAME_KEY = "firmen_name"
@@ -565,6 +566,37 @@ private fun speichereAuftraege(context: Context, liste: List<Auftrag>) {
     }
     context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
         .edit().putString(AUFTRAEGE_KEY, json.toString()).commit()
+}
+
+private fun auftragAlsJson(a: Auftrag): JSONObject = JSONObject().apply {
+    put("nummer", a.nummer); put("datum", a.datum); put("gueltigBis", a.gueltigBis); put("kunde", a.kunde)
+    put("kundenStrasse", a.kundenStrasse); put("kundenOrt", a.kundenOrt); put("leistung", a.leistung)
+    put("stunden", a.stunden); put("material", a.material); put("materialBonUri", a.materialBonUri); put("fahrt", a.fahrt)
+    put("fahrtKm", a.fahrtKm); put("fahrtKostenProKm", a.fahrtKostenProKm); put("stundensatz", a.stundensatz)
+    put("status", a.status); put("zahlungsstatus", a.zahlungsstatus); put("bezahltAm", a.bezahltAm)
+    put("terminDatum", a.terminDatum); put("terminUhrzeit", a.terminUhrzeit); put("notiz", a.notiz)
+    put("fotosVorher", JSONArray(a.fotosVorher)); put("fotosNachher", JSONArray(a.fotosNachher))
+    put("unterschriftPfad", a.unterschriftPfad); put("unterschriftDatum", a.unterschriftDatum)
+    put("rechnungsnummer", a.rechnungsnummer); put("rechnungsdatum", a.rechnungsdatum); put("rechnungUrsprungsnummer", a.rechnungUrsprungsnummer)
+    put("rechnungsstatus", a.rechnungsstatus); put("rechnungKorrekturHinweis", a.rechnungKorrekturHinweis); put("stornoNummer", a.stornoNummer); put("protokoll", a.protokoll)
+    put("faelligAm", a.faelligAm); put("mahnung1Datum", a.mahnung1Datum); put("mahnung1Frist", a.mahnung1Frist); put("mahnung1Gebuehr", a.mahnung1Gebuehr); put("mahnung1Text", a.mahnung1Text); put("mahnung1Erstellt", a.mahnung1Erstellt)
+    put("mahnung2Datum", a.mahnung2Datum); put("mahnung2Frist", a.mahnung2Frist); put("mahnung2Gebuehr", a.mahnung2Gebuehr); put("mahnung2Text", a.mahnung2Text); put("mahnung2Erstellt", a.mahnung2Erstellt)
+    put("arbeitsStart", a.arbeitsStart); put("arbeitsEnde", a.arbeitsEnde); put("arbeitsSekunden", a.arbeitsSekunden); put("arbeitszeitUebernommen", a.arbeitszeitUebernommen)
+    put("erstellungskosten", a.erstellungskosten); put("leistungsdatum", a.leistungsdatum); put("zuschlagBezeichnung", a.zuschlagBezeichnung); put("zuschlagBetrag", a.zuschlagBetrag)
+}
+
+private fun ladePapierkorb(context: Context): List<String> {
+    val raw = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE).getString(AUFTRAEGE_PAPIERKORB_KEY, "[]") ?: "[]"
+    val arr = try { JSONArray(raw) } catch (_: Exception) { JSONArray() }
+    return List(arr.length()) { i -> arr.optJSONObject(i)?.toString() ?: "{}" }
+}
+
+private fun speicherePapierkorb(context: Context, eintraege: List<String>) {
+    val arr = JSONArray()
+    eintraege.takeLast(50).forEach { raw ->
+        try { arr.put(JSONObject(raw)) } catch (_: Exception) { }
+    }
+    context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE).edit().putString(AUFTRAEGE_PAPIERKORB_KEY, arr.toString()).commit()
 }
 
 private fun backupText(context: Context): String {
@@ -1894,6 +1926,9 @@ fun KuemmeroApp() {
         mutableStateOf(datumFormat.format(cal.time))
     }
     var loeschIndex by remember { mutableStateOf<Int?>(null) }
+    var papierkorbOffen by remember { mutableStateOf(false) }
+    var papierkorbLoeschBestaetigung by remember { mutableStateOf(false) }
+    var papierkorbEintraege by remember { mutableStateOf(ladePapierkorb(context)) }
     var bearbeiteIndex by remember { mutableStateOf<Int?>(null) }
     var status by remember { mutableStateOf("Offen") }
     var zahlungsstatus by remember { mutableStateOf("Offen") }
@@ -2675,9 +2710,12 @@ fun KuemmeroApp() {
     }
 
     val fotoLauncher = rememberLauncherForActivityResult(
-        ActivityResultContracts.GetMultipleContents()
+        ActivityResultContracts.OpenMultipleDocuments()
     ) { uris ->
         if (uris.isNotEmpty()) {
+            uris.forEach { uri ->
+                try { context.contentResolver.takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION) } catch (_: Exception) { }
+            }
             val neue = uris.map { it.toString() }
             if (fotoTyp == "Vorher") fotosVorher = (fotosVorher + neue).distinct()
             else fotosNachher = (fotosNachher + neue).distinct()
@@ -2703,9 +2741,12 @@ fun KuemmeroApp() {
     }
 
     val kvFotoVorherLauncher = rememberLauncherForActivityResult(
-        ActivityResultContracts.GetMultipleContents()
+        ActivityResultContracts.OpenMultipleDocuments()
     ) { uris ->
         if (uris.isNotEmpty()) {
+            uris.forEach { uri ->
+                try { context.contentResolver.takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION) } catch (_: Exception) { }
+            }
             kvFotosVorher = (kvFotosVorher + uris.map { it.toString() }).distinct()
             android.widget.Toast.makeText(context, "${uris.size} Bild(er) vorher hinzugefügt.", 0).show()
         }
@@ -3713,6 +3754,72 @@ fun KuemmeroApp() {
         )
     }
 
+    if (papierkorbOffen) {
+        AlertDialog(
+            onDismissRequest = { papierkorbOffen = false },
+            title = { Text("🗑 Papierkorb") },
+            text = {
+                if (papierkorbEintraege.isEmpty()) Text("Der Papierkorb ist leer.")
+                else Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text("Bis zu 50 gelöschte Aufträge werden aufbewahrt.", style = MaterialTheme.typography.bodySmall)
+                    papierkorbEintraege.forEachIndexed { index, raw ->
+                        val o = try { JSONObject(raw) } catch (_: Exception) { JSONObject() }
+                        Card(Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = KuemmeroSurface)) {
+                            Row(Modifier.fillMaxWidth().padding(10.dp), verticalAlignment = Alignment.CenterVertically) {
+                                Column(Modifier.weight(1f)) {
+                                    Text(o.optString("kunde").ifBlank { "Ohne Kunde" }, fontWeight = FontWeight.Bold)
+                                    Text("${o.optString("nummer").ifBlank { "ohne Nummer" }} · ${o.optString("datum").ifBlank { "ohne Datum" }}", style = MaterialTheme.typography.bodySmall)
+                                }
+                                TextButton(onClick = {
+                                    val wieder = try { JSONObject(raw) } catch (_: Exception) { null }
+                                    if (wieder != null) {
+                                        val arr = JSONArray(context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE).getString(AUFTRAEGE_KEY, "[]") ?: "[]")
+                                        val doppelt = (0 until arr.length()).any { j ->
+                                            val x = arr.optJSONObject(j) ?: return@any false
+                                            x.optString("nummer").equals(wieder.optString("nummer"), true) && x.optString("kunde").equals(wieder.optString("kunde"), true)
+                                        }
+                                        if (!doppelt) {
+                                            arr.put(wieder)
+                                            context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE).edit().putString(AUFTRAEGE_KEY, arr.toString()).commit()
+                                            auftraege = ladeAuftraege(context)
+                                            papierkorbEintraege = papierkorbEintraege.toMutableList().apply { removeAt(index) }
+                                            speicherePapierkorb(context, papierkorbEintraege)
+                                            android.widget.Toast.makeText(context, "Auftrag wiederhergestellt.", android.widget.Toast.LENGTH_SHORT).show()
+                                        } else {
+                                            android.widget.Toast.makeText(context, "Der Auftrag ist bereits vorhanden.", android.widget.Toast.LENGTH_LONG).show()
+                                        }
+                                    }
+                                }) { Text("Wiederherstellen") }
+                            }
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                if (papierkorbEintraege.isNotEmpty()) TextButton(onClick = { papierkorbLoeschBestaetigung = true }) { Text("Papierkorb leeren") }
+                else TextButton(onClick = { papierkorbOffen = false }) { Text("Schließen") }
+            },
+            dismissButton = { if (papierkorbEintraege.isNotEmpty()) TextButton(onClick = { papierkorbOffen = false }) { Text("Schließen") } }
+        )
+    }
+
+    if (papierkorbLoeschBestaetigung) {
+        AlertDialog(
+            onDismissRequest = { papierkorbLoeschBestaetigung = false },
+            title = { Text("Papierkorb endgültig leeren?") },
+            text = { Text("Alle gelöschten Aufträge werden endgültig entfernt.") },
+            confirmButton = {
+                TextButton(onClick = {
+                    papierkorbEintraege = emptyList()
+                    speicherePapierkorb(context, emptyList())
+                    papierkorbLoeschBestaetigung = false
+                    papierkorbOffen = false
+                }, colors = ButtonDefaults.textButtonColors(contentColor = KuemmeroError)) { Text("Endgültig löschen") }
+            },
+            dismissButton = { TextButton(onClick = { papierkorbLoeschBestaetigung = false }) { Text("Abbrechen") } }
+        )
+    }
+
     loeschIndex?.let { index ->
         AlertDialog(
             onDismissRequest = { loeschIndex = null },
@@ -3720,6 +3827,11 @@ fun KuemmeroApp() {
             text = { Text("Soll der Auftrag wirklich gelöscht werden?") },
             confirmButton = {
                 TextButton(onClick = {
+                    val geloescht = auftraege.getOrNull(index)
+                    if (geloescht != null) {
+                        papierkorbEintraege = (papierkorbEintraege + auftragAlsJson(geloescht).toString()).takeLast(50)
+                        speicherePapierkorb(context, papierkorbEintraege)
+                    }
                     auftraege = auftraege.toMutableList().apply { removeAt(index) }
                     speichereAuftraege(context, auftraege)
                     timerIndex = null
@@ -4557,8 +4669,8 @@ fun KuemmeroApp() {
                 item {
                     KlappBereich("📷 Auftragsfotos (${fotosVorher.size + fotosNachher.size})", fotosBereichOffen, { fotosBereichOffen = !fotosBereichOffen }) {
                         Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
-                            OutlinedButton(onClick = { fotoTyp = "Vorher"; fotoLauncher.launch("image/*") }, modifier = Modifier.weight(1f), colors = ButtonDefaults.outlinedButtonColors(contentColor = KuemmeroGreen)) { Text("📷 Vorher (${fotosVorher.size})") }
-                            OutlinedButton(onClick = { fotoTyp = "Nachher"; fotoLauncher.launch("image/*") }, modifier = Modifier.weight(1f), colors = ButtonDefaults.outlinedButtonColors(contentColor = KuemmeroGreen)) { Text("📷 Nachher (${fotosNachher.size})") }
+                            OutlinedButton(onClick = { fotoTyp = "Vorher"; fotoLauncher.launch(arrayOf("image/*")) }, modifier = Modifier.weight(1f), colors = ButtonDefaults.outlinedButtonColors(contentColor = KuemmeroGreen)) { Text("📷 Vorher (${fotosVorher.size})") }
+                            OutlinedButton(onClick = { fotoTyp = "Nachher"; fotoLauncher.launch(arrayOf("image/*")) }, modifier = Modifier.weight(1f), colors = ButtonDefaults.outlinedButtonColors(contentColor = KuemmeroGreen)) { Text("📷 Nachher (${fotosNachher.size})") }
                         }
                         if (fotosVorher.isNotEmpty()) {
                             Text("Vorher-Fotos", fontWeight = FontWeight.Bold, color = KuemmeroText)
@@ -5950,7 +6062,7 @@ fun KuemmeroApp() {
                                         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                                             Text("📷 Bild vorher", color = KuemmeroGreen, fontWeight = FontWeight.Bold)
                                             OutlinedButton(
-                                                onClick = { kvFotoVorherLauncher.launch("image/*") },
+                                                onClick = { kvFotoVorherLauncher.launch(arrayOf("image/*")) },
                                                 modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp),
                                                 shape = RoundedCornerShape(26.dp),
                                                 border = BorderStroke(2.dp, KuemmeroGreen),
@@ -6478,6 +6590,17 @@ fun KuemmeroApp() {
                                 border = BorderStroke(2.dp, KuemmeroGreen),
                                 colors = ButtonDefaults.outlinedButtonColors(contentColor = KuemmeroGreen)
                             ) { Text("🛠 Meine Leistungen", fontWeight = FontWeight.Bold) }
+                        }
+                        item {
+                            Card(Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = KuemmeroSurface), shape = RoundedCornerShape(18.dp)) {
+                                Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                    Text("🗑 Papierkorb", style = MaterialTheme.typography.titleMedium, color = KuemmeroGreen, fontWeight = FontWeight.Bold)
+                                    Text("Gelöschte Aufträge können wiederhergestellt werden.", color = KuemmeroText, fontSize = 12.sp)
+                                    Button(onClick = { papierkorbEintraege = ladePapierkorb(context); papierkorbOffen = true }, modifier = Modifier.fillMaxWidth()) {
+                                        Text("Papierkorb öffnen (${papierkorbEintraege.size})", fontWeight = FontWeight.Bold)
+                                    }
+                                }
+                            }
                         }
                         item {
                             Card(Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = KuemmeroSurface), shape = RoundedCornerShape(18.dp)) {
