@@ -234,7 +234,8 @@ private fun BuchActionTile(
 fun BuchhaltungScreen(
     context: Context,
     auftraege: List<Auftrag>,
-    onBack: () -> Unit
+    onBack: () -> Unit,
+    onRechnungClick: (Auftrag) -> Unit
 ) {
     var buchungen by remember { mutableStateOf(ladeBuchungen(context)) }
     var eingabeOffen by remember { mutableStateOf(false) }
@@ -711,7 +712,12 @@ fun BuchhaltungScreen(
                         items(rechnungen) { rechnung ->
                             val betragRechnung = rechnungsBetrag(rechnung)
                             Card(
-                                modifier = Modifier.fillMaxWidth(),
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clickable {
+                                        rechnungenOffen = false
+                                        onRechnungClick(rechnung)
+                                    },
                                 colors = CardDefaults.cardColors(
                                     containerColor = if (rechnung.zahlungsstatus == "Bezahlt") BuchGreenCard else BuchOrange
                                 ),
