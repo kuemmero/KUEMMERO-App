@@ -3982,7 +3982,7 @@ fun KuemmeroApp() {
                         Triple("KV", "€", "Kostenvoranschläge"),
                         Triple("Kunden", "♙", "Kunden"),
                         Triple("Mahnungen", "!", "Mahnungen"),
-                        Triple("Buchh.", "▣", "Buchhaltung"),
+                        Triple("Buchh.", "▦", "Buchhaltung"),
                         Triple("Mehr", "⋯", "Mehr")
                     ).forEach { (label, iconText, page) ->
                         NavigationBarItem(
@@ -4000,9 +4000,9 @@ fun KuemmeroApp() {
                             icon = { Text(iconText, fontSize = 20.sp) },
                             label = { Text(label, fontSize = 9.sp, maxLines = 1, softWrap = false, textAlign = TextAlign.Center) },
                             colors = NavigationBarItemDefaults.colors(
-                                selectedIconColor = KuemmeroGreen,
-                                selectedTextColor = KuemmeroGreen,
-                                indicatorColor = KuemmeroMint,
+                                selectedIconColor = Color.White,
+                                selectedTextColor = Color.White,
+                                indicatorColor = KuemmeroGreen,
                                 unselectedIconColor = KuemmeroText,
                                 unselectedTextColor = KuemmeroText
                             )
