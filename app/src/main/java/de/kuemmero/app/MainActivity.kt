@@ -1902,12 +1902,6 @@ private fun FotoVorschau(
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun KuemmeroApp() {
-    KuemmeroAppInhalt()
-}
-
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-private fun KuemmeroAppInhalt() {
     val context = LocalContext.current
     val heute = remember { Date() }
     val datumFormat = remember { SimpleDateFormat("dd.MM.yyyy", Locale.GERMANY) }
