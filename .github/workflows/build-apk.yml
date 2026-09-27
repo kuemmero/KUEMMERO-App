@@ -41,16 +41,16 @@ jobs:
             exit 1
           fi
 
-      - name: APK bauen
+      - name: Release-APK bauen
         env:
           KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
           KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
           KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
         run: |
-          gradle :app:assembleDebug             -PkuemmeroStoreFile="$GITHUB_WORKSPACE/kuemmero-release.jks"             -PkuemmeroStorePassword="$KEYSTORE_PASSWORD"             -PkuemmeroKeyAlias="$KEY_ALIAS"             -PkuemmeroKeyPassword="$KEY_PASSWORD"
+          gradle :app:assembleRelease             -PkuemmeroStoreFile="$GITHUB_WORKSPACE/kuemmero-release.jks"             -PkuemmeroStorePassword="$KEYSTORE_PASSWORD"             -PkuemmeroKeyAlias="$KEY_ALIAS"             -PkuemmeroKeyPassword="$KEY_PASSWORD"
 
       - name: APK bereitstellen
         uses: actions/upload-artifact@v4
         with:
-          name: KUEMMERO-v1.3-13-feste-signatur
-          path: app/build/outputs/apk/debug/app-debug.apk
+          name: KUEMMERO-release-feste-signatur
+          path: app/build/outputs/apk/release/app-release.apk
