@@ -5552,7 +5552,23 @@ fun KuemmeroApp() {
                 BuchhaltungScreen(
                     context = context,
                     auftraege = auftraege,
-                    onBack = { hauptseite = "Mehr" }
+                    onBack = { hauptseite = "Mehr" },
+                    onRechnungClick = { rechnung ->
+                        val index = auftraege.indexOfFirst {
+                            it.rechnungsnummer == rechnung.rechnungsnummer &&
+                                    it.kunde == rechnung.kunde
+                        }
+                        if (index >= 0) {
+                            auftragDetailIndex = index
+                            hauptseite = "Aufträge"
+                        } else {
+                            android.widget.Toast.makeText(
+                                context,
+                                "Zugehöriger Auftrag wurde nicht gefunden.",
+                                android.widget.Toast.LENGTH_SHORT
+                            ).show()
+                        }
+                    }
                 )
             }
         } else {
