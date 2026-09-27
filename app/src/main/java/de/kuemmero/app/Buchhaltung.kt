@@ -17,6 +17,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import java.text.SimpleDateFormat
+import java.util.Date
 import java.util.Locale
 
 /*
@@ -129,7 +131,8 @@ private fun BuchStatCard(
             }
         }
     }
-}
+
+
 
 @Composable
 private fun BuchActionTile(
@@ -179,6 +182,7 @@ fun BuchhaltungScreen(
     var partner by remember { mutableStateOf("") }
     var kategorie by remember { mutableStateOf("Sonstiges") }
     var betrag by remember { mutableStateOf("") }
+    var auswertungOffen by remember { mutableStateOf(false) }
 
     val rechnungen = auftraege.filter { it.rechnungsnummer.isNotBlank() }
     val offeneRechnungen = rechnungen.count { it.zahlungsstatus != "Bezahlt" }
@@ -192,6 +196,26 @@ fun BuchhaltungScreen(
     val erfassteEinnahmen = buchungen.filter { it.typ == "Einnahme" }.sumOf { it.betrag }
     val erfassteAusgaben = buchungen.filter { it.typ == "Ausgabe" }.sumOf { it.betrag }
     val erfasstesErgebnis = erfassteEinnahmen - erfassteAusgaben
+
+    val heute = remember { Date() }
+    val monatJahr = remember(heute) { SimpleDateFormat("MM.yyyy", Locale.GERMANY).format(heute) }
+    val jahr = remember(heute) { SimpleDateFormat("yyyy", Locale.GERMANY).format(heute) }
+
+    fun buchungPasstZu(buchung: Buchung, muster: String): Boolean =
+        buchung.datum.trim().contains(muster)
+
+    val monatlicheEinnahmen = buchungen
+        .filter { it.typ == "Einnahme" && buchungPasstZu(it, monatJahr) }
+        .sumOf { it.betrag }
+    val monatlicheAusgaben = buchungen
+        .filter { it.typ == "Ausgabe" && buchungPasstZu(it, monatJahr) }
+        .sumOf { it.betrag }
+    val jaehrlicheEinnahmen = buchungen
+        .filter { it.typ == "Einnahme" && buchungPasstZu(it, jahr) }
+        .sumOf { it.betrag }
+    val jaehrlicheAusgaben = buchungen
+        .filter { it.typ == "Ausgabe" && buchungPasstZu(it, jahr) }
+        .sumOf { it.betrag }
 
     LazyColumn(
         modifier = Modifier
@@ -408,7 +432,7 @@ fun BuchhaltungScreen(
         item {
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 BuchActionTile("▤", "Belege", "Fotos & PDF", BuchOrange) { }
-                BuchActionTile("▥", "Auswertung", "Monat / Jahr", Color(0xFFF1EAFE)) { }
+                BuchActionTile("▥", "Auswertung", "Monat / Jahr", Color(0xFFF1EAFE)) { auswertungOffen = true }
             }
         }
 
@@ -453,4 +477,35 @@ fun BuchhaltungScreen(
             }
         }
     }
+
+    if (auswertungOffen) {
+        AlertDialog(
+            onDismissRequest = { auswertungOffen = false },
+            title = { Text("Auswertung", fontWeight = FontWeight.Bold, color = BuchGreenDark) },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Text("Aktueller Monat: $monatJahr", fontWeight = FontWeight.Bold)
+                    Text("Einnahmen: ${euro(monatlicheEinnahmen)}")
+                    Text("Ausgaben: ${euro(monatlicheAusgaben)}")
+                    Text("Ergebnis: ${euro(monatlicheEinnahmen - monatlicheAusgaben)}", fontWeight = FontWeight.Bold)
+                    HorizontalDivider()
+                    Text("Aktuelles Jahr: $jahr", fontWeight = FontWeight.Bold)
+                    Text("Einnahmen: ${euro(jaehrlicheEinnahmen)}")
+                    Text("Ausgaben: ${euro(jaehrlicheAusgaben)}")
+                    Text("Ergebnis: ${euro(jaehrlicheEinnahmen - jaehrlicheAusgaben)}", fontWeight = FontWeight.Bold)
+                    Text(
+                        "Die Auswertung verwendet das Datum im Format TT.MM.JJJJ der manuell erfassten Buchungen.",
+                        fontSize = 12.sp,
+                        color = Color(0xFF60716A)
+                    )
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { auswertungOffen = false }) {
+                    Text("Schließen", color = BuchGreen, fontWeight = FontWeight.Bold)
+                }
+            }
+        )
+    }
+
 }
