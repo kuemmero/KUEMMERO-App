@@ -326,7 +326,10 @@ fun BuchhaltungScreen(
                 }
     }
     val monatlicheRechnungseinnahmen = rechnungen
-        .filter { it.zahlungsstatus == "Bezahlt" && buchungPasstZu(it.bezahltAm, monatJahr) }
+        .filter {
+            it.zahlungsstatus == "Bezahlt" &&
+                    buchungPasstZu(it.bezahltAm.ifBlank { it.rechnungsdatum }, monatJahr)
+        }
         .sumOf { rechnungsBetrag(it) }
     val monatlicheEinnahmen = monatlicheRechnungseinnahmen + manuelleEinnahmenBuchungen
         .filter { buchungPasstZu(it.datum, monatJahr) }
@@ -335,7 +338,10 @@ fun BuchhaltungScreen(
         .filter { it.typ == "Ausgabe" && buchungPasstZu(it.datum, monatJahr) }
         .sumOf { it.betrag }
     val jaehrlicheRechnungseinnahmen = rechnungen
-        .filter { it.zahlungsstatus == "Bezahlt" && buchungPasstZu(it.bezahltAm, jahr) }
+        .filter {
+            it.zahlungsstatus == "Bezahlt" &&
+                    buchungPasstZu(it.bezahltAm.ifBlank { it.rechnungsdatum }, jahr)
+        }
         .sumOf { rechnungsBetrag(it) }
     val jaehrlicheEinnahmen = jaehrlicheRechnungseinnahmen + manuelleEinnahmenBuchungen
         .filter { buchungPasstZu(it.datum, jahr) }
@@ -646,7 +652,27 @@ fun BuchhaltungScreen(
             Text("Letzte Buchungen", fontSize = 21.sp, fontWeight = FontWeight.Bold, color = Color(0xFF102A20))
         }
 
-        if (buchungen.isEmpty()) {
+        // Bezahlte Rechnungen werden automatisch als Einnahmen in den
+        // "Letzten Buchungen" angezeigt. Bereits manuell erfasste Buchungen
+        // werden anhand der Rechnungsnummer nicht doppelt angezeigt.
+        val bezahlteRechnungenAlsBuchungen = rechnungen
+            .filter { it.zahlungsstatus == "Bezahlt" }
+            .map { rechnung ->
+                Buchung(
+                    typ = "Einnahme",
+                    datum = rechnung.bezahltAm.ifBlank { rechnung.rechnungsdatum },
+                    beleg = rechnung.rechnungsnummer,
+                    partner = rechnung.kunde.ifBlank { "Kunde" },
+                    kategorie = "Rechnung",
+                    betrag = rechnungsBetrag(rechnung),
+                    status = "Bezahlt"
+                )
+            }
+
+        val alleAnzeigenBuchungen = (buchungen + bezahlteRechnungenAlsBuchungen)
+            .distinctBy { "${it.beleg}|${it.typ}|${it.betrag}|${it.datum}" }
+
+        if (alleAnzeigenBuchungen.isEmpty()) {
             item {
                 Card(
                     modifier = Modifier
@@ -667,7 +693,7 @@ fun BuchhaltungScreen(
                 }
             }
         } else {
-            items(buchungen.asReversed().take(20)) { buchung ->
+            items(alleAnzeigenBuchungen.asReversed().take(20)) { buchung ->
                 Card(
                     modifier = Modifier.fillMaxWidth(),
                     shape = RoundedCornerShape(18.dp),
