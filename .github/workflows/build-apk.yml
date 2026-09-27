@@ -51,7 +51,7 @@ jobs:
           KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
         run: |
           set -e
-          echo "Starte Release-Build..."
+          echo "Starte Release-Build ohne blockierende Release-Lint-Analyse..."
           gradle --stop || true
           gradle :app:assembleRelease             --no-daemon             --stacktrace             --console=plain             --warning-mode=all             -PkuemmeroStoreFile="$GITHUB_WORKSPACE/kuemmero-release.jks"             -PkuemmeroStorePassword="$KEYSTORE_PASSWORD"             -PkuemmeroKeyAlias="$KEY_ALIAS"             -PkuemmeroKeyPassword="$KEY_PASSWORD"
 
