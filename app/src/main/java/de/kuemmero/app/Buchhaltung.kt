@@ -1,6 +1,9 @@
 package de.kuemmero.app
 
 import android.content.Context
+import android.content.Intent
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -29,6 +32,7 @@ import java.util.Locale
  */
 
 private const val BUCHHALTUNG_KEY = "buchhaltung_eintraege"
+private const val BUCHHALTUNG_BELEGE_KEY = "buchhaltung_belege"
 private const val BUCHHALTUNG_PREFS_NAME = "kuemmero_speicher"
 
 private val BuchGreen = Color(0xFF07883F)
@@ -52,6 +56,16 @@ data class Buchung(
     val kategorie: String,
     val betrag: Double,
     val status: String
+)
+
+data class BuchBeleg(
+    val datum: String,
+    val nummer: String,
+    val beschreibung: String,
+    val kategorie: String,
+    val betrag: Double,
+    val buchungTyp: String,
+    val dateiUri: String
 )
 
 private fun ladeBuchungen(context: Context): List<Buchung> {
@@ -91,6 +105,46 @@ private fun speichereBuchungen(context: Context, buchungen: List<Buchung>) {
     context.getSharedPreferences(BUCHHALTUNG_PREFS_NAME, Context.MODE_PRIVATE)
         .edit()
         .putString(BUCHHALTUNG_KEY, raw)
+        .apply()
+}
+
+private fun ladeBelege(context: Context): List<BuchBeleg> {
+    val raw = context
+        .getSharedPreferences(BUCHHALTUNG_PREFS_NAME, Context.MODE_PRIVATE)
+        .getString(BUCHHALTUNG_BELEGE_KEY, "") ?: ""
+
+    if (raw.isBlank()) return emptyList()
+
+    return raw.split("\n").mapNotNull { line ->
+        val teile = line.split("|")
+        if (teile.size != 7) null else BuchBeleg(
+            datum = teile[0],
+            nummer = teile[1],
+            beschreibung = teile[2],
+            kategorie = teile[3],
+            betrag = teile[4].toDoubleOrNull() ?: 0.0,
+            buchungTyp = teile[5],
+            dateiUri = teile[6]
+        )
+    }
+}
+
+private fun speichereBelege(context: Context, belege: List<BuchBeleg>) {
+    val raw = belege.joinToString("\n") {
+        listOf(
+            it.datum,
+            it.nummer,
+            it.beschreibung,
+            it.kategorie,
+            it.betrag.toString(),
+            it.buchungTyp,
+            it.dateiUri
+        ).joinToString("|")
+    }
+
+    context.getSharedPreferences(BUCHHALTUNG_PREFS_NAME, Context.MODE_PRIVATE)
+        .edit()
+        .putString(BUCHHALTUNG_BELEGE_KEY, raw)
         .apply()
 }
 
@@ -183,6 +237,32 @@ fun BuchhaltungScreen(
     var betrag by remember { mutableStateOf("") }
     var auswertungOffen by remember { mutableStateOf(false) }
     var rechnungenOffen by remember { mutableStateOf(false) }
+    var belege by remember { mutableStateOf(ladeBelege(context)) }
+    var belegeOffen by remember { mutableStateOf(false) }
+    var belegEingabeOffen by remember { mutableStateOf(false) }
+    var belegDatum by remember { mutableStateOf("") }
+    var belegNummer by remember { mutableStateOf("") }
+    var belegBeschreibung by remember { mutableStateOf("") }
+    var belegKategorie by remember { mutableStateOf("Sonstiges") }
+    var belegBetrag by remember { mutableStateOf("") }
+    var belegTyp by remember { mutableStateOf("Ausgabe") }
+    var belegDateiUri by remember { mutableStateOf("") }
+
+    val belegDateiLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.OpenDocument()
+    ) { uri ->
+        if (uri != null) {
+            try {
+                context.contentResolver.takePersistableUriPermission(
+                    uri,
+                    Intent.FLAG_GRANT_READ_URI_PERMISSION
+                )
+            } catch (_: SecurityException) {
+                // Manche Dateianbieter unterstützen keine dauerhafte URI-Freigabe.
+            }
+            belegDateiUri = uri.toString()
+        }
+    }
 
     val rechnungen = auftraege.filter { it.rechnungsnummer.isNotBlank() }
     val offeneRechnungen = rechnungen.count { it.zahlungsstatus != "Bezahlt" }
@@ -458,7 +538,7 @@ fun BuchhaltungScreen(
 
         item {
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                BuchActionTile("▤", "Belege", "Fotos & PDF", BuchOrange) { }
+                BuchActionTile("▤", "Belege", "Fotos & PDF", BuchOrange) { belegeOffen = true }
                 BuchActionTile("▥", "Auswertung", "Monat / Jahr", Color(0xFFF1EAFE)) { auswertungOffen = true }
             }
         }
@@ -581,6 +661,164 @@ fun BuchhaltungScreen(
                 }
             }
         )
+    if (belegeOffen) {
+        AlertDialog(
+            onDismissRequest = { belegeOffen = false },
+            title = { Text("Belege", fontWeight = FontWeight.Bold, color = BuchGreenDark) },
+            text = {
+                if (belege.isEmpty()) {
+                    Text("Noch keine Belege vorhanden. Über "Neuer Beleg" kannst du ein Foto oder PDF zuordnen.")
+                } else {
+                    LazyColumn(
+                        modifier = Modifier.heightIn(max = 430.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        items(belege.asReversed()) { beleg ->
+                            Card(
+                                modifier = Modifier.fillMaxWidth(),
+                                colors = CardDefaults.cardColors(containerColor = Color.White),
+                                shape = RoundedCornerShape(16.dp)
+                            ) {
+                                Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                    Text(
+                                        beleg.beschreibung.ifBlank { "Beleg" },
+                                        fontWeight = FontWeight.Bold,
+                                        color = BuchGreenDark
+                                    )
+                                    Text("${beleg.datum} • ${beleg.buchungTyp} • ${euro(beleg.betrag)}")
+                                    if (beleg.nummer.isNotBlank()) Text("Nr.: ${beleg.nummer}", fontSize = 12.sp)
+                                    Text("Kategorie: ${beleg.kategorie}", fontSize = 12.sp, color = Color(0xFF60716A))
+                                    Text(
+                                        if (beleg.dateiUri.isNotBlank()) "Datei angehängt" else "Keine Datei angehängt",
+                                        fontSize = 12.sp,
+                                        color = if (beleg.dateiUri.isNotBlank()) BuchGreen else Color(0xFFB35A00)
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    TextButton(onClick = {
+                        belegDatum = SimpleDateFormat("dd.MM.yyyy", Locale.GERMANY).format(Date())
+                        belegNummer = ""
+                        belegBeschreibung = ""
+                        belegKategorie = "Sonstiges"
+                        belegBetrag = ""
+                        belegTyp = "Ausgabe"
+                        belegDateiUri = ""
+                        belegEingabeOffen = true
+                    }) {
+                        Text("Neuer Beleg", color = BuchGreen, fontWeight = FontWeight.Bold)
+                    }
+                    TextButton(onClick = { belegeOffen = false }) {
+                        Text("Schließen", color = BuchGreen, fontWeight = FontWeight.Bold)
+                    }
+                }
+            }
+        )
+    }
+
+    if (belegEingabeOffen) {
+        AlertDialog(
+            onDismissRequest = { belegEingabeOffen = false },
+            title = { Text("Neuen Beleg erfassen", fontWeight = FontWeight.Bold, color = BuchGreenDark) },
+            text = {
+                Column(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    OutlinedTextField(
+                        value = belegDatum,
+                        onValueChange = { belegDatum = it },
+                        label = { Text("Datum (TT.MM.JJJJ)") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    OutlinedTextField(
+                        value = belegNummer,
+                        onValueChange = { belegNummer = it },
+                        label = { Text("Beleg-Nr. / Rechnungs-Nr.") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    OutlinedTextField(
+                        value = belegBeschreibung,
+                        onValueChange = { belegBeschreibung = it },
+                        label = { Text("Beschreibung / Lieferant") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    OutlinedTextField(
+                        value = belegKategorie,
+                        onValueChange = { belegKategorie = it },
+                        label = { Text("Kategorie") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    OutlinedTextField(
+                        value = belegBetrag,
+                        onValueChange = { belegBetrag = it.replace(',', '.') },
+                        label = { Text("Betrag €") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        FilterChip(
+                            selected = belegTyp == "Ausgabe",
+                            onClick = { belegTyp = "Ausgabe" },
+                            label = { Text("Ausgabe") }
+                        )
+                        FilterChip(
+                            selected = belegTyp == "Einnahme",
+                            onClick = { belegTyp = "Einnahme" },
+                            label = { Text("Einnahme") }
+                        )
+                    }
+                    OutlinedButton(
+                        onClick = {
+                            belegDateiLauncher.launch(arrayOf("application/pdf", "image/*"))
+                        },
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text(if (belegDateiUri.isBlank()) "Foto / PDF auswählen" else "Datei ausgewählt ✓")
+                    }
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { belegEingabeOffen = false }) {
+                    Text("Abbrechen", color = Color(0xFF60716A))
+                }
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        val betragWert = belegBetrag.replace(',', '.').toDoubleOrNull()
+                        if (belegDatum.isNotBlank() && belegBeschreibung.isNotBlank() && betragWert != null) {
+                            val neuerBeleg = BuchBeleg(
+                                datum = belegDatum.trim(),
+                                nummer = belegNummer.trim(),
+                                beschreibung = belegBeschreibung.trim(),
+                                kategorie = belegKategorie.trim().ifBlank { "Sonstiges" },
+                                betrag = betragWert,
+                                buchungTyp = belegTyp,
+                                dateiUri = belegDateiUri
+                            )
+                            belege = belege + neuerBeleg
+                            speichereBelege(context, belege)
+                            belegEingabeOffen = false
+                            belegeOffen = true
+                        }
+                    }
+                ) {
+                    Text("Beleg speichern", color = BuchGreen, fontWeight = FontWeight.Bold)
+                }
+            }
+        )
+    }
+
     }
 
 }
