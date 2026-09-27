@@ -627,20 +627,29 @@ fun BuchhaltungScreen(
         }
 
         item {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.SpaceBetween
-            ) {
-                Text("Schnellzugriff", fontSize = 21.sp, fontWeight = FontWeight.Bold, color = Color(0xFF102A20))
-                Text("4 Bereiche", fontSize = 12.sp, color = Color(0xFF60716A))
-            }
+            Text(
+                "Auftragsstatus",
+                fontSize = 21.sp,
+                fontWeight = FontWeight.Bold,
+                color = Color(0xFF102A20)
+            )
         }
 
         item {
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                BuchActionTile("▤", "Rechnungen", "Liste & Status", BuchGreenCard) { rechnungenOffen = true }
-                BuchActionTile("▣", "Ausgaben", "Erfassen", BuchBlue) { eingabeOffen = true; typ = "Ausgabe" }
+                BuchActionTile(
+                    "▤",
+                    "Aufträge",
+                    "${auftraege.size} insgesamt",
+                    BuchBlue
+                ) { }
+
+                BuchActionTile(
+                    "✓",
+                    "Abgerechnet",
+                    "${rechnungen.size} Auftrag${if (rechnungen.size == 1) "" else "e"}",
+                    BuchGreenCard
+                ) { rechnungenOffen = true }
             }
         }
 
@@ -651,6 +660,22 @@ fun BuchhaltungScreen(
                 "${offeneAuftraege.size} Auftrag${if (offeneAuftraege.size == 1) "" else "e"}",
                 BuchOrange
             ) { offeneAuftraegeOffen = true }
+        }
+
+        item {
+            Text(
+                "Schnellzugriff",
+                fontSize = 21.sp,
+                fontWeight = FontWeight.Bold,
+                color = Color(0xFF102A20)
+            )
+        }
+
+        item {
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                BuchActionTile("▤", "Rechnungen", "Liste & Status", BuchGreenCard) { rechnungenOffen = true }
+                BuchActionTile("▣", "Ausgaben", "Erfassen", BuchBlue) { eingabeOffen = true; typ = "Ausgabe" }
+            }
         }
 
         item {
