@@ -5543,11 +5543,17 @@ fun KuemmeroApp() {
                 } // Ende Auftragsliste
             }
         } else if (hauptseite == "Buchhaltung") {
-            BuchhaltungScreen(
-                context = context,
-                auftraege = auftraege,
-                onBack = { hauptseite = "Mehr" }
-            )
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(padding)
+            ) {
+                BuchhaltungScreen(
+                    context = context,
+                    auftraege = auftraege,
+                    onBack = { hauptseite = "Mehr" }
+                )
+            }
         } else {
             LazyColumn(
                 modifier = Modifier.padding(padding).padding(16.dp),
