@@ -1904,8 +1904,8 @@ private fun FotoVorschau(
 private fun Rechnungsfeld(
     label: String,
     value: String,
-    onValueChange: (String) -> Unit,
-    feldFarben: TextFieldColors
+    feldFarben: TextFieldColors,
+    onValueChange: (String) -> Unit
 ) {
     OutlinedTextField(
         value = value,
