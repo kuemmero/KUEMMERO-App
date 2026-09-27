@@ -182,16 +182,25 @@ fun BuchhaltungScreen(
     var kategorie by remember { mutableStateOf("Sonstiges") }
     var betrag by remember { mutableStateOf("") }
     var auswertungOffen by remember { mutableStateOf(false) }
+    var rechnungenOffen by remember { mutableStateOf(false) }
 
     val rechnungen = auftraege.filter { it.rechnungsnummer.isNotBlank() }
     val offeneRechnungen = rechnungen.count { it.zahlungsstatus != "Bezahlt" }
-    val rechnungsUmsatz = rechnungen.sumOf { a ->
+
+    fun rechnungsBetrag(a: Auftrag): Double =
         (a.stunden * a.stundensatz) +
                 a.material +
                 a.fahrt +
                 a.zuschlagBetrag +
                 a.erstellungskosten
-    }
+
+    val rechnungsUmsatz = rechnungen.sumOf { rechnungsBetrag(it) }
+    val bezahlteRechnungsSumme = rechnungen
+        .filter { it.zahlungsstatus == "Bezahlt" }
+        .sumOf { rechnungsBetrag(it) }
+    val offeneRechnungsSumme = rechnungen
+        .filter { it.zahlungsstatus != "Bezahlt" }
+        .sumOf { rechnungsBetrag(it) }
     val erfassteEinnahmen = buchungen.filter { it.typ == "Einnahme" }.sumOf { it.betrag }
     val erfassteAusgaben = buchungen.filter { it.typ == "Ausgabe" }.sumOf { it.betrag }
     val erfasstesErgebnis = erfassteEinnahmen - erfassteAusgaben
@@ -313,6 +322,25 @@ fun BuchhaltungScreen(
             Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                 BuchStatCard(
                     modifier = Modifier.weight(1f),
+                    background = BuchGreenCard,
+                    symbol = "✓",
+                    title = "Bezahlt €",
+                    value = euro(bezahlteRechnungsSumme)
+                )
+                BuchStatCard(
+                    modifier = Modifier.weight(1f),
+                    background = BuchOrange,
+                    symbol = "⌛",
+                    title = "Offen €",
+                    value = euro(offeneRechnungsSumme)
+                )
+            }
+        }
+
+        item {
+            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                BuchStatCard(
+                    modifier = Modifier.weight(1f),
                     background = BuchRose,
                     symbol = "↑",
                     title = "Ausgaben",
@@ -423,7 +451,7 @@ fun BuchhaltungScreen(
 
         item {
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                BuchActionTile("▤", "Rechnungen", "Liste & Status", BuchGreenCard) { }
+                BuchActionTile("▤", "Rechnungen", "Liste & Status", BuchGreenCard) { rechnungenOffen = true }
                 BuchActionTile("▣", "Ausgaben", "Erfassen", BuchBlue) { eingabeOffen = true; typ = "Ausgabe" }
             }
         }
@@ -475,6 +503,54 @@ fun BuchhaltungScreen(
                 }
             }
         }
+    }
+
+    if (rechnungenOffen) {
+        AlertDialog(
+            onDismissRequest = { rechnungenOffen = false },
+            title = { Text("Rechnungen", fontWeight = FontWeight.Bold, color = BuchGreenDark) },
+            text = {
+                if (rechnungen.isEmpty()) {
+                    Text("Noch keine Rechnungen vorhanden.")
+                } else {
+                    LazyColumn(
+                        modifier = Modifier.heightIn(max = 420.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        items(rechnungen) { rechnung ->
+                            val betragRechnung = rechnungsBetrag(rechnung)
+                            Card(
+                                modifier = Modifier.fillMaxWidth(),
+                                colors = CardDefaults.cardColors(
+                                    containerColor = if (rechnung.zahlungsstatus == "Bezahlt") BuchGreenCard else BuchOrange
+                                ),
+                                shape = RoundedCornerShape(16.dp)
+                            ) {
+                                Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                                    Text(
+                                        rechnung.rechnungsnummer,
+                                        fontWeight = FontWeight.Bold,
+                                        color = BuchGreenDark
+                                    )
+                                    Text(rechnung.kunde.ifBlank { "Kunde" }, fontWeight = FontWeight.SemiBold)
+                                    Text(euro(betragRechnung), fontWeight = FontWeight.Bold)
+                                    Text(
+                                        "Status: ${rechnung.zahlungsstatus}${if (rechnung.faelligAm.isNotBlank()) " • fällig ${rechnung.faelligAm}" else ""}",
+                                        fontSize = 12.sp,
+                                        color = Color(0xFF60716A)
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { rechnungenOffen = false }) {
+                    Text("Schließen", color = BuchGreen, fontWeight = FontWeight.Bold)
+                }
+            }
+        )
     }
 
     if (auswertungOffen) {
