@@ -235,7 +235,8 @@ fun BuchhaltungScreen(
     context: Context,
     auftraege: List<Auftrag>,
     onBack: () -> Unit,
-    onRechnungClick: (Auftrag) -> Unit
+    onRechnungClick: (Auftrag) -> Unit,
+    onOffenerAuftragClick: (Auftrag) -> Unit
 ) {
     var buchungen by remember { mutableStateOf(ladeBuchungen(context)) }
     var eingabeOffen by remember { mutableStateOf(false) }
@@ -247,6 +248,7 @@ fun BuchhaltungScreen(
     var betrag by remember { mutableStateOf("") }
     var auswertungOffen by remember { mutableStateOf(false) }
     var rechnungenOffen by remember { mutableStateOf(false) }
+    var offeneAuftraegeOffen by remember { mutableStateOf(false) }
     var belege by remember { mutableStateOf(ladeBelege(context)) }
     var belegeOffen by remember { mutableStateOf(false) }
     var belegEingabeOffen by remember { mutableStateOf(false) }
@@ -277,6 +279,7 @@ fun BuchhaltungScreen(
 
     val rechnungen = auftraege.filter { it.rechnungsnummer.isNotBlank() }
     val offeneRechnungen = rechnungen.count { it.zahlungsstatus != "Bezahlt" }
+    val offeneAuftraege = auftraege.filter { it.rechnungsnummer.isBlank() && it.status == "Erledigt" }
 
     fun rechnungsBetrag(a: Auftrag): Double =
         (a.stunden * a.stundensatz) +
@@ -642,6 +645,15 @@ fun BuchhaltungScreen(
         }
 
         item {
+            BuchActionTile(
+                "◷",
+                "Noch nicht abgerechnet",
+                "${offeneAuftraege.size} Auftrag${if (offeneAuftraege.size == 1) "" else "e"}",
+                BuchOrange
+            ) { offeneAuftraegeOffen = true }
+        }
+
+        item {
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 BuchActionTile("▤", "Belege", "Fotos & PDF", BuchOrange) { belegeOffen = true }
                 BuchActionTile("▥", "Auswertung", "Monat / Jahr", Color(0xFFF1EAFE)) { auswertungOffen = true }
@@ -778,6 +790,49 @@ fun BuchhaltungScreen(
             },
             confirmButton = {
                 TextButton(onClick = { rechnungenOffen = false }) {
+                    Text("Schließen", color = BuchGreen, fontWeight = FontWeight.Bold)
+                }
+            }
+        )
+    }
+
+    if (offeneAuftraegeOffen) {
+        AlertDialog(
+            onDismissRequest = { offeneAuftraegeOffen = false },
+            title = { Text("Noch nicht abgerechnet", fontWeight = FontWeight.Bold, color = BuchGreenDark) },
+            text = {
+                if (offeneAuftraege.isEmpty()) {
+                    Text("Keine erledigten Aufträge ohne Rechnung vorhanden.")
+                } else {
+                    LazyColumn(
+                        modifier = Modifier.heightIn(max = 420.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        items(offeneAuftraege) { auftrag ->
+                            Card(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clickable {
+                                        offeneAuftraegeOffen = false
+                                        onOffenerAuftragClick(auftrag)
+                                    },
+                                colors = CardDefaults.cardColors(containerColor = BuchOrange),
+                                shape = RoundedCornerShape(16.dp)
+                            ) {
+                                Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                                    Text(auftrag.kunde.ifBlank { "Kunde" }, fontWeight = FontWeight.Bold, color = BuchGreenDark)
+                                    Text("Auftrag: ${auftrag.nummer}", fontWeight = FontWeight.SemiBold)
+                                    Text("Datum: ${auftrag.datum}")
+                                    Text("Status: ${auftrag.status}", fontSize = 12.sp, color = Color(0xFF60716A))
+                                    Text("Noch keine Rechnung erstellt", fontSize = 12.sp, color = Color(0xFFB35A00))
+                                }
+                            }
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { offeneAuftraegeOffen = false }) {
                     Text("Schließen", color = BuchGreen, fontWeight = FontWeight.Bold)
                 }
             }

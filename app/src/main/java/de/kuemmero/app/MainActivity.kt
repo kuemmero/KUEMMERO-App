@@ -5568,6 +5568,19 @@ fun KuemmeroApp() {
                                 android.widget.Toast.LENGTH_SHORT
                             ).show()
                         }
+                    },
+                    onOffenerAuftragClick = { auftrag ->
+                        val index = auftraege.indexOfFirst { it.nummer == auftrag.nummer }
+                        if (index >= 0) {
+                            auftragDetailIndex = index
+                            hauptseite = "Aufträge"
+                        } else {
+                            android.widget.Toast.makeText(
+                                context,
+                                "Zugehöriger Auftrag wurde nicht gefunden.",
+                                android.widget.Toast.LENGTH_SHORT
+                            ).show()
+                        }
                     }
                 )
             }
