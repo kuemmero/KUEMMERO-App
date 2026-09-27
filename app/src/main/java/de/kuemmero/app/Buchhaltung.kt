@@ -708,12 +708,20 @@ fun BuchhaltungScreen(
                             }
                             Text("Beleg: ${buchung.beleg}", fontSize = 13.sp)
                             Text(
-                                if (passenderBeleg != null)
-                                    "📎 Beleg verknüpft – ${passenderBeleg.beschreibung}"
-                                else
-                                    "Kein gespeicherter Beleg mit dieser Nummer gefunden.",
+                                when {
+                                    passenderBeleg != null ->
+                                        "📎 Beleg verknüpft – ${passenderBeleg.beschreibung}"
+                                    buchung.kategorie == "Rechnung" ->
+                                        "🧾 Rechnung aus dem Rechnungsarchiv"
+                                    else ->
+                                        "Kein gespeicherter Beleg mit dieser Nummer gefunden."
+                                },
                                 fontSize = 12.sp,
-                                color = if (passenderBeleg != null) BuchGreen else Color(0xFFB35A00)
+                                color = when {
+                                    passenderBeleg != null -> BuchGreen
+                                    buchung.kategorie == "Rechnung" -> BuchGreen
+                                    else -> Color(0xFFB35A00)
+                                }
                             )
                         }
                         Text("Status: ${buchung.status}", fontSize = 12.sp, color = Color(0xFF60716A))
