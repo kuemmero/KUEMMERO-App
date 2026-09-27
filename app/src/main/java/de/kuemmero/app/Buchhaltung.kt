@@ -661,13 +661,15 @@ fun BuchhaltungScreen(
                 }
             }
         )
+    }
+
     if (belegeOffen) {
         AlertDialog(
             onDismissRequest = { belegeOffen = false },
             title = { Text("Belege", fontWeight = FontWeight.Bold, color = BuchGreenDark) },
             text = {
                 if (belege.isEmpty()) {
-                    Text("Noch keine Belege vorhanden. Über "Neuer Beleg" kannst du ein Foto oder PDF zuordnen.")
+                    Text("Noch keine Belege vorhanden. Über \"Neuer Beleg\" kannst du ein Foto oder PDF zuordnen.")
                 } else {
                     LazyColumn(
                         modifier = Modifier.heightIn(max = 430.dp),
@@ -817,8 +819,6 @@ fun BuchhaltungScreen(
                 }
             }
         )
-    }
-
     }
 
 }
