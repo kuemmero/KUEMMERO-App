@@ -6,6 +6,7 @@ import android.content.Intent
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -25,12 +26,6 @@ import androidx.compose.ui.unit.sp
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
-import java.io.File
-import java.io.FileInputStream
-import java.io.FileOutputStream
-import java.util.zip.ZipEntry
-import java.util.zip.ZipInputStream
-import java.util.zip.ZipOutputStream
 
 /*
  * KÜMMERO – Buchhaltung
@@ -156,61 +151,6 @@ private fun speichereBelege(context: Context, belege: List<BuchBeleg>) {
         .apply()
 }
 
-private const val BUCHHALTUNG_BACKUP_VERSION = 1
-private const val BACKUP_PREFS_FILE = "buchhaltung_backup.txt"
-private const val BACKUP_BELEGE_DIR = "belege"
-
-private fun backupSafe(value: String): String = value.replace("%", "%25").replace("\n", "%0A").replace("|", "%7C")
-private fun backupUnsafe(value: String): String = value.replace("%7C", "|").replace("%0A", "\n").replace("%25", "%")
-
-private fun createBuchhaltungBackup(context: Context, buchungen: List<Buchung>, belege: List<BuchBeleg>, outputUri: android.net.Uri): Boolean {
-    return try {
-        val tempDir = File(context.cacheDir, "buchhaltung_backup_${System.currentTimeMillis()}").apply { mkdirs() }
-        val metadata = File(tempDir, BACKUP_PREFS_FILE)
-        metadata.writeText(buildString {
-            appendLine("KUMMERO_BUCHHALTUNG_BACKUP")
-            appendLine("VERSION=$BUCHHALTUNG_BACKUP_VERSION")
-            appendLine("[BUCHUNGEN]")
-            buchungen.forEach { appendLine(listOf(it.typ,it.datum,it.beleg,it.partner,it.kategorie,it.betrag.toString(),it.status).joinToString("|") { v -> backupSafe(v) }) }
-            appendLine("[BELEGE]")
-            belege.forEach { appendLine(listOf(it.datum,it.nummer,it.beschreibung,it.kategorie,it.betrag.toString(),it.buchungTyp,it.dateiUri).joinToString("|") { v -> backupSafe(v) }) }
-        }, Charsets.UTF_8)
-        context.contentResolver.openOutputStream(outputUri)?.use { out ->
-            ZipOutputStream(out).use { zip ->
-                zip.putNextEntry(ZipEntry(BACKUP_PREFS_FILE)); FileInputStream(metadata).use { it.copyTo(zip) }; zip.closeEntry()
-                belege.forEachIndexed { index, beleg ->
-                    if (beleg.dateiUri.isNotBlank()) try {
-                        context.contentResolver.openInputStream(android.net.Uri.parse(beleg.dateiUri))?.use { input ->
-                            zip.putNextEntry(ZipEntry("$BACKUP_BELEGE_DIR/$index")); input.copyTo(zip); zip.closeEntry()
-                        }
-                    } catch (_: Exception) {}
-                }
-            }
-        } ?: return false
-        tempDir.deleteRecursively(); true
-    } catch (_: Exception) { false }
-}
-
-private fun restoreBuchhaltungBackup(context: Context, inputUri: android.net.Uri): Pair<List<Buchung>, List<BuchBeleg>>? {
-    return try {
-        val tempDir = File(context.cacheDir, "buchhaltung_restore_${System.currentTimeMillis()}").apply { mkdirs() }
-        context.contentResolver.openInputStream(inputUri)?.use { input -> ZipInputStream(input).use { zip ->
-            while (true) { val entry=zip.nextEntry ?: break; val target=File(tempDir, entry.name.replace("..","_")); if(entry.isDirectory) target.mkdirs() else { target.parentFile?.mkdirs(); FileOutputStream(target).use { out -> zip.copyTo(out) } }; zip.closeEntry() }
-        } } ?: return null
-        val metadata=File(tempDir,BACKUP_PREFS_FILE); if(!metadata.exists()) return null
-        val buchungen=mutableListOf<Buchung>(); val belege=mutableListOf<BuchBeleg>(); var section=""
-        metadata.readLines(Charsets.UTF_8).forEach { line ->
-            when(line) { "[BUCHUNGEN]"->section="B"; "[BELEGE]"->section="L"; else -> if(line.isNotBlank()&&!line.startsWith("KUMMERO_")&&!line.startsWith("VERSION=")) {
-                val t=line.split("|").map(::backupUnsafe)
-                if(section=="B"&&t.size==7) buchungen+=Buchung(t[0],t[1],t[2],t[3],t[4],t[5].toDoubleOrNull()?:0.0,t[6])
-                else if(section=="L"&&t.size==7) { val i=belege.size; val src=File(tempDir,"$BACKUP_BELEGE_DIR/$i"); val uri=if(src.exists()){ val dir=File(context.filesDir,"buchhaltung_belege").apply{mkdirs()}; val target=File(dir,"beleg_${System.currentTimeMillis()}_$i"); src.copyTo(target,true); android.net.Uri.fromFile(target).toString() } else ""; belege+=BuchBeleg(t[0],t[1],t[2],t[3],t[4].toDoubleOrNull()?:0.0,t[5],uri) }
-            }
-            }
-        }
-        tempDir.deleteRecursively(); buchungen to belege
-    } catch (_: Exception) { null }
-}
-
 @Composable
 private fun BuchStatCard(
     modifier: Modifier = Modifier,
@@ -317,14 +257,6 @@ fun BuchhaltungScreen(
     var belegTyp by remember { mutableStateOf("Ausgabe") }
     var belegDateiUri by remember { mutableStateOf("") }
     var belegZumLoeschen by remember { mutableStateOf<BuchBeleg?>(null) }
-    var backupMeldung by remember { mutableStateOf<String?>(null) }
-
-    val backupCreateLauncher = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/zip")) { uri ->
-        if (uri != null) backupMeldung = if (createBuchhaltungBackup(context, buchungen, belege, uri)) "Backup wurde erstellt. Im Speicher-Dialog kannst du Dropbox auswählen." else "Backup konnte nicht erstellt werden."
-    }
-    val backupRestoreLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
-        if (uri != null) { val restored=restoreBuchhaltungBackup(context,uri); if(restored!=null){ buchungen=restored.first; belege=restored.second; speichereBuchungen(context,buchungen); speichereBelege(context,belege); backupMeldung="Backup erfolgreich wiederhergestellt." } else backupMeldung="Backup konnte nicht gelesen werden." }
-    }
 
     val belegDateiLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.OpenDocument()
@@ -535,6 +467,52 @@ fun BuchhaltungScreen(
             }
         }
 
+        item {
+            OutlinedButton(
+                onClick = {
+                    val testDatum = SimpleDateFormat("dd.MM.yyyy", Locale.GERMANY).format(Date())
+                    val testNummer = "TEST-001"
+                    val testBetrag = 123.45
+                    val testBeleg = BuchBeleg(
+                        datum = testDatum,
+                        nummer = testNummer,
+                        beschreibung = "Testbeleg",
+                        kategorie = "Muster-Test",
+                        betrag = testBetrag,
+                        buchungTyp = "Einnahme",
+                        dateiUri = ""
+                    )
+                    val testBuchung = Buchung(
+                        typ = "Einnahme",
+                        datum = testDatum,
+                        beleg = testNummer,
+                        partner = "Musterkunde",
+                        kategorie = "Muster-Test",
+                        betrag = testBetrag,
+                        status = "Bezahlt"
+                    )
+                    belege = belege.filterNot { it.nummer.equals(testNummer, ignoreCase = true) } + testBeleg
+                    buchungen = buchungen.filterNot { it.beleg.equals(testNummer, ignoreCase = true) } + testBuchung
+                    speichereBelege(context, belege)
+                    speichereBuchungen(context, buchungen)
+                    belegeOffen = true
+                    android.widget.Toast.makeText(
+                        context,
+                        "Muster-Test angelegt: 123,45 € · TEST-001",
+                        android.widget.Toast.LENGTH_LONG
+                    ).show()
+                },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(52.dp),
+                shape = RoundedCornerShape(26.dp),
+                border = BorderStroke(2.dp, BuchGreen),
+                colors = ButtonDefaults.outlinedButtonColors(contentColor = BuchGreen)
+            ) {
+                Text("🧪 Muster-Test anlegen", fontWeight = FontWeight.Bold)
+            }
+        }
+
         if (eingabeOffen) {
             item {
                 Card(
@@ -632,19 +610,6 @@ fun BuchhaltungScreen(
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 BuchActionTile("▤", "Belege", "Fotos & PDF", BuchOrange) { belegeOffen = true }
                 BuchActionTile("▥", "Auswertung", "Monat / Jahr", Color(0xFFF1EAFE)) { auswertungOffen = true }
-            }
-        }
-
-        item {
-            Card(modifier=Modifier.fillMaxWidth(), shape=RoundedCornerShape(20.dp), colors=CardDefaults.cardColors(containerColor=Color.White)) {
-                Column(Modifier.padding(14.dp), verticalArrangement=Arrangement.spacedBy(9.dp)) {
-                    Text("Datensicherung / Handywechsel", fontSize=18.sp, fontWeight=FontWeight.Bold, color=BuchGreenDark)
-                    Text("Buchungen und Belege als Backup sichern. Im Dateiauswahldialog kannst du Dropbox auswählen, wenn die Dropbox-App installiert ist.", fontSize=13.sp, color=Color(0xFF60716A))
-                    Row(horizontalArrangement=Arrangement.spacedBy(8.dp)) {
-                        OutlinedButton(onClick={backupCreateLauncher.launch("KUMMERO_Buchhaltung_Backup.zip")}, modifier=Modifier.weight(1f)){Text("Backup sichern")}
-                        OutlinedButton(onClick={backupRestoreLauncher.launch(arrayOf("application/zip"))}, modifier=Modifier.weight(1f)){Text("Wiederherstellen")}
-                    }
-                }
             }
         }
 
@@ -881,10 +846,6 @@ fun BuchhaltungScreen(
                 }
             }
         )
-    }
-
-    if (backupMeldung != null) {
-        AlertDialog(onDismissRequest={backupMeldung=null}, title={Text("Datensicherung",fontWeight=FontWeight.Bold,color=BuchGreenDark)}, text={Text(backupMeldung.orEmpty())}, confirmButton={TextButton(onClick={backupMeldung=null}){Text("OK",color=BuchGreen,fontWeight=FontWeight.Bold)}})
     }
 
     if (belegZumLoeschen != null) {
