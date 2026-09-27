@@ -3899,7 +3899,7 @@ fun KuemmeroApp() {
         )
     }
 
-    val seiten = listOf("Heute", "Aufträge", "Kostenvoranschläge", "Kunden", "Mahnungen", "Mehr")
+    val seiten = listOf("Heute", "Aufträge", "Kostenvoranschläge", "Kunden", "Mahnungen", "Buchhaltung", "Mehr")
     fun wischSeite(delta: Float) {
         val index = seiten.indexOf(hauptseite)
         if (index < 0) return
@@ -3982,6 +3982,7 @@ fun KuemmeroApp() {
                         Triple("KV", "€", "Kostenvoranschläge"),
                         Triple("Kunden", "♙", "Kunden"),
                         Triple("Mahnungen", "!", "Mahnungen"),
+                        Triple("Buchh.", "▣", "Buchhaltung"),
                         Triple("Mehr", "⋯", "Mehr")
                     ).forEach { (label, iconText, page) ->
                         NavigationBarItem(
@@ -5541,6 +5542,12 @@ fun KuemmeroApp() {
                 }
                 } // Ende Auftragsliste
             }
+        } else if (hauptseite == "Buchhaltung") {
+            BuchhaltungScreen(
+                context = context,
+                auftraege = auftraege,
+                onBack = { hauptseite = "Mehr" }
+            )
         } else {
             LazyColumn(
                 modifier = Modifier.padding(padding).padding(16.dp),

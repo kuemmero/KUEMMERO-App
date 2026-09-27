@@ -20,6 +20,8 @@ import java.util.Locale
  */
 
 private const val BUCHHALTUNG_KEY = "buchhaltung_eintraege"
+private const val BUCHHALTUNG_PREFS_NAME = "kuemmero_speicher"
+private val BUCHHALTUNG_GREEN = androidx.compose.ui.graphics.Color(0xFF2F8F57)
 
 data class Buchung(
     val typ: String,
@@ -33,7 +35,7 @@ data class Buchung(
 
 private fun ladeBuchungen(context: Context): List<Buchung> {
     val raw = context
-        .getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        .getSharedPreferences(BUCHHALTUNG_PREFS_NAME, Context.MODE_PRIVATE)
         .getString(BUCHHALTUNG_KEY, "") ?: ""
 
     if (raw.isBlank()) return emptyList()
@@ -73,7 +75,7 @@ private fun speichereBuchungen(
     }
 
     context
-        .getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        .getSharedPreferences(BUCHHALTUNG_PREFS_NAME, Context.MODE_PRIVATE)
         .edit()
         .putString(BUCHHALTUNG_KEY, raw)
         .apply()
@@ -137,7 +139,7 @@ fun BuchhaltungScreen(
                 TextButton(onClick = onBack) {
                     Text(
                         "← Zurück",
-                        color = KuemmeroGreen
+                        color = BUCHHALTUNG_GREEN
                     )
                 }
 
@@ -146,7 +148,7 @@ fun BuchhaltungScreen(
                 Text(
                     "Buchhaltung",
                     style = MaterialTheme.typography.headlineSmall,
-                    color = KuemmeroGreen
+                    color = BUCHHALTUNG_GREEN
                 )
             }
         }
