@@ -1,6 +1,7 @@
 package de.kuemmero.app
 
 import android.content.Context
+import android.content.ActivityNotFoundException
 import android.content.Intent
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -247,6 +248,7 @@ fun BuchhaltungScreen(
     var belegBetrag by remember { mutableStateOf("") }
     var belegTyp by remember { mutableStateOf("Ausgabe") }
     var belegDateiUri by remember { mutableStateOf("") }
+    var belegZumLoeschen by remember { mutableStateOf<BuchBeleg?>(null) }
 
     val belegDateiLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.OpenDocument()
@@ -681,7 +683,7 @@ fun BuchhaltungScreen(
                                 colors = CardDefaults.cardColors(containerColor = Color.White),
                                 shape = RoundedCornerShape(16.dp)
                             ) {
-                                Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(5.dp)) {
                                     Text(
                                         beleg.beschreibung.ifBlank { "Beleg" },
                                         fontWeight = FontWeight.Bold,
@@ -695,6 +697,36 @@ fun BuchhaltungScreen(
                                         fontSize = 12.sp,
                                         color = if (beleg.dateiUri.isNotBlank()) BuchGreen else Color(0xFFB35A00)
                                     )
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.End,
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        if (beleg.dateiUri.isNotBlank()) {
+                                            TextButton(onClick = {
+                                                try {
+                                                    val uri = android.net.Uri.parse(beleg.dateiUri)
+                                                    val intent = Intent(Intent.ACTION_VIEW).apply {
+                                                        setDataAndType(
+                                                            uri,
+                                                            context.contentResolver.getType(uri) ?: "application/octet-stream"
+                                                        )
+                                                        addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                                                    }
+                                                    context.startActivity(Intent.createChooser(intent, "Beleg öffnen mit"))
+                                                } catch (_: ActivityNotFoundException) {
+                                                    // Keine passende App auf dem Gerät vorhanden.
+                                                } catch (_: Exception) {
+                                                    // Ungültige oder nicht mehr erreichbare Datei-URI.
+                                                }
+                                            }) {
+                                                Text("Datei öffnen", color = BuchGreen, fontWeight = FontWeight.Bold)
+                                            }
+                                        }
+                                        TextButton(onClick = { belegZumLoeschen = beleg }) {
+                                            Text("Löschen", color = Color(0xFFB3261E), fontWeight = FontWeight.Bold)
+                                        }
+                                    }
                                 }
                             }
                         }
@@ -718,6 +750,35 @@ fun BuchhaltungScreen(
                     TextButton(onClick = { belegeOffen = false }) {
                         Text("Schließen", color = BuchGreen, fontWeight = FontWeight.Bold)
                     }
+                }
+            }
+        )
+    }
+
+    if (belegZumLoeschen != null) {
+        AlertDialog(
+            onDismissRequest = { belegZumLoeschen = null },
+            title = { Text("Beleg löschen?", fontWeight = FontWeight.Bold, color = BuchGreenDark) },
+            text = {
+                Text(
+                    "Soll der Beleg \"${belegZumLoeschen?.beschreibung?.ifBlank { "Beleg" }}\" wirklich gelöscht werden?",
+                )
+            },
+            dismissButton = {
+                TextButton(onClick = { belegZumLoeschen = null }) {
+                    Text("Abbrechen", color = BuchGreen)
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    val zuLoeschen = belegZumLoeschen
+                    if (zuLoeschen != null) {
+                        belege = belege.filterNot { it == zuLoeschen }
+                        speichereBelege(context, belege)
+                    }
+                    belegZumLoeschen = null
+                }) {
+                    Text("Löschen", color = Color(0xFFB3261E), fontWeight = FontWeight.Bold)
                 }
             }
         )
