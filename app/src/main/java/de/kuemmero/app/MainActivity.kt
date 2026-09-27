@@ -338,6 +338,7 @@ private fun ladeKostenvoranschlaege(context: Context): List<Kostenvoranschlag> {
             o.optDouble("fahrt", 0.0), o.optDouble("stundensatz", 42.0), o.optString("materialBonUri", ""),
             run { val a = o.optJSONArray("fotosVorher") ?: JSONArray(); List(a.length()) { j -> a.optString(j) } },
             o.optDouble("erstellungskosten", 0.0),
+            leistungsdatum = o.optString("leistungsdatum", ""),
             fahrtKm = o.optDouble("fahrtKm", 0.0),
             fahrtKostenProKm = o.optDouble("fahrtKostenProKm", context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE).getString(FAHRTKOSTEN_PRO_KM_KEY, "0.40")?.replace(",", ".")?.toDoubleOrNull() ?: 0.40),
             zuschlagBezeichnung = o.optString("zuschlagBezeichnung", ""),
