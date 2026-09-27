@@ -131,8 +131,7 @@ private fun BuchStatCard(
             }
         }
     }
-
-
+}
 
 @Composable
 private fun BuchActionTile(
