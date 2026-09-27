@@ -2904,7 +2904,11 @@ fun KuemmeroApp() {
                             fahrt = fahrtWert,
                             stundensatz = satzWert,
                             erstellungskosten = erstellungWert,
-                            zuschlagBetrag = zuschlagWert
+                            zuschlagBetrag = zuschlagWert,
+                            // Eine neu ausgestellte Rechnung ist zunächst immer offen.
+                            // Der Zahlungsstatus wird erst durch „Als bezahlt markieren“ geändert.
+                            zahlungsstatus = if (a.rechnungsnummer.isBlank()) "Offen" else a.zahlungsstatus,
+                            bezahltAm = if (a.rechnungsnummer.isBlank()) "" else a.bezahltAm
                         ))
                     }
                     speichereAuftraege(context, auftraege)

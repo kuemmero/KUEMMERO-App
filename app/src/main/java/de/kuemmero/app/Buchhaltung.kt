@@ -278,7 +278,14 @@ fun BuchhaltungScreen(
     }
 
     val rechnungen = auftraege.filter { it.rechnungsnummer.isNotBlank() }
-    val offeneRechnungen = rechnungen.count { it.zahlungsstatus != "Bezahlt" }
+
+    // Der Zahlungsstatus kommt ausschließlich aus dem Auftrag.
+    // Alles außer „Bezahlt“ gilt als offen – damit bleiben „Offen“ und „Bezahlt“
+    // zwischen Auftragsansicht und Buchhaltung synchron.
+    fun rechnungIstOffen(a: Auftrag): Boolean =
+        !a.zahlungsstatus.trim().equals("Bezahlt", ignoreCase = true)
+
+    val offeneRechnungen = rechnungen.count(::rechnungIstOffen)
     val offeneAuftraege = auftraege.filter { it.rechnungsnummer.isBlank() && it.status == "Erledigt" }
 
     fun rechnungsBetrag(a: Auftrag): Double =
@@ -290,10 +297,10 @@ fun BuchhaltungScreen(
 
     val rechnungsUmsatz = rechnungen.sumOf { rechnungsBetrag(it) }
     val bezahlteRechnungsSumme = rechnungen
-        .filter { it.zahlungsstatus == "Bezahlt" }
+        .filter { !rechnungIstOffen(it) }
         .sumOf { rechnungsBetrag(it) }
     val offeneRechnungsSumme = rechnungen
-        .filter { it.zahlungsstatus != "Bezahlt" }
+        .filter(::rechnungIstOffen)
         .sumOf { rechnungsBetrag(it) }
     // Bezahlte Rechnungen sind tatsächliche Einnahmen der Buchhaltung.
     // Manuell erfasste Einnahmen werden zusätzlich berücksichtigt, aber nicht doppelt,
@@ -790,7 +797,7 @@ fun BuchhaltungScreen(
                                         onRechnungClick(rechnung)
                                     },
                                 colors = CardDefaults.cardColors(
-                                    containerColor = if (rechnung.zahlungsstatus == "Bezahlt") BuchGreenCard else BuchOrange
+                                    containerColor = if (!rechnungIstOffen(rechnung)) BuchGreenCard else BuchOrange
                                 ),
                                 shape = RoundedCornerShape(16.dp)
                             ) {
@@ -803,7 +810,7 @@ fun BuchhaltungScreen(
                                     Text(rechnung.kunde.ifBlank { "Kunde" }, fontWeight = FontWeight.SemiBold)
                                     Text(euro(betragRechnung), fontWeight = FontWeight.Bold)
                                     Text(
-                                        "Status: ${rechnung.zahlungsstatus}${if (rechnung.faelligAm.isNotBlank()) " • fällig ${rechnung.faelligAm}" else ""}",
+                                        "Zahlung: ${if (rechnungIstOffen(rechnung)) "Offen" else "Bezahlt"}${if (rechnung.faelligAm.isNotBlank()) " • fällig ${rechnung.faelligAm}" else ""}",
                                         fontSize = 12.sp,
                                         color = Color(0xFF60716A)
                                     )
