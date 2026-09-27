@@ -488,6 +488,20 @@ fun BuchhaltungScreen(
                         OutlinedTextField(value = partner, onValueChange = { partner = it }, label = { Text("Kunde / Lieferant") }, modifier = Modifier.fillMaxWidth())
                         OutlinedTextField(value = kategorie, onValueChange = { kategorie = it }, label = { Text("Kategorie / Leistung") }, modifier = Modifier.fillMaxWidth())
                         OutlinedTextField(value = betrag, onValueChange = { betrag = it }, label = { Text("Betrag €") }, modifier = Modifier.fillMaxWidth())
+                        if (beleg.isNotBlank()) {
+                            val passenderBeleg = belege.firstOrNull {
+                                it.nummer.trim().equals(beleg.trim(), ignoreCase = true)
+                            }
+                            Text(
+                                if (passenderBeleg != null)
+                                    "📎 Beleg verknüpft: ${passenderBeleg.beschreibung}"
+                                else
+                                    "Beleg-Nr. kann mit einem gespeicherten Beleg verknüpft werden."
+                                ,
+                                fontSize = 12.sp,
+                                color = if (passenderBeleg != null) BuchGreen else Color(0xFF60716A)
+                            )
+                        }
                         Button(
                             onClick = {
                                 val wert = betrag.replace(",", ".").toDoubleOrNull()
@@ -579,7 +593,20 @@ fun BuchhaltungScreen(
                     Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                         Text("${buchung.typ}: ${euro(buchung.betrag)}", fontWeight = FontWeight.Bold, color = BuchGreenDark)
                         Text("${buchung.datum} • ${buchung.partner} • ${buchung.kategorie}", color = Color(0xFF45554F))
-                        if (buchung.beleg.isNotBlank()) Text("Beleg: ${buchung.beleg}", fontSize = 13.sp)
+                        if (buchung.beleg.isNotBlank()) {
+                            val passenderBeleg = belege.firstOrNull {
+                                it.nummer.trim().equals(buchung.beleg.trim(), ignoreCase = true)
+                            }
+                            Text("Beleg: ${buchung.beleg}", fontSize = 13.sp)
+                            Text(
+                                if (passenderBeleg != null)
+                                    "📎 Beleg verknüpft – ${passenderBeleg.beschreibung}"
+                                else
+                                    "Kein gespeicherter Beleg mit dieser Nummer gefunden.",
+                                fontSize = 12.sp,
+                                color = if (passenderBeleg != null) BuchGreen else Color(0xFFB35A00)
+                            )
+                        }
                         Text("Status: ${buchung.status}", fontSize = 12.sp, color = Color(0xFF60716A))
                     }
                 }
@@ -697,6 +724,18 @@ fun BuchhaltungScreen(
                                         fontSize = 12.sp,
                                         color = if (beleg.dateiUri.isNotBlank()) BuchGreen else Color(0xFFB35A00)
                                     )
+                                    val verknuepfteBuchungen = buchungen.filter {
+                                        it.beleg.isNotBlank() &&
+                                                it.beleg.trim().equals(beleg.nummer.trim(), ignoreCase = true)
+                                    }
+                                    if (beleg.nummer.isNotBlank() && verknuepfteBuchungen.isNotEmpty()) {
+                                        Text(
+                                            "🔗 Mit ${verknuepfteBuchungen.size} Buchung(en) verknüpft",
+                                            fontSize = 12.sp,
+                                            color = BuchGreen,
+                                            fontWeight = FontWeight.SemiBold
+                                        )
+                                    }
                                     Row(
                                         modifier = Modifier.fillMaxWidth(),
                                         horizontalArrangement = Arrangement.End,
