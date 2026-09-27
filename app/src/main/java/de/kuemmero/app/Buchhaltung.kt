@@ -291,7 +291,19 @@ fun BuchhaltungScreen(
     val offeneRechnungsSumme = rechnungen
         .filter { it.zahlungsstatus != "Bezahlt" }
         .sumOf { rechnungsBetrag(it) }
-    val erfassteEinnahmen = buchungen.filter { it.typ == "Einnahme" }.sumOf { it.betrag }
+    // Bezahlte Rechnungen sind tatsächliche Einnahmen der Buchhaltung.
+    // Manuell erfasste Einnahmen werden zusätzlich berücksichtigt, aber nicht doppelt,
+    // wenn die Buchung bereits über eine Rechnungsnummer mit einer Rechnung verknüpft ist.
+    val manuelleEinnahmen = buchungen
+        .filter { buchung ->
+            buchung.typ == "Einnahme" &&
+                    rechnungen.none { rechnung ->
+                        rechnung.rechnungsnummer.isNotBlank() &&
+                                buchung.beleg.trim().equals(rechnung.rechnungsnummer.trim(), ignoreCase = true)
+                    }
+        }
+        .sumOf { it.betrag }
+    val erfassteEinnahmen = bezahlteRechnungsSumme + manuelleEinnahmen
     val erfassteAusgaben = buchungen.filter { it.typ == "Ausgabe" }.sumOf { it.betrag }
     val erfasstesErgebnis = erfassteEinnahmen - erfassteAusgaben
 
@@ -302,17 +314,33 @@ fun BuchhaltungScreen(
     fun buchungPasstZu(buchung: Buchung, muster: String): Boolean =
         buchung.datum.trim().contains(muster)
 
-    val monatlicheEinnahmen = buchungen
-        .filter { it.typ == "Einnahme" && buchungPasstZu(it, monatJahr) }
+    fun buchungPasstZu(datumText: String, muster: String): Boolean =
+        datumText.trim().contains(muster)
+
+    val manuelleEinnahmenBuchungen = buchungen.filter { buchung ->
+        buchung.typ == "Einnahme" &&
+                rechnungen.none { rechnung ->
+                    rechnung.rechnungsnummer.isNotBlank() &&
+                            buchung.beleg.trim().equals(rechnung.rechnungsnummer.trim(), ignoreCase = true)
+                }
+    }
+    val monatlicheRechnungseinnahmen = rechnungen
+        .filter { it.zahlungsstatus == "Bezahlt" && buchungPasstZu(it.bezahltAm, monatJahr) }
+        .sumOf { rechnungsBetrag(it) }
+    val monatlicheEinnahmen = monatlicheRechnungseinnahmen + manuelleEinnahmenBuchungen
+        .filter { buchungPasstZu(it.datum, monatJahr) }
         .sumOf { it.betrag }
     val monatlicheAusgaben = buchungen
-        .filter { it.typ == "Ausgabe" && buchungPasstZu(it, monatJahr) }
+        .filter { it.typ == "Ausgabe" && buchungPasstZu(it.datum, monatJahr) }
         .sumOf { it.betrag }
-    val jaehrlicheEinnahmen = buchungen
-        .filter { it.typ == "Einnahme" && buchungPasstZu(it, jahr) }
+    val jaehrlicheRechnungseinnahmen = rechnungen
+        .filter { it.zahlungsstatus == "Bezahlt" && buchungPasstZu(it.bezahltAm, jahr) }
+        .sumOf { rechnungsBetrag(it) }
+    val jaehrlicheEinnahmen = jaehrlicheRechnungseinnahmen + manuelleEinnahmenBuchungen
+        .filter { buchungPasstZu(it.datum, jahr) }
         .sumOf { it.betrag }
     val jaehrlicheAusgaben = buchungen
-        .filter { it.typ == "Ausgabe" && buchungPasstZu(it, jahr) }
+        .filter { it.typ == "Ausgabe" && buchungPasstZu(it.datum, jahr) }
         .sumOf { it.betrag }
 
     LazyColumn(
