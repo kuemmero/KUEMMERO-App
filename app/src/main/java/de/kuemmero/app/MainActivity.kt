@@ -1902,33 +1902,7 @@ private fun FotoVorschau(
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun KuemmeroApp() {
-    val context = LocalContext.current
-    try {
-        KuemmeroAppInhalt()
-    } catch (e: Throwable) {
-        val fehler = e::class.java.simpleName + ": " + (e.message ?: "Unbekannter Fehler")
-        context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-            .edit()
-            .putString("kuemmero_letzter_startfehler", fehler)
-            .apply()
-        Surface(modifier = Modifier.fillMaxSize(), color = KuemmeroBackground) {
-            Column(
-                modifier = Modifier.fillMaxSize().padding(24.dp),
-                verticalArrangement = Arrangement.Center,
-                horizontalAlignment = Alignment.CenterHorizontally
-            ) {
-                Text("KÜMMERO – Sicherheitsmodus", color = KuemmeroGreen, fontSize = 26.sp, fontWeight = FontWeight.Bold)
-                Spacer(Modifier.height(16.dp))
-                Text("Die App hat beim Start einen Fehler erkannt.", color = KuemmeroText, textAlign = TextAlign.Center)
-                Spacer(Modifier.height(12.dp))
-                Text(fehler, color = KuemmeroError, fontSize = 12.sp, textAlign = TextAlign.Center)
-                Spacer(Modifier.height(20.dp))
-                Button(onClick = { (context as? ComponentActivity)?.recreate() }, colors = ButtonDefaults.buttonColors(containerColor = KuemmeroGreen)) {
-                    Text("Erneut starten", color = Color.White)
-                }
-            }
-        }
-    }
+    KuemmeroAppInhalt()
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
