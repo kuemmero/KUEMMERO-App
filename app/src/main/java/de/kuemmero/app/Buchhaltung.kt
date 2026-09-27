@@ -3,6 +3,7 @@ package de.kuemmero.app
 import android.content.Context
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -141,7 +142,7 @@ private fun BuchActionTile(
     Card(
         modifier = Modifier
             .fillMaxWidth()
-            .clickableWithoutImport(onClick),
+            .clickable(onClick = onClick),
         shape = RoundedCornerShape(20.dp),
         colors = CardDefaults.cardColors(containerColor = background)
     ) {
@@ -163,10 +164,6 @@ private fun BuchActionTile(
         }
     }
 }
-
-// Kleine lokale Hilfsfunktion, damit der ActionTile ohne zusätzliche Modifier-Imports auskommt.
-private fun Modifier.clickableWithoutImport(onClick: () -> Unit): Modifier =
-    androidx.compose.foundation.clickable(onClick = onClick)
 
 @Composable
 fun BuchhaltungScreen(
