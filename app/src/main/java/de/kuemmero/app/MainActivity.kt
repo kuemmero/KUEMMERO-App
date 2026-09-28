@@ -4508,14 +4508,6 @@ fun KuemmeroApp() {
                 }
                 item {
                     OutlinedTextField(
-                        gueltigBis, { gueltigBis = it },
-                        label = { Text("Gültig bis") },
-                        colors = feldFarben,
-                        modifier = Modifier.fillMaxWidth()
-                    )
-                }
-                item {
-                    OutlinedTextField(
                         kunde, { kunde = it },
                         label = { Text("Kunde") },
                         colors = feldFarben,
@@ -4997,7 +4989,9 @@ fun KuemmeroApp() {
                                 auftragFormOffen = true
                                 nummer = kuemmeroNaechsteDokumentNummer("AUF", Calendar.getInstance().get(Calendar.YEAR), auftraege.map { it.nummer })
                                 datum = datumJetzt
-                                leistungsdatum = datumJetzt
+                                // Leistungsdatum bei einem neuen Auftrag bewusst leer lassen.
+                                // Es wird erst eingetragen, wenn die Leistung tatsächlich feststeht/erfolgt.
+                                leistungsdatum = ""
                                 gueltigBis = ""
                                 kunde = ""
                                 strasse = ""
