@@ -4408,11 +4408,16 @@ fun KuemmeroApp() {
                                     }
 
                                     HorizontalDivider(color = KuemmeroGreenLight)
-                                    Text("Netto: ${euro(nettoVorschau)}", color = KuemmeroText)
-                                    if (steuerartIstRegelbesteuerung(context)) {
-                                        Text("Umsatzsteuer 19 %: ${euro(umsatzsteuerBetrag(nettoVorschau))}", color = KuemmeroText)
+                                    if (steuerartIstKleinunternehmer(context)) {
+                                        Text("Steuerbefreiung nach § 19 UStG – keine Umsatzsteuer", color = KuemmeroText, fontWeight = FontWeight.SemiBold)
+                                        Text("Rechnungsbetrag: ${euro(endbetragVorschau)}", color = KuemmeroGreen, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleLarge)
+                                    } else {
+                                        Text("Netto: ${euro(nettoVorschau)}", color = KuemmeroText)
+                                        if (steuerartIstRegelbesteuerung(context)) {
+                                            Text("Umsatzsteuer 19 %: ${euro(umsatzsteuerBetrag(nettoVorschau))}", color = KuemmeroText)
+                                        }
+                                        Text("Gesamtbetrag: ${euro(endbetragVorschau)}", color = KuemmeroGreen, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleLarge)
                                     }
-                                    Text("Gesamtbetrag: ${euro(endbetragVorschau)}", color = KuemmeroGreen, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleLarge)
 
                                     Button(
                                         onClick = {
