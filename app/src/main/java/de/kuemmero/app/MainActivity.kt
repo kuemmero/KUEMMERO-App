@@ -467,7 +467,6 @@ private fun ladeAuftraege(context: Context): List<Auftrag> {
             o.optLong("arbeitsSekunden", 0L),
             o.optBoolean("arbeitszeitUebernommen", false),
             o.optDouble("erstellungskosten", 0.0),
-            leistungsdatum = o.optString("leistungsdatum", ""),
             fahrtKm = o.optDouble("fahrtKm", 0.0),
             fahrtKostenProKm = o.optDouble("fahrtKostenProKm", context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE).getString(FAHRTKOSTEN_PRO_KM_KEY, "0.40")?.replace(",", ".")?.toDoubleOrNull() ?: 0.40),
             rechnungUrsprungsnummer = o.optString("rechnungUrsprungsnummer", ""),
@@ -2074,22 +2073,6 @@ fun KuemmeroApp() {
     var auftragFuerPdf by remember { mutableStateOf<Auftrag?>(null) }
     var rechnungFuerIndex by remember { mutableStateOf<Int?>(null) }
 
-    // Rechnungsprüfung: Die Rechnung wird erst nach Kontrolle/Korrektur als PDF erzeugt.
-    var rechnungPruefNummer by remember { mutableStateOf("") }
-    var rechnungPruefDatum by remember { mutableStateOf("") }
-    var rechnungPruefFaellig by remember { mutableStateOf("") }
-    var rechnungPruefLeistungsdatum by remember { mutableStateOf("") }
-    var rechnungPruefKunde by remember { mutableStateOf("") }
-    var rechnungPruefStrasse by remember { mutableStateOf("") }
-    var rechnungPruefOrt by remember { mutableStateOf("") }
-    var rechnungPruefLeistung by remember { mutableStateOf("") }
-    var rechnungPruefStunden by remember { mutableStateOf("") }
-    var rechnungPruefMaterial by remember { mutableStateOf("") }
-    var rechnungPruefFahrt by remember { mutableStateOf("") }
-    var rechnungPruefStundensatz by remember { mutableStateOf("") }
-    var rechnungPruefErstellungskosten by remember { mutableStateOf("") }
-    var rechnungPruefZuschlag by remember { mutableStateOf("") }
-
     // Auftragsnummer immer automatisch vorhanden halten. Auch ältere/leere Aufträge
     // bekommen beim Öffnen des Formulars eine eindeutige Nummer.
     LaunchedEffect(auftragFormOffen, bearbeiteIndex) {
@@ -2821,83 +2804,53 @@ fun KuemmeroApp() {
                 val rechnungsSteuer = rechnungsPrefs.getString(STEUERNUMMER_KEY, "") ?: ""
                 if (rechnungsStrasse.isBlank() || rechnungsPlzOrt.isBlank() || rechnungsSteuer.isBlank()) {
                     android.widget.Toast.makeText(context, "Bitte unter Mehr zuerst Straße, PLZ/Ort und Steuernummer eintragen.", android.widget.Toast.LENGTH_LONG).show()
+                    rechnungFuerIndex = null
                     return@rememberLauncherForActivityResult
                 }
                 try {
-                    val stundenWert = zahl(rechnungPruefStunden)
-                    val materialWert = zahl(rechnungPruefMaterial)
-                    val fahrtWert = zahl(rechnungPruefFahrt)
-                    val satzWert = zahl(rechnungPruefStundensatz)
-                    val erstellungWert = zahl(rechnungPruefErstellungskosten)
-                    val zuschlagWert = zahl(rechnungPruefZuschlag)
-                    val rechnungsnummer = rechnungPruefNummer.trim()
-                    val rechnungsdatum = rechnungPruefDatum.trim()
-                    val faelligAm = rechnungPruefFaellig.trim()
-
-                    if (rechnungsnummer.isBlank() || rechnungsdatum.isBlank() || faelligAm.isBlank() ||
-                        rechnungPruefKunde.isBlank() || rechnungPruefLeistung.isBlank()) {
-                        android.widget.Toast.makeText(context, "Bitte alle Pflichtfelder der Rechnung prüfen und ausfüllen.", android.widget.Toast.LENGTH_LONG).show()
-                        return@rememberLauncherForActivityResult
-                    }
-
-                    val doppelt = auftraege.withIndex().any {
-                        it.index != index && it.value.rechnungsnummer.equals(rechnungsnummer, ignoreCase = true)
-                    }
-                    if (doppelt) {
-                        android.widget.Toast.makeText(context, "Diese Rechnungsnummer ist bereits vergeben.", android.widget.Toast.LENGTH_LONG).show()
-                        return@rememberLauncherForActivityResult
-                    }
-
+                    val rechnungsnummer = naechsteRechnungsnummer(context)
+                    val rechnungsdatum = datumFormat.format(Date())
+                    val faelligCal = Calendar.getInstance().apply { add(Calendar.DAY_OF_YEAR, 14) }
+                    val faelligAm = datumFormat.format(faelligCal.time)
                     val pdf = erstelleRechnungPdf(
                         context,
                         rechnungsnummer,
                         rechnungsdatum,
                         faelligAm,
-                        rechnungPruefLeistungsdatum.trim(),
-                        rechnungPruefKunde.trim(),
-                        rechnungPruefStrasse.trim(),
-                        rechnungPruefOrt.trim(),
-                        rechnungPruefLeistung.trim(),
-                        stundenWert,
-                        materialWert,
-                        fahrtWert,
-                        satzWert,
+                        a.leistungsdatum.ifBlank { a.terminDatum.ifBlank { a.datum } },
+                        a.kunde,
+                        a.kundenStrasse,
+                        a.kundenOrt,
+                        a.leistung,
+                        a.stunden,
+                        a.material,
+                        a.fahrt,
+                        a.stundensatz,
                         a.unterschriftPfad,
                         a.unterschriftDatum,
-                        a.fotosVorher, a.fotosNachher, erstellungWert, a.fahrtKm, a.fahrtKostenProKm,
-                        "RECHNUNG", "", a.zuschlagBezeichnung, zuschlagWert
+                        a.fotosVorher, a.fotosNachher, a.erstellungskosten, a.fahrtKm, a.fahrtKostenProKm, "RECHNUNG", "", a.zuschlagBezeichnung, a.zuschlagBetrag
                     )
                     context.contentResolver.openOutputStream(uri)?.use { out -> pdf.writeTo(out) }
                     pdf.close()
-
                     speichereRechnungsnummer(context, rechnungsnummer)
                     auftraege = auftraege.toMutableList().apply {
-                        set(index, a.copy(
-                            status = "Abgerechnet",
-                            rechnungsnummer = rechnungsnummer,
-                            rechnungsdatum = rechnungsdatum,
-                            faelligAm = faelligAm,
-                            leistungsdatum = rechnungPruefLeistungsdatum.trim(),
-                            kunde = rechnungPruefKunde.trim(),
-                            kundenStrasse = rechnungPruefStrasse.trim(),
-                            kundenOrt = rechnungPruefOrt.trim(),
-                            leistung = rechnungPruefLeistung.trim(),
-                            stunden = stundenWert,
-                            material = materialWert,
-                            fahrt = fahrtWert,
-                            stundensatz = satzWert,
-                            erstellungskosten = erstellungWert,
-                            zuschlagBetrag = zuschlagWert
-                        ))
+                        set(
+                            index,
+                            a.copy(
+                                status = "Abgerechnet",
+                                rechnungsnummer = rechnungsnummer,
+                                rechnungsdatum = rechnungsdatum,
+                                faelligAm = faelligAm
+                            )
+                        )
                     }
                     speichereAuftraege(context, auftraege)
                     android.widget.Toast.makeText(context, "Rechnung gespeichert: $rechnungsnummer", 0).show()
-                    rechnungFuerIndex = null
-                    hauptseite = "Aufträge"
                 } catch (e: Exception) {
-                    android.widget.Toast.makeText(context, "Rechnung konnte nicht erstellt werden: ${e.message ?: "unbekannter Fehler"}", 1).show()
+                    android.widget.Toast.makeText(context, "Rechnung konnte nicht erstellt werden.", 1).show()
                 }
             }
+            rechnungFuerIndex = null
         }
     }
 
@@ -3550,40 +3503,45 @@ fun KuemmeroApp() {
     if (neuerKundeDialog) {
         AlertDialog(
             onDismissRequest = { neuerKundeDialog = false },
-            title = { Text("Neuen Kunden anlegen") },
+            title = { Text("Neuen Kunden anlegen", color = KuemmeroGreen, fontWeight = FontWeight.Bold) },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     OutlinedTextField(
                         neuerKundenName,
                         { neuerKundenName = it },
                         label = { Text("Kunde") },
-                        singleLine = true
+                        singleLine = true,
+                        colors = feldFarben
                     )
                     OutlinedTextField(
                         neuerKundenAdresse,
                         { neuerKundenAdresse = it },
-                        label = { Text("Adresse") },
-                        singleLine = true
+                        label = { Text("Straße") },
+                        singleLine = true,
+                        colors = feldFarben
                     )
                     OutlinedTextField(
                         neuerKundenOrt,
                         { neuerKundenOrt = it },
                         label = { Text("PLZ und Ort") },
-                        singleLine = true
+                        singleLine = true,
+                        colors = feldFarben
                     )
                     OutlinedTextField(
                         neuerKundenTelefon,
                         { neuerKundenTelefon = it },
                         label = { Text("Telefon") },
                         singleLine = true,
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone)
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone),
+                        colors = feldFarben
                     )
                     OutlinedTextField(
                         neuerKundenEmail,
                         { neuerKundenEmail = it },
                         label = { Text("E-Mail") },
                         singleLine = true,
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email)
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email),
+                        colors = feldFarben
                     )
                 }
             },
@@ -3607,10 +3565,10 @@ fun KuemmeroApp() {
                         neuerKundeDialog = false
                         android.widget.Toast.makeText(context, "Kunde gespeichert.", 0).show()
                     }
-                }) { Text("Speichern") }
+                }, colors = ButtonDefaults.buttonColors(containerColor = KuemmeroGreen)) { Text("Speichern", color = Color.White, fontWeight = FontWeight.Bold) }
             },
             dismissButton = {
-                TextButton(onClick = { neuerKundeDialog = false }) { Text("Abbrechen") }
+                TextButton(onClick = { neuerKundeDialog = false }, colors = ButtonDefaults.textButtonColors(contentColor = KuemmeroGreen)) { Text("Abbrechen") }
             }
         )
     }
@@ -4075,7 +4033,7 @@ fun KuemmeroApp() {
             val rechnungAuftrag = rechnungIndex?.let { auftraege.getOrNull(it) }
             LazyColumn(
                 modifier = Modifier.padding(padding).padding(16.dp),
-                verticalArrangement = Arrangement.spacedBy(10.dp)
+                verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
                 item {
                     Row(
@@ -4085,13 +4043,19 @@ fun KuemmeroApp() {
                         TextButton(onClick = { rechnungFuerIndex = null; hauptseite = "Aufträge" }) {
                             Text("← Zurück", color = KuemmeroGreen, fontWeight = FontWeight.Bold)
                         }
-                        Text("Rechnung prüfen", style = MaterialTheme.typography.headlineSmall,
-                            color = KuemmeroGreen, fontWeight = FontWeight.Bold)
+                        Text(
+                            "Rechnung",
+                            style = MaterialTheme.typography.headlineSmall,
+                            color = KuemmeroGreen,
+                            fontWeight = FontWeight.Bold
+                        )
                     }
                 }
 
                 if (rechnungAuftrag == null) {
-                    item { Text("Kein Auftrag für die Rechnung ausgewählt.", color = KuemmeroText) }
+                    item {
+                        Text("Kein Auftrag für die Rechnung ausgewählt.", color = KuemmeroText)
+                    }
                 } else {
                     item {
                         Card(
@@ -4100,66 +4064,21 @@ fun KuemmeroApp() {
                             shape = RoundedCornerShape(20.dp),
                             border = BorderStroke(1.5.dp, KuemmeroGreenLight)
                         ) {
-                            Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(9.dp)) {
-                                Text("Vor dem Drucken prüfen und korrigieren",
-                                    color = KuemmeroGreen, fontWeight = FontWeight.Bold)
-                                Text("Änderungen werden erst beim Speichern der Rechnung übernommen.",
-                                    color = KuemmeroText, fontSize = 12.sp)
-
-                                @Composable
-                                fun Rechnungsfeld(label: String, value: String, onValueChange: (String) -> Unit) {
-                                    OutlinedTextField(
-                                        value = value,
-                                        onValueChange = onValueChange,
-                                        label = { Text(label) },
-                                        modifier = Modifier.fillMaxWidth(),
-                                        singleLine = true,
-                                        colors = feldFarben
-                                    )
-                                }
-
-                                Rechnungsfeld("Rechnungsnummer", rechnungPruefNummer) { rechnungPruefNummer = it }
-                                Rechnungsfeld("Rechnungsdatum", rechnungPruefDatum) { rechnungPruefDatum = it }
-                                Rechnungsfeld("Fällig am", rechnungPruefFaellig) { rechnungPruefFaellig = it }
-                                Rechnungsfeld("Leistungsdatum", rechnungPruefLeistungsdatum) { rechnungPruefLeistungsdatum = it }
-                                Rechnungsfeld("Kunde", rechnungPruefKunde) { rechnungPruefKunde = it }
-                                Rechnungsfeld("Straße / Hausnummer", rechnungPruefStrasse) { rechnungPruefStrasse = it }
-                                Rechnungsfeld("PLZ und Ort", rechnungPruefOrt) { rechnungPruefOrt = it }
-                                Rechnungsfeld("Leistung", rechnungPruefLeistung) { rechnungPruefLeistung = it }
-
-                                Text("Beträge", fontWeight = FontWeight.Bold, color = KuemmeroGreen)
-                                Rechnungsfeld("Stunden", rechnungPruefStunden) { rechnungPruefStunden = it }
-                                Rechnungsfeld("Stundensatz €", rechnungPruefStundensatz) { rechnungPruefStundensatz = it }
-                                Rechnungsfeld("Material €", rechnungPruefMaterial) { rechnungPruefMaterial = it }
-                                Rechnungsfeld("Fahrtkosten €", rechnungPruefFahrt) { rechnungPruefFahrt = it }
-                                Rechnungsfeld("Erstellungskosten €", rechnungPruefErstellungskosten) { rechnungPruefErstellungskosten = it }
-                                Rechnungsfeld("Zuschlag €", rechnungPruefZuschlag) { rechnungPruefZuschlag = it }
-
-                                val pruefNetto = runde2(
-                                    gesamtbetrag(
-                                        zahl(rechnungPruefStunden),
-                                        zahl(rechnungPruefMaterial),
-                                        zahl(rechnungPruefFahrt),
-                                        zahl(rechnungPruefStundensatz),
-                                        zahl(rechnungPruefErstellungskosten)
-                                    ) + zahl(rechnungPruefZuschlag)
-                                )
-                                val pruefSteuerart = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-                                    .getString(STEUERART_KEY, "") ?: ""
-                                val pruefUst = if (pruefSteuerart == STEUERART_REGELBESTEUERUNG) umsatzsteuerBetrag(pruefNetto) else 0.0
-                                val pruefEndbetrag = if (pruefSteuerart == STEUERART_REGELBESTEUERUNG) runde2(pruefNetto + pruefUst) else pruefNetto
+                            Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(7.dp)) {
+                                Text("Rechnung aus Auftrag", color = KuemmeroGreen, fontWeight = FontWeight.Bold)
+                                Text("Auftragsnummer: ${rechnungAuftrag.nummer.ifBlank { "—" }}", color = KuemmeroText)
+                                Text("Kunde: ${rechnungAuftrag.kunde.ifBlank { "—" }}", color = KuemmeroText)
+                                Text("Adresse: ${rechnungAuftrag.kundenStrasse.ifBlank { "—" }}", color = KuemmeroText)
+                                Text("PLZ und Ort: ${rechnungAuftrag.kundenOrt.ifBlank { "—" }}", color = KuemmeroText)
+                                Text("Leistung: ${rechnungAuftrag.leistung.ifBlank { "—" }}", color = KuemmeroText)
+                                Text("Leistungsdatum: ${rechnungAuftrag.leistungsdatum.ifBlank { rechnungAuftrag.terminDatum.ifBlank { rechnungAuftrag.datum } }}", color = KuemmeroText)
                                 HorizontalDivider(color = KuemmeroGreenLight)
-                                if (pruefSteuerart == STEUERART_REGELBESTEUERUNG) {
-                                    Text("Netto: ${euro(pruefNetto)}", color = KuemmeroText)
-                                    Text("Umsatzsteuer 19 %: ${euro(pruefUst)}", color = KuemmeroText)
-                                    Text("Gesamt inkl. Umsatzsteuer: ${euro(pruefEndbetrag)}",
-                                        style = MaterialTheme.typography.titleLarge,
-                                        color = KuemmeroGreen, fontWeight = FontWeight.Bold)
-                                } else {
-                                    Text("Gesamtbetrag: ${euro(pruefEndbetrag)}",
-                                        style = MaterialTheme.typography.titleLarge,
-                                        color = KuemmeroGreen, fontWeight = FontWeight.Bold)
-                                }
+                                Text(
+                                    "Gesamtbetrag: ${euro(runde2(gesamtbetrag(rechnungAuftrag.stunden, rechnungAuftrag.material, rechnungAuftrag.fahrt, rechnungAuftrag.stundensatz, rechnungAuftrag.erstellungskosten) + rechnungAuftrag.zuschlagBetrag))}",
+                                    style = MaterialTheme.typography.titleLarge,
+                                    color = KuemmeroGreen,
+                                    fontWeight = FontWeight.Bold
+                                )
                             }
                         }
                     }
@@ -4177,7 +4096,7 @@ fun KuemmeroApp() {
                                     steuer.isBlank() -> android.widget.Toast.makeText(context, "Bitte unter Mehr Steuernummer / USt-ID / KU-IdNr. eintragen.", android.widget.Toast.LENGTH_LONG).show()
                                     !steuerartIstAusgewaehlt(context) -> android.widget.Toast.makeText(context, "Bitte unter Mehr die Steuerart auswählen.", android.widget.Toast.LENGTH_LONG).show()
                                     else -> {
-                                        val name = rechnungPruefKunde.ifBlank { "Kunde" }.replace("/", "-")
+                                        val name = rechnungAuftrag.kunde.ifBlank { "Kunde" }.replace("/", "-")
                                         rechnungLauncher.launch(dokumentSpeicherIntent("application/pdf", "KÜMMERO-Rechnung-$name.pdf"))
                                     }
                                 }
@@ -4186,7 +4105,7 @@ fun KuemmeroApp() {
                             shape = RoundedCornerShape(28.dp),
                             colors = ButtonDefaults.buttonColors(containerColor = KuemmeroGreen)
                         ) {
-                            Text("🧾 Geprüfte Rechnung als PDF speichern", fontWeight = FontWeight.Bold)
+                            Text("🧾 Rechnung als PDF erstellen & speichern", fontWeight = FontWeight.Bold)
                         }
                     }
 
@@ -4353,24 +4272,6 @@ fun KuemmeroApp() {
                         Button(
                             onClick = {
                                 rechnungFuerIndex = detailIndex
-                                detailAuftrag?.let { a ->
-                                    rechnungPruefNummer = a.rechnungsnummer.ifBlank { naechsteRechnungsnummer(context) }
-                                    rechnungPruefDatum = a.rechnungsdatum.ifBlank { datumFormat.format(Date()) }
-                                    rechnungPruefFaellig = a.faelligAm.ifBlank {
-                                        Calendar.getInstance().apply { add(Calendar.DAY_OF_YEAR, 14) }.let { datumFormat.format(it.time) }
-                                    }
-                                    rechnungPruefLeistungsdatum = a.leistungsdatum.ifBlank { a.terminDatum.ifBlank { a.datum } }
-                                    rechnungPruefKunde = a.kunde
-                                    rechnungPruefStrasse = a.kundenStrasse
-                                    rechnungPruefOrt = a.kundenOrt
-                                    rechnungPruefLeistung = a.leistung
-                                    rechnungPruefStunden = a.stunden.toString()
-                                    rechnungPruefMaterial = a.material.toString()
-                                    rechnungPruefFahrt = a.fahrt.toString()
-                                    rechnungPruefStundensatz = a.stundensatz.toString()
-                                    rechnungPruefErstellungskosten = a.erstellungskosten.toString()
-                                    rechnungPruefZuschlag = a.zuschlagBetrag.toString()
-                                }
                                 hauptseite = "Rechnung"
                             },
                             modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp),
@@ -5568,16 +5469,6 @@ fun KuemmeroApp() {
                                             android.widget.Toast.makeText(context, fehlend, android.widget.Toast.LENGTH_LONG).show()
                                         } else {
                                             rechnungFuerIndex = index
-                                            auftraege.getOrNull(index)?.let { a ->
-                                                rechnungPruefNummer = a.rechnungsnummer.ifBlank { naechsteRechnungsnummer(context) }
-                                                rechnungPruefDatum = a.rechnungsdatum.ifBlank { datumFormat.format(Date()) }
-                                                rechnungPruefFaellig = a.faelligAm.ifBlank { Calendar.getInstance().apply { add(Calendar.DAY_OF_YEAR, 14) }.let { datumFormat.format(it.time) } }
-                                                rechnungPruefLeistungsdatum = a.leistungsdatum.ifBlank { a.terminDatum.ifBlank { a.datum } }
-                                                rechnungPruefKunde = a.kunde; rechnungPruefStrasse = a.kundenStrasse; rechnungPruefOrt = a.kundenOrt
-                                                rechnungPruefLeistung = a.leistung; rechnungPruefStunden = a.stunden.toString(); rechnungPruefMaterial = a.material.toString()
-                                                rechnungPruefFahrt = a.fahrt.toString(); rechnungPruefStundensatz = a.stundensatz.toString()
-                                                rechnungPruefErstellungskosten = a.erstellungskosten.toString(); rechnungPruefZuschlag = a.zuschlagBetrag.toString()
-                                            }
                                             hauptseite = "Rechnung"
                                         }
                                     },
@@ -5657,46 +5548,11 @@ fun KuemmeroApp() {
                 } // Ende Auftragsliste
             }
         } else if (hauptseite == "Buchhaltung") {
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(padding)
-            ) {
-                BuchhaltungScreen(
-                    context = context,
-                    auftraege = auftraege,
-                    onBack = { hauptseite = "Mehr" },
-                    onRechnungClick = { rechnung ->
-                        val index = auftraege.indexOfFirst {
-                            it.rechnungsnummer == rechnung.rechnungsnummer &&
-                                    it.kunde == rechnung.kunde
-                        }
-                        if (index >= 0) {
-                            auftragDetailIndex = index
-                            hauptseite = "Aufträge"
-                        } else {
-                            android.widget.Toast.makeText(
-                                context,
-                                "Zugehöriger Auftrag wurde nicht gefunden.",
-                                android.widget.Toast.LENGTH_SHORT
-                            ).show()
-                        }
-                    },
-                    onOffenerAuftragClick = { auftrag ->
-                        val index = auftraege.indexOfFirst { it.nummer == auftrag.nummer }
-                        if (index >= 0) {
-                            auftragDetailIndex = index
-                            hauptseite = "Aufträge"
-                        } else {
-                            android.widget.Toast.makeText(
-                                context,
-                                "Zugehöriger Auftrag wurde nicht gefunden.",
-                                android.widget.Toast.LENGTH_SHORT
-                            ).show()
-                        }
-                    }
-                )
-            }
+            BuchhaltungScreen(
+                context = context,
+                auftraege = auftraege,
+                onBack = { hauptseite = "Mehr" }
+            )
         } else {
             LazyColumn(
                 modifier = Modifier.padding(padding).padding(16.dp),
