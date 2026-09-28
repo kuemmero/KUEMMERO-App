@@ -1930,6 +1930,7 @@ fun KuemmeroApp() {
     }
     var datum by remember { mutableStateOf(datumFormat.format(heute)) }
     var leistungsdatum by remember { mutableStateOf("") }
+    var leistungsdatumPickerOffen by remember { mutableStateOf(false) }
     var gueltigBis by remember {
         val cal = Calendar.getInstance()
         cal.time = heute
@@ -2063,6 +2064,37 @@ fun KuemmeroApp() {
         focusedLabelColor = KuemmeroGreen,
         unfocusedLabelColor = KuemmeroText
     )
+
+    // Leistungsdatum darf nicht frei eingegeben werden. Es wird ausschließlich
+    // über den Kalender ausgewählt, damit keine ungültigen Datumswerte entstehen.
+    if (leistungsdatumPickerOffen) {
+        val basisDatum = parseDeDatum(datum.trim()) ?: Date()
+        val startCal = Calendar.getInstance().apply {
+            time = parseDeDatum(leistungsdatum.trim()) ?: basisDatum
+        }
+        android.app.DatePickerDialog(
+            context,
+            { _, jahr, monat, tag ->
+                val ausgewaehlt = Calendar.getInstance().apply {
+                    set(jahr, monat, tag, 0, 0, 0)
+                    set(Calendar.MILLISECOND, 0)
+                }.time
+                val basis = parseDeDatum(datum.trim())
+                if (basis == null || !ausgewaehlt.before(basis)) {
+                    leistungsdatum = datumFormat.format(ausgewaehlt)
+                } else {
+                    android.widget.Toast.makeText(context, "Das Leistungsdatum darf nicht vor dem Auftragsdatum liegen.", android.widget.Toast.LENGTH_SHORT).show()
+                }
+                leistungsdatumPickerOffen = false
+            },
+            startCal.get(Calendar.YEAR),
+            startCal.get(Calendar.MONTH),
+            startCal.get(Calendar.DAY_OF_MONTH)
+        ).apply {
+            datePicker.minDate = basisDatum.time
+            setOnCancelListener { leistungsdatumPickerOffen = false }
+        }.show()
+    }
 
     LaunchedEffect(bearbeiteIndex) {
         if (bearbeiteIndex != null) {
@@ -4505,13 +4537,37 @@ fun KuemmeroApp() {
                     )
                 }
                 item {
-                    OutlinedTextField(
-                        leistungsdatum, { leistungsdatum = it },
-                        label = { Text("Leistungsdatum (optional)") },
-                        placeholder = { Text("TT.MM.JJJJ – nur wenn bereits festgelegt") },
-                        colors = feldFarben,
-                        modifier = Modifier.fillMaxWidth()
-                    )
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        OutlinedTextField(
+                            value = leistungsdatum,
+                            onValueChange = { },
+                            readOnly = true,
+                            label = { Text("Leistungsdatum (optional)") },
+                            placeholder = { Text("Noch kein Leistungsdatum festgelegt") },
+                            colors = feldFarben,
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+                            OutlinedButton(
+                                onClick = { leistungsdatumPickerOffen = true },
+                                modifier = Modifier.weight(1f),
+                                border = BorderStroke(2.dp, KuemmeroGreen),
+                                colors = ButtonDefaults.outlinedButtonColors(contentColor = KuemmeroGreen)
+                            ) {
+                                Text("📅 Datum auswählen", fontWeight = FontWeight.Bold)
+                            }
+                            if (leistungsdatum.isNotBlank()) {
+                                OutlinedButton(
+                                    onClick = { leistungsdatum = "" },
+                                    modifier = Modifier.weight(1f),
+                                    border = BorderStroke(2.dp, KuemmeroError),
+                                    colors = ButtonDefaults.outlinedButtonColors(contentColor = KuemmeroError)
+                                ) {
+                                    Text("Löschen", fontWeight = FontWeight.Bold)
+                                }
+                            }
+                        }
+                    }
                 }
                 item {
                     OutlinedTextField(
@@ -4799,6 +4855,7 @@ fun KuemmeroApp() {
                                 }
                                 auftragFormOffen = false
                                 leistungsdatum = ""
+                                leistungsdatumPickerOffen = false
                                 kunde = ""
                                 strasse = ""
                                 ort = ""
