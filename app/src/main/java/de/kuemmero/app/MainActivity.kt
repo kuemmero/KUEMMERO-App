@@ -1929,7 +1929,7 @@ fun KuemmeroApp() {
         mutableStateOf(kuemmeroNaechsteDokumentNummer("AUF", Calendar.getInstance().get(Calendar.YEAR), auftraege.map { it.nummer }))
     }
     var datum by remember { mutableStateOf(datumFormat.format(heute)) }
-    var leistungsdatum by remember { mutableStateOf(datumFormat.format(heute)) }
+    var leistungsdatum by remember { mutableStateOf("") }
     var gueltigBis by remember {
         val cal = Calendar.getInstance()
         cal.time = heute
@@ -2861,7 +2861,7 @@ fun KuemmeroApp() {
     val rate = zahl(stundensatz, zahl(gespeicherterStundensatz(context)))
     val formularZuschlag = bearbeiteIndex?.let { old ->
         auftraege.getOrNull(old)?.zuschlagBetrag ?: 0.0
-    } ?: leistungsZuschlag(context, leistungsdatum.trim().ifBlank { datum.trim() }).second
+    } ?: leistungsZuschlag(context, leistungsdatum.trim().ifBlank { terminDatum.trim().ifBlank { datum.trim() } }).second
     val gesamt = runde2(gesamtbetrag(arbeitsstunden, materialKosten, fahrtKosten, rate) + formularZuschlag)
     val umsatz = auftraege.sumOf { runde2(gesamtbetrag(it.stunden, it.material, it.fahrt, it.stundensatz, it.erstellungskosten) + it.zuschlagBetrag) }
 
@@ -4500,8 +4500,8 @@ fun KuemmeroApp() {
                 item {
                     OutlinedTextField(
                         leistungsdatum, { leistungsdatum = it },
-                        label = { Text("Leistungsdatum") },
-                        placeholder = { Text("TT.MM.JJJJ") },
+                        label = { Text("Leistungsdatum (optional)") },
+                        placeholder = { Text("TT.MM.JJJJ – nur wenn bereits festgelegt") },
                         colors = feldFarben,
                         modifier = Modifier.fillMaxWidth()
                     )
@@ -4780,12 +4780,12 @@ fun KuemmeroApp() {
                                     bearbeiteIndex?.let { auftraege.getOrNull(it)?.arbeitsEnde } ?: 0L,
                                     bearbeiteIndex?.let { auftraege.getOrNull(it)?.arbeitsSekunden } ?: 0L,
                                     erstellungskosten = bearbeiteIndex?.let { auftraege.getOrNull(it)?.erstellungskosten } ?: 0.0,
-                                    leistungsdatum = leistungsdatum.trim().ifBlank { datum.trim() },
+                                    leistungsdatum = leistungsdatum.trim(),
                                     fahrtKm = zahl(fahrtKm),
                                     fahrtKostenProKm = fahrtSatz,
                                     protokoll = protokoll.trim(),
-                                    zuschlagBezeichnung = bearbeiteIndex?.let { old -> val alt = auftraege.getOrNull(old); if (alt != null && alt.leistungsdatum == leistungsdatum.trim().ifBlank { datum.trim() }) alt.zuschlagBezeichnung else leistungsZuschlag(context, leistungsdatum.trim().ifBlank { datum.trim() }).first } ?: leistungsZuschlag(context, leistungsdatum.trim().ifBlank { datum.trim() }).first,
-                                    zuschlagBetrag = bearbeiteIndex?.let { old -> val alt = auftraege.getOrNull(old); if (alt != null && alt.leistungsdatum == leistungsdatum.trim().ifBlank { datum.trim() }) alt.zuschlagBetrag else leistungsZuschlag(context, leistungsdatum.trim().ifBlank { datum.trim() }).second } ?: leistungsZuschlag(context, leistungsdatum.trim().ifBlank { datum.trim() }).second
+                                    zuschlagBezeichnung = bearbeiteIndex?.let { old -> val alt = auftraege.getOrNull(old); if (alt != null && alt.leistungsdatum == leistungsdatum.trim().ifBlank { datum.trim() }) alt.zuschlagBezeichnung else leistungsZuschlag(context, leistungsdatum.trim().ifBlank { terminDatum.trim().ifBlank { datum.trim() } }).first } ?: leistungsZuschlag(context, leistungsdatum.trim().ifBlank { terminDatum.trim().ifBlank { datum.trim() } }).first,
+                                    zuschlagBetrag = bearbeiteIndex?.let { old -> val alt = auftraege.getOrNull(old); if (alt != null && alt.leistungsdatum == leistungsdatum.trim().ifBlank { datum.trim() }) alt.zuschlagBetrag else leistungsZuschlag(context, leistungsdatum.trim().ifBlank { terminDatum.trim().ifBlank { datum.trim() } }).second } ?: leistungsZuschlag(context, leistungsdatum.trim().ifBlank { terminDatum.trim().ifBlank { datum.trim() } }).second
                                 )
                                 val index = bearbeiteIndex
                                 if (index != null) {
@@ -4799,7 +4799,7 @@ fun KuemmeroApp() {
                                     android.widget.Toast.makeText(context, "Auftrag gespeichert.", 0).show()
                                 }
                                 auftragFormOffen = false
-                                leistungsdatum = datumFormat.format(Date())
+                                leistungsdatum = ""
                                 kunde = ""
                                 strasse = ""
                                 ort = ""
