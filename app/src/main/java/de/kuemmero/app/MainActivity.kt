@@ -5551,7 +5551,23 @@ fun KuemmeroApp() {
             BuchhaltungScreen(
                 context = context,
                 auftraege = auftraege,
-                onBack = { hauptseite = "Mehr" }
+                onBack = { hauptseite = "Mehr" },
+                onRechnungClick = { rechnung ->
+                    val index = auftraege.indexOfFirst { it.nummer == rechnung.nummer }
+                    if (index >= 0) {
+                        hauptseite = "Aufträge"
+                        auftragFormOffen = false
+                        auftragDetailIndex = index
+                    }
+                },
+                onOffenerAuftragClick = { auftrag ->
+                    val index = auftraege.indexOfFirst { it.nummer == auftrag.nummer }
+                    if (index >= 0) {
+                        hauptseite = "Aufträge"
+                        auftragFormOffen = false
+                        auftragDetailIndex = index
+                    }
+                }
             )
         } else {
             LazyColumn(
