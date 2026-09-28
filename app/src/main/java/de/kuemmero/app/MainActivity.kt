@@ -5301,31 +5301,45 @@ fun KuemmeroApp() {
                         modifier = Modifier.fillMaxWidth()
                     )
                     Spacer(Modifier.height(10.dp))
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .horizontalScroll(rememberScrollState()),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    Column(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
-                        listOf("Alle", "Offen", "In Bearbeitung", "Erledigt", "Abgerechnet").forEach { option ->
-                            val aktiv = statusFilter == option
-                            Surface(
-                                modifier = Modifier
-                                    .height(42.dp)
-                                    .clickable { statusFilter = option },
-                                shape = RoundedCornerShape(21.dp),
-                                color = if (aktiv) KuemmeroGreen else KuemmeroMint,
-                                border = BorderStroke(1.5.dp, if (aktiv) KuemmeroGreen else Color(0xFF7A8A82))
+                        listOf(
+                            listOf("Alle", "Offen"),
+                            listOf("In Bearbeitung", "Erledigt"),
+                            listOf("Abgerechnet")
+                        ).forEach { zeile ->
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
                             ) {
-                                Box(
-                                    modifier = Modifier.padding(horizontal = 16.dp),
-                                    contentAlignment = Alignment.Center
-                                ) {
-                                    Text(
-                                        option,
-                                        color = if (aktiv) Color.White else KuemmeroGreen,
-                                        fontWeight = FontWeight.Bold
-                                    )
+                                zeile.forEach { option ->
+                                    val aktiv = statusFilter == option
+                                    Surface(
+                                        modifier = Modifier
+                                            .weight(1f)
+                                            .height(42.dp)
+                                            .clickable { statusFilter = option },
+                                        shape = RoundedCornerShape(21.dp),
+                                        color = if (aktiv) KuemmeroGreen else KuemmeroMint,
+                                        border = BorderStroke(1.5.dp, if (aktiv) KuemmeroGreen else Color(0xFF7A8A82))
+                                    ) {
+                                        Box(
+                                            modifier = Modifier.fillMaxSize(),
+                                            contentAlignment = Alignment.Center
+                                        ) {
+                                            Text(
+                                                option,
+                                                color = if (aktiv) Color.White else KuemmeroGreen,
+                                                fontWeight = FontWeight.Bold,
+                                                maxLines = 1
+                                            )
+                                        }
+                                    }
+                                }
+                                if (zeile.size == 1) {
+                                    Spacer(Modifier.weight(1f))
                                 }
                             }
                         }
