@@ -4465,6 +4465,20 @@ fun KuemmeroApp() {
 
                     item {
                         OutlinedButton(
+                            onClick = {
+                                ToneGenerator(AudioManager.STREAM_NOTIFICATION, 80)
+                                    .startTone(ToneGenerator.TONE_PROP_BEEP, 150)
+                                loeschIndex = detailIndex
+                            },
+                            modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp),
+                            shape = RoundedCornerShape(26.dp),
+                            border = BorderStroke(2.dp, KuemmeroError),
+                            colors = ButtonDefaults.outlinedButtonColors(contentColor = KuemmeroError)
+                        ) { Text("🗑 Auftrag löschen", fontWeight = FontWeight.Bold) }
+                    }
+
+                    item {
+                        OutlinedButton(
                             onClick = { auftragDetailIndex = null; hauptseite = "Aufträge" },
                             modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp),
                             shape = RoundedCornerShape(26.dp),
@@ -4898,6 +4912,7 @@ fun KuemmeroApp() {
                                     terminDatum.trim(), terminUhrzeit.trim(), notiz.trim(), fotosVorher, fotosNachher, unterschriftPfad, unterschriftDatum,
                                     bearbeiteIndex?.let { auftraege.getOrNull(it)?.rechnungsnummer } ?: "",
                                     bearbeiteIndex?.let { auftraege.getOrNull(it)?.rechnungsdatum } ?: "",
+                                    bearbeiteIndex?.let { auftraege.getOrNull(it)?.rechnungsbetragGespeichert } ?: 0.0,
                                     bearbeiteIndex?.let { auftraege.getOrNull(it)?.faelligAm } ?: "",
                                     bearbeiteIndex?.let { auftraege.getOrNull(it)?.mahnung1Datum } ?: "",
                                     bearbeiteIndex?.let { auftraege.getOrNull(it)?.mahnung1Frist } ?: "",
