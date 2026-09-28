@@ -4262,7 +4262,14 @@ fun KuemmeroApp() {
                                 auftragFormOffen = true
                                 nummer = a.nummer
                                 datum = a.datum
-                                leistungsdatum = a.leistungsdatum.ifBlank { a.terminDatum.ifBlank { a.datum } }
+                                leistungsdatum = run {
+                                    val gespeichert = a.leistungsdatum.trim()
+                                    if (gespeichert.isBlank()) "" else {
+                                        val auftragsDatum = parseDeDatum(a.datum.trim())
+                                        val leistungsDatum = parseDeDatum(gespeichert)
+                                        if (auftragsDatum == null || leistungsDatum == null || leistungsDatum.before(auftragsDatum)) "" else gespeichert
+                                    }
+                                }
                                 gueltigBis = a.gueltigBis
                                 kunde = a.kunde
                                 strasse = a.kundenStrasse
@@ -5366,7 +5373,16 @@ fun KuemmeroApp() {
                                     auftragFormOffen = true
                                     nummer = a.nummer.ifBlank { nummer }
                                     datum = a.datum.ifBlank { datum }
-                                    leistungsdatum = a.leistungsdatum.ifBlank { a.terminDatum.ifBlank { a.datum.ifBlank { datum } } }
+                                    // Leistungsdatum ist wirklich optional: kein automatischer Fallback auf Termin- oder Auftragsdatum.
+                                    // Offensichtlich veraltete Datumswerte vor dem Auftragsdatum werden beim Bearbeiten entfernt.
+                                    leistungsdatum = run {
+                                        val gespeichertes = a.leistungsdatum.trim()
+                                        if (gespeichertes.isBlank()) "" else {
+                                            val auftragsDatum = parseDeDatum(a.datum.trim())
+                                            val leistungsDatum = parseDeDatum(gespeichertes)
+                                            if (auftragsDatum == null || leistungsDatum == null || leistungsDatum.before(auftragsDatum)) "" else gespeichertes
+                                        }
+                                    }
                                     gueltigBis = a.gueltigBis.ifBlank { gueltigBis }
                                     kunde = a.kunde
                                     strasse = a.kundenStrasse
@@ -5719,7 +5735,7 @@ fun KuemmeroApp() {
                                         bearbeiteIndex = null
                                         nummer = kuemmeroNaechsteDokumentNummer("AUF", Calendar.getInstance().get(Calendar.YEAR), auftraege.map { it.nummer })
                                         datum = datumJetzt
-                                        leistungsdatum = datumJetzt
+                                        leistungsdatum = ""
                                         gueltigBis = ""
                                         kunde = ""; strasse = ""; ort = ""; leistung = ""
                                         stunden = ""; material = ""; materialBonUri = ""; fahrtKm = ""
@@ -6027,7 +6043,7 @@ fun KuemmeroApp() {
                                                         zahlungsstatus = "Offen",
                                                         fotosVorher = k.fotosVorher,
                                                         erstellungskosten = k.erstellungskosten,
-                                                        leistungsdatum = k.datum,
+                                                        leistungsdatum = "",
                                                         fahrtKm = k.fahrtKm,
                                                         fahrtKostenProKm = k.fahrtKostenProKm,
                                                         zuschlagBezeichnung = k.zuschlagBezeichnung,
