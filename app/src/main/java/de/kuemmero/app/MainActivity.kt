@@ -205,7 +205,9 @@ data class Auftrag(
     val protokoll: String = "",
     // Zum Zeitpunkt des Auftrags festgehaltener Wochenend-/Feiertagszuschlag.
     val zuschlagBezeichnung: String = "",
-    val zuschlagBetrag: Double = 0.0
+    val zuschlagBetrag: Double = 0.0,
+    // Endbetrag der tatsächlich erzeugten Rechnung, inklusive USt falls Regelbesteuerung.
+    val rechnungsbetragGespeichert: Double = 0.0
 )
 
 private const val PREFS_NAME = "kuemmero_speicher"
@@ -420,6 +422,11 @@ private fun gesamtbetrag(stunden: Double, material: Double, fahrt: Double, stund
 private fun euro(value: Double): String =
     String.format(Locale.GERMANY, "%.2f €", runde2(value))
 
+private fun rechnungsEndbetrag(context: Context, a: Auftrag): Double {
+    val netto = runde2(gesamtbetrag(a.stunden, a.material, a.fahrt, a.stundensatz, a.erstellungskosten) + a.zuschlagBetrag)
+    return if (steuerartIstRegelbesteuerung(context)) runde2(netto + umsatzsteuerBetrag(netto)) else netto
+}
+
 private fun ladeAuftraege(context: Context): List<Auftrag> {
     val raw = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
         .getString(AUFTRAEGE_KEY, "[]") ?: "[]"
@@ -475,7 +482,8 @@ private fun ladeAuftraege(context: Context): List<Auftrag> {
             stornoNummer = o.optString("stornoNummer", ""),
             protokoll = o.optString("protokoll", ""),
             zuschlagBezeichnung = o.optString("zuschlagBezeichnung", ""),
-            zuschlagBetrag = o.optDouble("zuschlagBetrag", 0.0)
+            zuschlagBetrag = o.optDouble("zuschlagBetrag", 0.0),
+            rechnungsbetragGespeichert = o.optDouble("rechnungsbetragGespeichert", 0.0)
         )
     }
 }
@@ -549,6 +557,7 @@ private fun speichereAuftraege(context: Context, liste: List<Auftrag>) {
             put("unterschriftDatum", a.unterschriftDatum)
             put("rechnungsnummer", a.rechnungsnummer)
             put("rechnungsdatum", a.rechnungsdatum)
+            put("rechnungsbetragGespeichert", a.rechnungsbetragGespeichert)
             put("rechnungUrsprungsnummer", a.rechnungUrsprungsnummer)
             put("rechnungsstatus", a.rechnungsstatus)
             put("rechnungKorrekturHinweis", a.rechnungKorrekturHinweis)
@@ -588,7 +597,7 @@ private fun auftragAlsJson(a: Auftrag): JSONObject = JSONObject().apply {
     put("terminDatum", a.terminDatum); put("terminUhrzeit", a.terminUhrzeit); put("notiz", a.notiz)
     put("fotosVorher", JSONArray(a.fotosVorher)); put("fotosNachher", JSONArray(a.fotosNachher))
     put("unterschriftPfad", a.unterschriftPfad); put("unterschriftDatum", a.unterschriftDatum)
-    put("rechnungsnummer", a.rechnungsnummer); put("rechnungsdatum", a.rechnungsdatum); put("rechnungUrsprungsnummer", a.rechnungUrsprungsnummer)
+    put("rechnungsnummer", a.rechnungsnummer); put("rechnungsdatum", a.rechnungsdatum); put("rechnungsbetragGespeichert", a.rechnungsbetragGespeichert); put("rechnungUrsprungsnummer", a.rechnungUrsprungsnummer)
     put("rechnungsstatus", a.rechnungsstatus); put("rechnungKorrekturHinweis", a.rechnungKorrekturHinweis); put("stornoNummer", a.stornoNummer); put("protokoll", a.protokoll)
     put("faelligAm", a.faelligAm); put("mahnung1Datum", a.mahnung1Datum); put("mahnung1Frist", a.mahnung1Frist); put("mahnung1Gebuehr", a.mahnung1Gebuehr); put("mahnung1Text", a.mahnung1Text); put("mahnung1Erstellt", a.mahnung1Erstellt)
     put("mahnung2Datum", a.mahnung2Datum); put("mahnung2Frist", a.mahnung2Frist); put("mahnung2Gebuehr", a.mahnung2Gebuehr); put("mahnung2Text", a.mahnung2Text); put("mahnung2Erstellt", a.mahnung2Erstellt)
@@ -2934,6 +2943,7 @@ fun KuemmeroApp() {
                                 status = "Abgerechnet",
                                 rechnungsnummer = rechnungsnummer,
                                 rechnungsdatum = rechnungsdatum,
+                                rechnungsbetragGespeichert = rechnungsEndbetrag(context, a),
                                 faelligAm = faelligAm
                             )
                         )
