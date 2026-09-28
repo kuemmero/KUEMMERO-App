@@ -4603,6 +4603,7 @@ fun KuemmeroApp() {
             LazyColumn(
                 state = listeState,
                 modifier = Modifier.padding(padding).padding(16.dp),
+                contentPadding = PaddingValues(bottom = 110.dp),
                 verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
                 if (auftragFormOffen) {
