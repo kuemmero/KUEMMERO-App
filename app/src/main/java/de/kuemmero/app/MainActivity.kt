@@ -1988,6 +1988,7 @@ fun KuemmeroApp() {
     var kvNummer by remember { mutableStateOf(kuemmeroNaechsteDokumentNummer("KV", Calendar.getInstance().get(Calendar.YEAR), kostenvoranschlaege.map { it.nummer })) }
     var kvDatum by remember { mutableStateOf(datumFormat.format(heute)) }
     var kvGueltigBis by remember { mutableStateOf(datumFormat.format(Calendar.getInstance().apply { add(Calendar.DAY_OF_YEAR, 14) }.time)) }
+    var kvGueltigBisPickerOffen by remember { mutableStateOf(false) }
     var kvKunde by remember { mutableStateOf("") }
     var kvStrasse by remember { mutableStateOf("") }
     var kvOrt by remember { mutableStateOf("") }
@@ -2093,6 +2094,41 @@ fun KuemmeroApp() {
         ).apply {
             datePicker.minDate = basisDatum.time
             setOnCancelListener { leistungsdatumPickerOffen = false }
+        }.show()
+    }
+
+    // Gültig-bis-Datum beim Kostenvoranschlag darf nicht frei eingegeben werden.
+    // Es wird ausschließlich über den Kalender gesetzt und muss nach dem Angebotsdatum liegen.
+    if (kvGueltigBisPickerOffen) {
+        val basisDatum = parseDeDatum(kvDatum.trim()) ?: Date()
+        val bestehendesDatum = parseDeDatum(kvGueltigBis.trim())
+        val startCal = Calendar.getInstance().apply {
+            time = bestehendesDatum ?: Calendar.getInstance().apply {
+                time = basisDatum
+                add(Calendar.DAY_OF_YEAR, 14)
+            }.time
+        }
+        if (startCal.time.before(basisDatum)) startCal.time = basisDatum
+        android.app.DatePickerDialog(
+            context,
+            { _, jahr, monat, tag ->
+                val ausgewaehlt = Calendar.getInstance().apply {
+                    set(jahr, monat, tag, 0, 0, 0)
+                    set(Calendar.MILLISECOND, 0)
+                }.time
+                if (!ausgewaehlt.after(basisDatum)) {
+                    android.widget.Toast.makeText(context, "„Gültig bis“ muss nach dem Datum des Kostenvoranschlags liegen.", android.widget.Toast.LENGTH_SHORT).show()
+                } else {
+                    kvGueltigBis = datumFormat.format(ausgewaehlt)
+                }
+                kvGueltigBisPickerOffen = false
+            },
+            startCal.get(Calendar.YEAR),
+            startCal.get(Calendar.MONTH),
+            startCal.get(Calendar.DAY_OF_MONTH)
+        ).apply {
+            datePicker.minDate = basisDatum.time + 24L * 60L * 60L * 1000L
+            setOnCancelListener { kvGueltigBisPickerOffen = false }
         }.show()
     }
 
@@ -4348,7 +4384,8 @@ fun KuemmeroApp() {
                                 kvBearbeiteIndex = null
                                 kvNummer = kuemmeroNaechsteDokumentNummer("KV", Calendar.getInstance().get(Calendar.YEAR), kostenvoranschlaege.map { it.nummer })
                                 kvDatum = datumFormat.format(Date())
-                                kvGueltigBis = ""
+                                kvGueltigBis = datumFormat.format(Calendar.getInstance().apply { add(Calendar.DAY_OF_YEAR, 14) }.time)
+                                kvGueltigBisPickerOffen = false
                                 kvKunde = a.kunde
                                 kvStrasse = a.kundenStrasse
                                 kvOrt = a.kundenOrt
@@ -5990,6 +6027,7 @@ fun KuemmeroApp() {
                                         kvNummer = kuemmeroNaechsteDokumentNummer("KV", Calendar.getInstance().get(Calendar.YEAR), kostenvoranschlaege.map { it.nummer })
                                         kvDatum = datumFormat.format(Date())
                                         kvGueltigBis = datumFormat.format(Calendar.getInstance().apply { add(Calendar.DAY_OF_YEAR, 14) }.time)
+                                        kvGueltigBisPickerOffen = false
                                         kvKunde = ""
                                         kvStrasse = ""
                                         kvOrt = ""
@@ -6163,7 +6201,17 @@ fun KuemmeroApp() {
                                         )
                                         OutlinedTextField(kvNummer, { kvNummer = it }, label = { Text("Nummer") }, colors = feldFarben, modifier = Modifier.fillMaxWidth())
                                         OutlinedTextField(kvDatum, { kvDatum = it }, label = { Text("Datum") }, colors = feldFarben, modifier = Modifier.fillMaxWidth())
-                                        OutlinedTextField(kvGueltigBis, { kvGueltigBis = it }, label = { Text("Gültig bis") }, colors = feldFarben, modifier = Modifier.fillMaxWidth())
+                                        OutlinedTextField(
+                                            value = kvGueltigBis,
+                                            onValueChange = { },
+                                            label = { Text("Gültig bis") },
+                                            readOnly = true,
+                                            colors = feldFarben,
+                                            modifier = Modifier.fillMaxWidth().clickable { kvGueltigBisPickerOffen = true },
+                                            trailingIcon = {
+                                                TextButton(onClick = { kvGueltigBisPickerOffen = true }) { Text("📅") }
+                                            }
+                                        )
                                         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                                             Text("Kunde", color = KuemmeroGreen, fontWeight = FontWeight.Bold)
                                             OutlinedButton(
