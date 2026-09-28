@@ -5905,7 +5905,7 @@ fun KuemmeroApp() {
                                         auftragFormOffen = false
                                         auftragDetailIndex = null
                                         bearbeiteIndex = null
-                                        statusFilter = "In Bearbeitung"
+                                        statusFilter = "Alle"
                                         zahlungsFilterOffen = false
                                         auftragsSuche = ""
                                     },
