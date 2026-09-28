@@ -295,6 +295,16 @@ fun BuchhaltungScreen(
     // Bei Regelbesteuerung wird die in der Rechnung ausgewiesene Umsatzsteuer hinzugerechnet.
     // Bei Kleinunternehmern bleibt der Rechnungsbetrag unverändert.
     fun rechnungsBetrag(a: Auftrag): Double {
+        // Nach dem Erstellen der Rechnung wird der tatsächlich ausgewiesene
+        // Endbetrag dauerhaft am Auftrag gespeichert. Die Buchhaltung darf
+        // diesen Betrag nicht erneut aus den Auftragsfeldern berechnen,
+        // weil sich dadurch Rundung, Zuschläge oder Steuerart unterscheiden können.
+        if (a.rechnungsbetragGespeichert > 0.0) {
+            return buchRunde2(a.rechnungsbetragGespeichert)
+        }
+
+        // Rückwärtskompatibilität für bereits vorhandene Rechnungen ohne
+        // gespeicherten Endbetrag.
         val netto = buchRunde2(
             (a.stunden * a.stundensatz) +
                     a.material +
