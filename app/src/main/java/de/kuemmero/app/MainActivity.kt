@@ -5912,7 +5912,7 @@ fun KuemmeroApp() {
                                     modifier = Modifier.weight(1f).heightIn(min = 56.dp),
                                     shape = RoundedCornerShape(18.dp),
                                     colors = ButtonDefaults.buttonColors(containerColor = KuemmeroGreen)
-                                ) { Text("⏱ Arbeitszeit", fontWeight = FontWeight.Bold) }
+                                ) { Text("🕒 Aufträge / Arbeitszeit", fontWeight = FontWeight.Bold) }
                             }
                         }
                         item {
