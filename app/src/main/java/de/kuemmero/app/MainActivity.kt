@@ -4912,7 +4912,6 @@ fun KuemmeroApp() {
                                     terminDatum.trim(), terminUhrzeit.trim(), notiz.trim(), fotosVorher, fotosNachher, unterschriftPfad, unterschriftDatum,
                                     bearbeiteIndex?.let { auftraege.getOrNull(it)?.rechnungsnummer } ?: "",
                                     bearbeiteIndex?.let { auftraege.getOrNull(it)?.rechnungsdatum } ?: "",
-                                    bearbeiteIndex?.let { auftraege.getOrNull(it)?.rechnungsbetragGespeichert } ?: 0.0,
                                     bearbeiteIndex?.let { auftraege.getOrNull(it)?.faelligAm } ?: "",
                                     bearbeiteIndex?.let { auftraege.getOrNull(it)?.mahnung1Datum } ?: "",
                                     bearbeiteIndex?.let { auftraege.getOrNull(it)?.mahnung1Frist } ?: "",
@@ -4932,6 +4931,7 @@ fun KuemmeroApp() {
                                     fahrtKm = zahl(fahrtKm),
                                     fahrtKostenProKm = fahrtSatz,
                                     protokoll = protokoll.trim(),
+                                    rechnungsbetragGespeichert = bearbeiteIndex?.let { auftraege.getOrNull(it)?.rechnungsbetragGespeichert } ?: 0.0,
                                     zuschlagBezeichnung = bearbeiteIndex?.let { old -> val alt = auftraege.getOrNull(old); if (alt != null && alt.leistungsdatum == leistungsdatum.trim().ifBlank { datum.trim() }) alt.zuschlagBezeichnung else leistungsZuschlag(context, leistungsdatum.trim().ifBlank { terminDatum.trim().ifBlank { datum.trim() } }).first } ?: leistungsZuschlag(context, leistungsdatum.trim().ifBlank { terminDatum.trim().ifBlank { datum.trim() } }).first,
                                     zuschlagBetrag = bearbeiteIndex?.let { old -> val alt = auftraege.getOrNull(old); if (alt != null && alt.leistungsdatum == leistungsdatum.trim().ifBlank { datum.trim() }) alt.zuschlagBetrag else leistungsZuschlag(context, leistungsdatum.trim().ifBlank { terminDatum.trim().ifBlank { datum.trim() } }).second } ?: leistungsZuschlag(context, leistungsdatum.trim().ifBlank { terminDatum.trim().ifBlank { datum.trim() } }).second
                                 )
