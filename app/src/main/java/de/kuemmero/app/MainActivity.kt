@@ -1900,23 +1900,6 @@ private fun FotoVorschau(
     }
 }
 
-@Composable
-private fun Rechnungsfeld(
-    label: String,
-    value: String,
-    feldFarben: TextFieldColors,
-    onValueChange: (String) -> Unit
-) {
-    OutlinedTextField(
-        value = value,
-        onValueChange = onValueChange,
-        label = { Text(label) },
-        modifier = Modifier.fillMaxWidth(),
-        singleLine = true,
-        colors = feldFarben
-    )
-}
-
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun KuemmeroApp() {
@@ -2904,11 +2887,7 @@ fun KuemmeroApp() {
                             fahrt = fahrtWert,
                             stundensatz = satzWert,
                             erstellungskosten = erstellungWert,
-                            zuschlagBetrag = zuschlagWert,
-                            // Eine neu ausgestellte Rechnung ist zunächst immer offen.
-                            // Der Zahlungsstatus wird erst durch „Als bezahlt markieren“ geändert.
-                            zahlungsstatus = if (a.rechnungsnummer.isBlank()) "Offen" else a.zahlungsstatus,
-                            bezahltAm = if (a.rechnungsnummer.isBlank()) "" else a.bezahltAm
+                            zuschlagBetrag = zuschlagWert
                         ))
                     }
                     speichereAuftraege(context, auftraege)
@@ -4127,22 +4106,34 @@ fun KuemmeroApp() {
                                 Text("Änderungen werden erst beim Speichern der Rechnung übernommen.",
                                     color = KuemmeroText, fontSize = 12.sp)
 
-                                Rechnungsfeld("Rechnungsnummer", rechnungPruefNummer, feldFarben) { rechnungPruefNummer = it }
-                                Rechnungsfeld("Rechnungsdatum", rechnungPruefDatum, feldFarben) { rechnungPruefDatum = it }
-                                Rechnungsfeld("Fällig am", rechnungPruefFaellig, feldFarben) { rechnungPruefFaellig = it }
-                                Rechnungsfeld("Leistungsdatum", rechnungPruefLeistungsdatum, feldFarben) { rechnungPruefLeistungsdatum = it }
-                                Rechnungsfeld("Kunde", rechnungPruefKunde, feldFarben) { rechnungPruefKunde = it }
-                                Rechnungsfeld("Straße / Hausnummer", rechnungPruefStrasse, feldFarben) { rechnungPruefStrasse = it }
-                                Rechnungsfeld("PLZ und Ort", rechnungPruefOrt, feldFarben) { rechnungPruefOrt = it }
-                                Rechnungsfeld("Leistung", rechnungPruefLeistung, feldFarben) { rechnungPruefLeistung = it }
+                                @Composable
+                                fun Rechnungsfeld(label: String, value: String, onValueChange: (String) -> Unit) {
+                                    OutlinedTextField(
+                                        value = value,
+                                        onValueChange = onValueChange,
+                                        label = { Text(label) },
+                                        modifier = Modifier.fillMaxWidth(),
+                                        singleLine = true,
+                                        colors = feldFarben
+                                    )
+                                }
+
+                                Rechnungsfeld("Rechnungsnummer", rechnungPruefNummer) { rechnungPruefNummer = it }
+                                Rechnungsfeld("Rechnungsdatum", rechnungPruefDatum) { rechnungPruefDatum = it }
+                                Rechnungsfeld("Fällig am", rechnungPruefFaellig) { rechnungPruefFaellig = it }
+                                Rechnungsfeld("Leistungsdatum", rechnungPruefLeistungsdatum) { rechnungPruefLeistungsdatum = it }
+                                Rechnungsfeld("Kunde", rechnungPruefKunde) { rechnungPruefKunde = it }
+                                Rechnungsfeld("Straße / Hausnummer", rechnungPruefStrasse) { rechnungPruefStrasse = it }
+                                Rechnungsfeld("PLZ und Ort", rechnungPruefOrt) { rechnungPruefOrt = it }
+                                Rechnungsfeld("Leistung", rechnungPruefLeistung) { rechnungPruefLeistung = it }
 
                                 Text("Beträge", fontWeight = FontWeight.Bold, color = KuemmeroGreen)
-                                Rechnungsfeld("Stunden", rechnungPruefStunden, feldFarben) { rechnungPruefStunden = it }
-                                Rechnungsfeld("Stundensatz €", rechnungPruefStundensatz, feldFarben) { rechnungPruefStundensatz = it }
-                                Rechnungsfeld("Material €", rechnungPruefMaterial, feldFarben) { rechnungPruefMaterial = it }
-                                Rechnungsfeld("Fahrtkosten €", rechnungPruefFahrt, feldFarben) { rechnungPruefFahrt = it }
-                                Rechnungsfeld("Erstellungskosten €", rechnungPruefErstellungskosten, feldFarben) { rechnungPruefErstellungskosten = it }
-                                Rechnungsfeld("Zuschlag €", rechnungPruefZuschlag, feldFarben) { rechnungPruefZuschlag = it }
+                                Rechnungsfeld("Stunden", rechnungPruefStunden) { rechnungPruefStunden = it }
+                                Rechnungsfeld("Stundensatz €", rechnungPruefStundensatz) { rechnungPruefStundensatz = it }
+                                Rechnungsfeld("Material €", rechnungPruefMaterial) { rechnungPruefMaterial = it }
+                                Rechnungsfeld("Fahrtkosten €", rechnungPruefFahrt) { rechnungPruefFahrt = it }
+                                Rechnungsfeld("Erstellungskosten €", rechnungPruefErstellungskosten) { rechnungPruefErstellungskosten = it }
+                                Rechnungsfeld("Zuschlag €", rechnungPruefZuschlag) { rechnungPruefZuschlag = it }
 
                                 val pruefGesamt = runde2(
                                     gesamtbetrag(
