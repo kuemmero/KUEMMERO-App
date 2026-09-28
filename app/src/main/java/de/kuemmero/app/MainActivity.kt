@@ -1970,6 +1970,8 @@ fun KuemmeroApp() {
     var statusFilter by remember { mutableStateOf("Alle") }
     var zahlungsFilterOffen by remember { mutableStateOf(false) }
     var kundenAkteName by remember { mutableStateOf<String?>(null) }
+    var kundeBearbeiteName by remember { mutableStateOf<String?>(null) }
+    var kundeLoeschName by remember { mutableStateOf<String?>(null) }
     var kalenderOffen by remember { mutableStateOf(false) }
     var terminBereichOffen by remember { mutableStateOf(false) }
     var notizBereichOffen by remember { mutableStateOf(false) }
@@ -3666,8 +3668,16 @@ fun KuemmeroApp() {
             },
             confirmButton = {
                 Button(onClick = {
-                    if (neuerKundenName.isBlank()) {
-                        android.widget.Toast.makeText(context, "Bitte Kundennamen eingeben.", 0).show()
+                    val fehlendeKundendaten = when {
+                        neuerKundenName.isBlank() -> "Bitte Kundennamen eingeben."
+                        neuerKundenAdresse.isBlank() -> "Bitte Straße und Hausnummer eingeben."
+                        neuerKundenOrt.isBlank() -> "Bitte PLZ und Ort eingeben."
+                        neuerKundenEmail.isNotBlank() && !android.util.Patterns.EMAIL_ADDRESS.matcher(neuerKundenEmail.trim()).matches() ->
+                            "Bitte eine gültige E-Mail-Adresse eingeben."
+                        else -> ""
+                    }
+                    if (fehlendeKundendaten.isNotBlank()) {
+                        android.widget.Toast.makeText(context, fehlendeKundendaten, 0).show()
                     } else {
                         val k = Kunde(
                             neuerKundenName.trim(),
@@ -3676,13 +3686,44 @@ fun KuemmeroApp() {
                             neuerKundenTelefon.trim(),
                             neuerKundenEmail.trim()
                         )
-                        speichereOderAktualisiereKunde(context, k)
+                        val alterName = kundeBearbeiteName
+                        val kundenListeNeu = kunden.toMutableList()
+                        if (alterName != null) {
+                            val index = kundenListeNeu.indexOfFirst { it.name.equals(alterName, ignoreCase = true) }
+                            val neuerNameDoppelt = kundenListeNeu.withIndex().any { it.index != index && it.value.name.equals(k.name, ignoreCase = true) }
+                            if (neuerNameDoppelt) {
+                                android.widget.Toast.makeText(context, "Dieser Kundenname ist bereits vorhanden.", 0).show()
+                                return@Button
+                            }
+                            if (index >= 0) {
+                                kundenListeNeu[index] = k
+                                // Bestehende Aufträge und Kostenvoranschläge auf die geänderten Kundendaten umstellen.
+                                auftraege = auftraege.map { a ->
+                                    if (a.kunde.equals(alterName, ignoreCase = true)) a.copy(kunde = k.name, kundenStrasse = k.adresse, kundenOrt = k.ort) else a
+                                }
+                                kostenvoranschlaege = kostenvoranschlaege.map { kv ->
+                                    if (kv.kunde.equals(alterName, ignoreCase = true)) kv.copy(kunde = k.name, kundenStrasse = k.adresse, kundenOrt = k.ort) else kv
+                                }
+                                speichereAuftraege(context, auftraege)
+                                speichereKostenvoranschlaege(context, kostenvoranschlaege)
+                            }
+                        } else {
+                            val nameVorhanden = kundenListeNeu.any { it.name.equals(k.name, ignoreCase = true) }
+                            if (nameVorhanden) {
+                                android.widget.Toast.makeText(context, "Dieser Kundenname ist bereits vorhanden.", 0).show()
+                                return@Button
+                            }
+                            kundenListeNeu.add(k)
+                        }
+                        speichereKunden(context, kundenListeNeu)
                         kunden = ladeKunden(context)
                         kunde = k.name
                         strasse = k.adresse
                         ort = k.ort
+                        kundeBearbeiteName = null
                         neuerKundeDialog = false
-                        android.widget.Toast.makeText(context, "Kunde gespeichert.", 0).show()
+                        kundenAkteName = k.name
+                        android.widget.Toast.makeText(context, if (alterName != null) "Kunde geändert." else "Kunde gespeichert.", 0).show()
                     }
                 }, colors = ButtonDefaults.buttonColors(containerColor = KuemmeroGreen)) { Text("Speichern", color = Color.White, fontWeight = FontWeight.Bold) }
             },
@@ -3825,6 +3866,32 @@ fun KuemmeroApp() {
                     if (kundeAkte?.ort?.isNotBlank() == true) Text("Ort: ${kundeAkte.ort}")
                     if (kundeAkte?.telefon?.isNotBlank() == true) Text("Telefon: ${kundeAkte.telefon}")
                     if (kundeAkte?.email?.isNotBlank() == true) Text("E-Mail: ${kundeAkte.email}")
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        OutlinedButton(
+                            onClick = {
+                                kundeAkte?.let { k ->
+                                    kundeBearbeiteName = k.name
+                                    neuerKundenName = k.name
+                                    neuerKundenAdresse = k.adresse
+                                    neuerKundenOrt = k.ort
+                                    neuerKundenTelefon = k.telefon
+                                    neuerKundenEmail = k.email
+                                    kundenAkteName = null
+                                    neuerKundeDialog = true
+                                }
+                            },
+                            modifier = Modifier.weight(1f),
+                            colors = ButtonDefaults.outlinedButtonColors(contentColor = KuemmeroGreen)
+                        ) { Text("✏️ Ändern") }
+                        OutlinedButton(
+                            onClick = { kundeAkte?.let { kundeLoeschName = it.name } },
+                            modifier = Modifier.weight(1f),
+                            colors = ButtonDefaults.outlinedButtonColors(contentColor = KuemmeroError)
+                        ) { Text("🗑 Löschen") }
+                    }
                     HorizontalDivider()
                     Text("Aufträge: ${kundenAuftraege.size}", fontWeight = FontWeight.Bold)
                     Text("Umsatz: ${euro(kundenAuftraege.sumOf { runde2(gesamtbetrag(it.stunden, it.material, it.fahrt, it.stundensatz, it.erstellungskosten) + it.zuschlagBetrag) })}")
@@ -3859,6 +3926,48 @@ fun KuemmeroApp() {
                 }
             },
             confirmButton = { TextButton(onClick = { kundenAkteName = null }) { Text("Schließen") } }
+        )
+    }
+
+    if (kundeLoeschName != null) {
+        val loeschName = kundeLoeschName!!
+        val anzahlAuftraege = auftraege.count { it.kunde.equals(loeschName, ignoreCase = true) }
+        AlertDialog(
+            onDismissRequest = { kundeLoeschName = null },
+            containerColor = Color.White,
+            title = { Text("Kunde löschen?", color = KuemmeroError, fontWeight = FontWeight.Bold) },
+            text = {
+                Text(
+                    if (anzahlAuftraege > 0) {
+                        "Soll der Kunde "$loeschName" wirklich gelöscht werden? Die $anzahlAuftraege zugehörigen Aufträge bleiben zur Dokumentation erhalten."
+                    } else {
+                        "Soll der Kunde "$loeschName" wirklich gelöscht werden?"
+                    }
+                )
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        val neueKunden = kunden.filterNot { it.name.equals(loeschName, ignoreCase = true) }
+                        speichereKunden(context, neueKunden)
+                        kunden = neueKunden
+                        if (kunde.equals(loeschName, ignoreCase = true)) {
+                            kunde = ""
+                            strasse = ""
+                            ort = ""
+                        }
+                        kundeLoeschName = null
+                        kundenAkteName = null
+                        android.widget.Toast.makeText(context, "Kunde gelöscht. Aufträge bleiben erhalten.", 0).show()
+                    },
+                    colors = ButtonDefaults.textButtonColors(contentColor = KuemmeroError)
+                ) { Text("Löschen", fontWeight = FontWeight.Bold) }
+            },
+            dismissButton = {
+                TextButton(onClick = { kundeLoeschName = null }, colors = ButtonDefaults.textButtonColors(contentColor = KuemmeroGreen)) {
+                    Text("Abbrechen")
+                }
+            }
         )
     }
 
@@ -6034,6 +6143,27 @@ fun KuemmeroApp() {
                                         if (k.telefon.isNotBlank()) Text("☎ ${k.telefon}", color = KuemmeroText)
                                         if (k.email.isNotBlank()) Text("✉ ${k.email}", color = KuemmeroText)
                                         Text("Aufträge: ${auftraege.count { it.kunde == k.name }}", color = KuemmeroText)
+                                        Row(
+                                            modifier = Modifier.fillMaxWidth(),
+                                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                        ) {
+                                            TextButton(
+                                                onClick = {
+                                                    kundeBearbeiteName = k.name
+                                                    neuerKundenName = k.name
+                                                    neuerKundenAdresse = k.adresse
+                                                    neuerKundenOrt = k.ort
+                                                    neuerKundenTelefon = k.telefon
+                                                    neuerKundenEmail = k.email
+                                                    neuerKundeDialog = true
+                                                },
+                                                colors = ButtonDefaults.textButtonColors(contentColor = KuemmeroGreen)
+                                            ) { Text("✏️ Ändern", fontWeight = FontWeight.Bold) }
+                                            TextButton(
+                                                onClick = { kundeLoeschName = k.name },
+                                                colors = ButtonDefaults.textButtonColors(contentColor = KuemmeroError)
+                                            ) { Text("🗑 Löschen", fontWeight = FontWeight.Bold) }
+                                        }
                                         Text("Kundenakte öffnen →", color = KuemmeroGreen, fontWeight = FontWeight.Bold)
                                     }
                                 }
