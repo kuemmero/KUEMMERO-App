@@ -5982,7 +5982,13 @@ fun KuemmeroApp() {
                                                     kvBearbeiteIndex = index
                                                     kvNummer = k.nummer
                                                     kvDatum = k.datum
-                                                    kvGueltigBis = k.gueltigBis
+                                                    val kvBasisDatum = try { datumFormat.parse(k.datum) ?: Date() } catch (_: Exception) { Date() }
+                                                    val kvGespeichertesGueltigBis = try { datumFormat.parse(k.gueltigBis) } catch (_: Exception) { null }
+                                                    kvGueltigBis = if (kvGespeichertesGueltigBis == null || !kvGespeichertesGueltigBis.after(kvBasisDatum)) {
+                                                        datumFormat.format(Calendar.getInstance().apply { time = kvBasisDatum; add(Calendar.DAY_OF_YEAR, 14) }.time)
+                                                    } else {
+                                                        k.gueltigBis
+                                                    }
                                                     kvKunde = k.kunde
                                                     kvStrasse = k.kundenStrasse
                                                     kvOrt = k.kundenOrt
@@ -6192,8 +6198,12 @@ fun KuemmeroApp() {
                                         )
                                         Button(
                                             onClick = {
+                                                val kvDatumParsed = try { datumFormat.parse(kvDatum.trim()) } catch (_: Exception) { null }
+                                                val kvGueltigBisParsed = try { datumFormat.parse(kvGueltigBis.trim()) } catch (_: Exception) { null }
                                                 if (kvKunde.isBlank()) {
                                                     android.widget.Toast.makeText(context, "Bitte Kundennamen eingeben.", 0).show()
+                                                } else if (kvDatumParsed == null || kvGueltigBisParsed == null || !kvGueltigBisParsed.after(kvDatumParsed)) {
+                                                    android.widget.Toast.makeText(context, "Gültig bis muss nach dem Datum liegen.", android.widget.Toast.LENGTH_LONG).show()
                                                 } else {
                                                     val k = Kostenvoranschlag(
                                                         kvNummer.trim(), kvDatum.trim(), kvGueltigBis.trim(),
