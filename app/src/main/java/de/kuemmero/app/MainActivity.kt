@@ -3939,9 +3939,9 @@ fun KuemmeroApp() {
             text = {
                 Text(
                     if (anzahlAuftraege > 0) {
-                        "Soll der Kunde "$loeschName" wirklich gelöscht werden? Die $anzahlAuftraege zugehörigen Aufträge bleiben zur Dokumentation erhalten."
+                        "Soll der Kunde \"$loeschName\" wirklich gelöscht werden? Die $anzahlAuftraege zugehörigen Aufträge bleiben zur Dokumentation erhalten."
                     } else {
-                        "Soll der Kunde "$loeschName" wirklich gelöscht werden?"
+                        "Soll der Kunde \"$loeschName\" wirklich gelöscht werden?"
                     }
                 )
             },
