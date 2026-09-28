@@ -51,6 +51,9 @@ private val BuchGray = Color(0xFFF0F3F5)
 private fun euro(wert: Double): String =
     String.format(Locale.GERMANY, "%.2f €", wert)
 
+private fun buchRunde2(wert: Double): Double =
+    kotlin.math.round(wert * 100.0) / 100.0
+
 data class Buchung(
     val typ: String,
     val datum: String,
@@ -292,7 +295,7 @@ fun BuchhaltungScreen(
     // Bei Regelbesteuerung wird die in der Rechnung ausgewiesene Umsatzsteuer hinzugerechnet.
     // Bei Kleinunternehmern bleibt der Rechnungsbetrag unverändert.
     fun rechnungsBetrag(a: Auftrag): Double {
-        val netto = runde2(
+        val netto = buchRunde2(
             (a.stunden * a.stundensatz) +
                     a.material +
                     a.fahrt +
@@ -302,7 +305,7 @@ fun BuchhaltungScreen(
         val steuerart = context.getSharedPreferences(BUCHHALTUNG_PREFS_NAME, Context.MODE_PRIVATE)
             .getString("steuerart", "") ?: ""
         return if (steuerart == "Regelbesteuerung (19 %)") {
-            runde2(netto * 1.19)
+            buchRunde2(netto * 1.19)
         } else {
             netto
         }
