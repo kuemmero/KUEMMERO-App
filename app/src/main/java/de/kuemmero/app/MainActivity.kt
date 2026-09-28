@@ -1929,6 +1929,7 @@ fun KuemmeroApp() {
         mutableStateOf(kuemmeroNaechsteDokumentNummer("AUF", Calendar.getInstance().get(Calendar.YEAR), auftraege.map { it.nummer }))
     }
     var datum by remember { mutableStateOf(datumFormat.format(heute)) }
+    var datumPickerOffen by remember { mutableStateOf(false) }
     var leistungsdatum by remember { mutableStateOf("") }
     var leistungsdatumPickerOffen by remember { mutableStateOf(false) }
     var gueltigBis by remember {
@@ -2065,6 +2066,31 @@ fun KuemmeroApp() {
         focusedLabelColor = KuemmeroGreen,
         unfocusedLabelColor = KuemmeroText
     )
+
+    // Auftragsdatum darf nicht frei eingegeben werden. Es wird ausschließlich
+    // über den Kalender ausgewählt, damit keine ungültigen Datumswerte entstehen.
+    if (datumPickerOffen) {
+        val bestehendesDatum = parseDeDatum(datum.trim())
+        val startCal = Calendar.getInstance().apply {
+            time = bestehendesDatum ?: Date()
+        }
+        android.app.DatePickerDialog(
+            context,
+            { _, jahr, monat, tag ->
+                val ausgewaehlt = Calendar.getInstance().apply {
+                    set(jahr, monat, tag, 0, 0, 0)
+                    set(Calendar.MILLISECOND, 0)
+                }.time
+                datum = datumFormat.format(ausgewaehlt)
+                datumPickerOffen = false
+            },
+            startCal.get(Calendar.YEAR),
+            startCal.get(Calendar.MONTH),
+            startCal.get(Calendar.DAY_OF_MONTH)
+        ).apply {
+            setOnCancelListener { datumPickerOffen = false }
+        }.show()
+    }
 
     // Leistungsdatum darf nicht frei eingegeben werden. Es wird ausschließlich
     // über den Kalender ausgewählt, damit keine ungültigen Datumswerte entstehen.
@@ -4567,10 +4593,15 @@ fun KuemmeroApp() {
                 }
                 item {
                     OutlinedTextField(
-                        datum, { datum = it },
+                        value = datum,
+                        onValueChange = { },
+                        readOnly = true,
                         label = { Text("Datum") },
                         colors = feldFarben,
-                        modifier = Modifier.fillMaxWidth()
+                        modifier = Modifier.fillMaxWidth().clickable { datumPickerOffen = true },
+                        trailingIcon = {
+                            TextButton(onClick = { datumPickerOffen = true }) { Text("📅") }
+                        }
                     )
                 }
                 item {
