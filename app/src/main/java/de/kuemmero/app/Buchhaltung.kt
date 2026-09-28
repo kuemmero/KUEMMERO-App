@@ -288,12 +288,25 @@ fun BuchhaltungScreen(
     val offeneRechnungen = rechnungen.count(::rechnungIstOffen)
     val offeneAuftraege = auftraege.filter { it.rechnungsnummer.isBlank() && it.status == "Erledigt" }
 
-    fun rechnungsBetrag(a: Auftrag): Double =
-        (a.stunden * a.stundensatz) +
-                a.material +
-                a.fahrt +
-                a.zuschlagBetrag +
-                a.erstellungskosten
+    // Rechnungsbetrag der Buchhaltung entspricht dem tatsächlich zu zahlenden Betrag.
+    // Bei Regelbesteuerung wird die in der Rechnung ausgewiesene Umsatzsteuer hinzugerechnet.
+    // Bei Kleinunternehmern bleibt der Rechnungsbetrag unverändert.
+    fun rechnungsBetrag(a: Auftrag): Double {
+        val netto = runde2(
+            (a.stunden * a.stundensatz) +
+                    a.material +
+                    a.fahrt +
+                    a.zuschlagBetrag +
+                    a.erstellungskosten
+        )
+        val steuerart = context.getSharedPreferences(BUCHHALTUNG_PREFS_NAME, Context.MODE_PRIVATE)
+            .getString("steuerart", "") ?: ""
+        return if (steuerart == "Regelbesteuerung (19 %)") {
+            runde2(netto * 1.19)
+        } else {
+            netto
+        }
+    }
 
     val rechnungsUmsatz = rechnungen.sumOf { rechnungsBetrag(it) }
     val bezahlteRechnungsSumme = rechnungen

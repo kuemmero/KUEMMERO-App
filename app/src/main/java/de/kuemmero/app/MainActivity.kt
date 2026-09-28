@@ -4135,7 +4135,7 @@ fun KuemmeroApp() {
                                 Rechnungsfeld("Erstellungskosten €", rechnungPruefErstellungskosten) { rechnungPruefErstellungskosten = it }
                                 Rechnungsfeld("Zuschlag €", rechnungPruefZuschlag) { rechnungPruefZuschlag = it }
 
-                                val pruefGesamt = runde2(
+                                val pruefNetto = runde2(
                                     gesamtbetrag(
                                         zahl(rechnungPruefStunden),
                                         zahl(rechnungPruefMaterial),
@@ -4144,10 +4144,22 @@ fun KuemmeroApp() {
                                         zahl(rechnungPruefErstellungskosten)
                                     ) + zahl(rechnungPruefZuschlag)
                                 )
+                                val pruefSteuerart = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+                                    .getString(STEUERART_KEY, "") ?: ""
+                                val pruefUst = if (pruefSteuerart == STEUERART_REGELBESTEUERUNG) umsatzsteuerBetrag(pruefNetto) else 0.0
+                                val pruefEndbetrag = if (pruefSteuerart == STEUERART_REGELBESTEUERUNG) runde2(pruefNetto + pruefUst) else pruefNetto
                                 HorizontalDivider(color = KuemmeroGreenLight)
-                                Text("Gesamtbetrag: ${euro(pruefGesamt)}",
-                                    style = MaterialTheme.typography.titleLarge,
-                                    color = KuemmeroGreen, fontWeight = FontWeight.Bold)
+                                if (pruefSteuerart == STEUERART_REGELBESTEUERUNG) {
+                                    Text("Netto: ${euro(pruefNetto)}", color = KuemmeroText)
+                                    Text("Umsatzsteuer 19 %: ${euro(pruefUst)}", color = KuemmeroText)
+                                    Text("Gesamt inkl. Umsatzsteuer: ${euro(pruefEndbetrag)}",
+                                        style = MaterialTheme.typography.titleLarge,
+                                        color = KuemmeroGreen, fontWeight = FontWeight.Bold)
+                                } else {
+                                    Text("Gesamtbetrag: ${euro(pruefEndbetrag)}",
+                                        style = MaterialTheme.typography.titleLarge,
+                                        color = KuemmeroGreen, fontWeight = FontWeight.Bold)
+                                }
                             }
                         }
                     }
