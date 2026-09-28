@@ -2175,6 +2175,21 @@ fun KuemmeroApp() {
         }
     }
 
+    var auftragFuerPdf by remember { mutableStateOf<Auftrag?>(null) }
+    var rechnungFuerIndex by remember { mutableStateOf<Int?>(null) }
+    var rechnungPruefOffen by remember { mutableStateOf(false) }
+    var rechnungPruefNummer by remember { mutableStateOf("") }
+    var rechnungPruefDatum by remember { mutableStateOf("") }
+    var rechnungPruefFaellig by remember { mutableStateOf("") }
+    var rechnungPruefLeistungsdatum by remember { mutableStateOf("") }
+    var rechnungPruefLeistung by remember { mutableStateOf("") }
+    var rechnungPruefStunden by remember { mutableStateOf("") }
+    var rechnungPruefMaterial by remember { mutableStateOf("") }
+    var rechnungPruefFahrt by remember { mutableStateOf("") }
+    var rechnungPruefStundensatz by remember { mutableStateOf("") }
+    var rechnungPruefErstellungskosten by remember { mutableStateOf("") }
+    var rechnungPruefZuschlag by remember { mutableStateOf("") }
+
     LaunchedEffect(rechnungFuerIndex) {
         val a = rechnungFuerIndex?.let { auftraege.getOrNull(it) }
         if (a != null) {
@@ -2194,21 +2209,6 @@ fun KuemmeroApp() {
             rechnungPruefOffen = false
         }
     }
-
-    var auftragFuerPdf by remember { mutableStateOf<Auftrag?>(null) }
-    var rechnungFuerIndex by remember { mutableStateOf<Int?>(null) }
-    var rechnungPruefOffen by remember { mutableStateOf(false) }
-    var rechnungPruefNummer by remember { mutableStateOf("") }
-    var rechnungPruefDatum by remember { mutableStateOf("") }
-    var rechnungPruefFaellig by remember { mutableStateOf("") }
-    var rechnungPruefLeistungsdatum by remember { mutableStateOf("") }
-    var rechnungPruefLeistung by remember { mutableStateOf("") }
-    var rechnungPruefStunden by remember { mutableStateOf("") }
-    var rechnungPruefMaterial by remember { mutableStateOf("") }
-    var rechnungPruefFahrt by remember { mutableStateOf("") }
-    var rechnungPruefStundensatz by remember { mutableStateOf("") }
-    var rechnungPruefErstellungskosten by remember { mutableStateOf("") }
-    var rechnungPruefZuschlag by remember { mutableStateOf("") }
 
     // Auftragsnummer immer automatisch vorhanden halten. Auch ältere/leere Aufträge
     // bekommen beim Öffnen des Formulars eine eindeutige Nummer.
