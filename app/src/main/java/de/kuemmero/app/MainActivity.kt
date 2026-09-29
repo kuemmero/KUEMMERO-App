@@ -2930,6 +2930,9 @@ fun KuemmeroApp() {
             .getString(BACKUP_URI_KEY, null)
             ?.isNotBlank() == true
         AlertDialog(
+            containerColor = Color.White,
+            titleContentColor = KuemmeroGreen,
+            textContentColor = KuemmeroText,
             onDismissRequest = { sicherungBestaetigung = false },
             title = { Text("Sicherung bestätigen") },
             text = {
@@ -2957,6 +2960,9 @@ fun KuemmeroApp() {
 
     if (dropboxBestaetigung) {
         AlertDialog(
+            containerColor = Color.White,
+            titleContentColor = KuemmeroGreen,
+            textContentColor = KuemmeroText,
             onDismissRequest = { dropboxBestaetigung = false },
             title = { Text("Dropbox-Sicherung bestätigen") },
             text = {
@@ -2985,6 +2991,12 @@ fun KuemmeroApp() {
             val leistungsdatumOk = a.leistungsdatum.isNotBlank() || a.terminDatum.isNotBlank() || a.datum.isNotBlank()
 
             AlertDialog(
+
+                containerColor = Color.White,
+
+                titleContentColor = KuemmeroGreen,
+
+                textContentColor = KuemmeroText,
                 onDismissRequest = { abschlusspruefungIndex = null },
                 title = { Text("Auftrag abschließen") },
                 text = {
@@ -3019,6 +3031,9 @@ fun KuemmeroApp() {
 
     if (arbeitszeitAendernIndex != null) {
         AlertDialog(
+            containerColor = Color.White,
+            titleContentColor = KuemmeroGreen,
+            textContentColor = KuemmeroText,
             onDismissRequest = { arbeitszeitAendernIndex = null },
             title = { Text("Arbeitszeit ändern") },
             text = {
@@ -3054,6 +3069,9 @@ fun KuemmeroApp() {
 
     if (kvLoeschIndex != null) {
         AlertDialog(
+            containerColor = Color.White,
+            titleContentColor = KuemmeroGreen,
+            textContentColor = KuemmeroText,
             onDismissRequest = { kvLoeschIndex = null },
             title = { Text("Kostenvoranschlag löschen?") },
             text = { Text("Soll der Kostenvoranschlag wirklich gelöscht werden?") },
@@ -3077,6 +3095,9 @@ fun KuemmeroApp() {
 
     if (mahnungEinstellungenOffen) {
         AlertDialog(
+            containerColor = Color.White,
+            titleContentColor = KuemmeroGreen,
+            textContentColor = KuemmeroText,
             onDismissRequest = { mahnungEinstellungenOffen = false },
             title = { Text("⚙ Mahnung-Einstellungen") },
             text = {
@@ -3222,6 +3243,9 @@ fun KuemmeroApp() {
 
     if (mahnungSpeicherBestaetigungOffen) {
         AlertDialog(
+            containerColor = Color.White,
+            titleContentColor = KuemmeroGreen,
+            textContentColor = KuemmeroText,
             onDismissRequest = { mahnungSpeicherBestaetigungOffen = false },
             title = { Text("Mahnung wirklich speichern?") },
             text = {
@@ -3254,6 +3278,9 @@ fun KuemmeroApp() {
 
     if (testMahnung1DialogOffen && mahnungTestmodus) {
         AlertDialog(
+            containerColor = Color.White,
+            titleContentColor = KuemmeroGreen,
+            textContentColor = KuemmeroText,
             onDismissRequest = { testMahnung1DialogOffen = false },
             title = { Text("Test-Mahnung erstellen / ändern") },
             text = {
@@ -3284,6 +3311,9 @@ fun KuemmeroApp() {
 
     if (testMahnungLoeschBestaetigung && mahnungTestmodus) {
         AlertDialog(
+            containerColor = Color.White,
+            titleContentColor = KuemmeroGreen,
+            textContentColor = KuemmeroText,
             onDismissRequest = { testMahnungLoeschBestaetigung = false },
             title = { Text("Test-Mahnung löschen?") },
             text = { Text("Nur die Test-Mahnung wird entfernt. Echte Rechnungsdaten bleiben unverändert.") },
@@ -3304,6 +3334,9 @@ fun KuemmeroApp() {
 
     if (mahnung1Index != null) {
         AlertDialog(
+            containerColor = Color.White,
+            titleContentColor = KuemmeroGreen,
+            textContentColor = KuemmeroText,
             onDismissRequest = { mahnung1Index = null },
             title = { Text("1. Mahnung erstellen") },
             text = {
@@ -3361,6 +3394,9 @@ fun KuemmeroApp() {
 
     if (mahnung2Index != null) {
         AlertDialog(
+            containerColor = Color.White,
+            titleContentColor = KuemmeroGreen,
+            textContentColor = KuemmeroText,
             onDismissRequest = { mahnung2Index = null },
             title = { Text("2. Mahnung erstellen") },
             text = {
@@ -3407,6 +3443,9 @@ fun KuemmeroApp() {
         if (vorgang != null) {
             val istStorno = rechnungVorgangTyp == "STORNO"
             AlertDialog(
+                containerColor = Color.White,
+                titleContentColor = KuemmeroGreen,
+                textContentColor = KuemmeroText,
                 onDismissRequest = { rechnungVorgangIndex = null; rechnungVorgangTyp = "" },
                 title = { Text(if (istStorno) "Rechnung stornieren" else "Rechnung berichtigen") },
                 text = {
@@ -3429,6 +3468,9 @@ fun KuemmeroApp() {
 
     if (rechnungNummerEditIndex != null) {
         AlertDialog(
+            containerColor = Color.White,
+            titleContentColor = KuemmeroGreen,
+            textContentColor = KuemmeroText,
             onDismissRequest = { rechnungNummerEditIndex = null },
             title = { Text("Rechnungsnummer korrigieren") },
             text = {
@@ -3644,6 +3686,9 @@ fun KuemmeroApp() {
         val uri = fotoVorschauUri!!
         val bitmap = remember(uri) { ladeFotoBitmap(context, uri) }
         AlertDialog(
+            containerColor = Color.White,
+            titleContentColor = KuemmeroGreen,
+            textContentColor = KuemmeroText,
             onDismissRequest = { fotoVorschauUri = null },
             title = { Text("Auftragsfoto") },
             text = {
@@ -3676,6 +3721,9 @@ fun KuemmeroApp() {
 
     if (unterschriftDialog) {
         AlertDialog(
+            containerColor = Color.White,
+            titleContentColor = KuemmeroGreen,
+            textContentColor = KuemmeroText,
             onDismissRequest = { unterschriftDialog = false },
             title = { Text("Kunden-Unterschrift") },
             text = {
@@ -3761,6 +3809,9 @@ fun KuemmeroApp() {
         val kundeAkte = kunden.firstOrNull { it.name.equals(name, ignoreCase = true) }
         val kundenAuftraege = auftraege.filter { it.kunde.equals(name, ignoreCase = true) }
         AlertDialog(
+            containerColor = Color.White,
+            titleContentColor = KuemmeroGreen,
+            textContentColor = KuemmeroText,
             onDismissRequest = { kundenAkteName = null },
             title = { Text("Kundenakte") },
             text = {
@@ -3833,12 +3884,15 @@ fun KuemmeroApp() {
                     }
                 }
             },
-            confirmButton = { TextButton(onClick = { kalenderOffen = false }) { Text("Schließen") } }
+            confirmButton = { TextButton(onClick = { kalenderOffen = false }, colors = ButtonDefaults.textButtonColors(contentColor = KuemmeroGreen)) { Text("Schließen") } }
         )
     }
 
     if (papierkorbOffen) {
         AlertDialog(
+            containerColor = Color.White,
+            titleContentColor = KuemmeroGreen,
+            textContentColor = KuemmeroText,
             onDismissRequest = { papierkorbOffen = false },
             title = { Text("🗑 Papierkorb") },
             text = {
@@ -3888,6 +3942,9 @@ fun KuemmeroApp() {
 
     if (papierkorbLoeschBestaetigung) {
         AlertDialog(
+            containerColor = Color.White,
+            titleContentColor = KuemmeroGreen,
+            textContentColor = KuemmeroText,
             onDismissRequest = { papierkorbLoeschBestaetigung = false },
             title = { Text("Papierkorb endgültig leeren?") },
             text = { Text("Alle gelöschten Aufträge werden endgültig entfernt.") },
@@ -3905,6 +3962,9 @@ fun KuemmeroApp() {
 
     loeschIndex?.let { index ->
         AlertDialog(
+            containerColor = Color.White,
+            titleContentColor = KuemmeroGreen,
+            textContentColor = KuemmeroText,
             onDismissRequest = { loeschIndex = null },
             title = { Text("Auftrag löschen?") },
             text = { Text("Soll der Auftrag wirklich gelöscht werden?") },
