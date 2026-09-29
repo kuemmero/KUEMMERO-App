@@ -203,11 +203,11 @@ data class Auftrag(
     val stornoNummer: String = "",
     // Eigenes Auftragsprotokoll: Verlauf/Arbeitsschritte/Bemerkungen zum Auftrag.
     val protokoll: String = "",
-    // Final geprüfter Rechnungsbetrag; bleibt nach Rechnungskorrekturen als Belegwert erhalten.
-    val rechnungsbetragGespeichert: Double = 0.0,
     // Zum Zeitpunkt des Auftrags festgehaltener Wochenend-/Feiertagszuschlag.
     val zuschlagBezeichnung: String = "",
-    val zuschlagBetrag: Double = 0.0
+    val zuschlagBetrag: Double = 0.0,
+    // Endbetrag der tatsächlich erzeugten Rechnung, inklusive USt falls Regelbesteuerung.
+    val rechnungsbetragGespeichert: Double = 0.0
 )
 
 private const val PREFS_NAME = "kuemmero_speicher"
@@ -422,6 +422,11 @@ private fun gesamtbetrag(stunden: Double, material: Double, fahrt: Double, stund
 private fun euro(value: Double): String =
     String.format(Locale.GERMANY, "%.2f €", runde2(value))
 
+private fun rechnungsEndbetrag(context: Context, a: Auftrag): Double {
+    val netto = runde2(gesamtbetrag(a.stunden, a.material, a.fahrt, a.stundensatz, a.erstellungskosten) + a.zuschlagBetrag)
+    return if (steuerartIstRegelbesteuerung(context)) runde2(netto + umsatzsteuerBetrag(netto)) else netto
+}
+
 private fun ladeAuftraege(context: Context): List<Auftrag> {
     val raw = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
         .getString(AUFTRAEGE_KEY, "[]") ?: "[]"
@@ -469,7 +474,6 @@ private fun ladeAuftraege(context: Context): List<Auftrag> {
             o.optLong("arbeitsSekunden", 0L),
             o.optBoolean("arbeitszeitUebernommen", false),
             o.optDouble("erstellungskosten", 0.0),
-            leistungsdatum = o.optString("leistungsdatum", ""),
             fahrtKm = o.optDouble("fahrtKm", 0.0),
             fahrtKostenProKm = o.optDouble("fahrtKostenProKm", context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE).getString(FAHRTKOSTEN_PRO_KM_KEY, "0.40")?.replace(",", ".")?.toDoubleOrNull() ?: 0.40),
             rechnungUrsprungsnummer = o.optString("rechnungUrsprungsnummer", ""),
@@ -478,7 +482,8 @@ private fun ladeAuftraege(context: Context): List<Auftrag> {
             stornoNummer = o.optString("stornoNummer", ""),
             protokoll = o.optString("protokoll", ""),
             zuschlagBezeichnung = o.optString("zuschlagBezeichnung", ""),
-            zuschlagBetrag = o.optDouble("zuschlagBetrag", 0.0)
+            zuschlagBetrag = o.optDouble("zuschlagBetrag", 0.0),
+            rechnungsbetragGespeichert = o.optDouble("rechnungsbetragGespeichert", 0.0)
         )
     }
 }
@@ -552,6 +557,7 @@ private fun speichereAuftraege(context: Context, liste: List<Auftrag>) {
             put("unterschriftDatum", a.unterschriftDatum)
             put("rechnungsnummer", a.rechnungsnummer)
             put("rechnungsdatum", a.rechnungsdatum)
+            put("rechnungsbetragGespeichert", a.rechnungsbetragGespeichert)
             put("rechnungUrsprungsnummer", a.rechnungUrsprungsnummer)
             put("rechnungsstatus", a.rechnungsstatus)
             put("rechnungKorrekturHinweis", a.rechnungKorrekturHinweis)
@@ -591,7 +597,7 @@ private fun auftragAlsJson(a: Auftrag): JSONObject = JSONObject().apply {
     put("terminDatum", a.terminDatum); put("terminUhrzeit", a.terminUhrzeit); put("notiz", a.notiz)
     put("fotosVorher", JSONArray(a.fotosVorher)); put("fotosNachher", JSONArray(a.fotosNachher))
     put("unterschriftPfad", a.unterschriftPfad); put("unterschriftDatum", a.unterschriftDatum)
-    put("rechnungsnummer", a.rechnungsnummer); put("rechnungsdatum", a.rechnungsdatum); put("rechnungUrsprungsnummer", a.rechnungUrsprungsnummer)
+    put("rechnungsnummer", a.rechnungsnummer); put("rechnungsdatum", a.rechnungsdatum); put("rechnungsbetragGespeichert", a.rechnungsbetragGespeichert); put("rechnungUrsprungsnummer", a.rechnungUrsprungsnummer)
     put("rechnungsstatus", a.rechnungsstatus); put("rechnungKorrekturHinweis", a.rechnungKorrekturHinweis); put("stornoNummer", a.stornoNummer); put("protokoll", a.protokoll)
     put("faelligAm", a.faelligAm); put("mahnung1Datum", a.mahnung1Datum); put("mahnung1Frist", a.mahnung1Frist); put("mahnung1Gebuehr", a.mahnung1Gebuehr); put("mahnung1Text", a.mahnung1Text); put("mahnung1Erstellt", a.mahnung1Erstellt)
     put("mahnung2Datum", a.mahnung2Datum); put("mahnung2Frist", a.mahnung2Frist); put("mahnung2Gebuehr", a.mahnung2Gebuehr); put("mahnung2Text", a.mahnung2Text); put("mahnung2Erstellt", a.mahnung2Erstellt)
@@ -1680,59 +1686,23 @@ private fun mahnung1IstUeberfaellig(auftrag: Auftrag, heute: String): Boolean {
 
 private val KuemmeroGreen = Color(0xFF087F3E)
 private val KuemmeroGreenLight = Color(0xFF4CAF50)
-private val KuemmeroMint = Color(0xFFE8F5E9)
-private val KuemmeroBackground = Color(0xFFE8F5E9)
-private val KuemmeroSurface = Color(0xFFE8F5E9)
+private val KuemmeroMint = Color.White
+private val KuemmeroBackground = Color.White
+private val KuemmeroSurface = Color.White
 private val KuemmeroText = Color(0xFF18352A)
 private val KuemmeroError = Color(0xFFC62828)
 
 private val KuemmeroColors = lightColorScheme(
     primary = KuemmeroGreen,
     onPrimary = Color.White,
-    primaryContainer = KuemmeroMint,
-    onPrimaryContainer = KuemmeroText,
-    inversePrimary = KuemmeroGreenLight,
-
     secondary = KuemmeroGreenLight,
     onSecondary = Color.White,
-    secondaryContainer = KuemmeroMint,
-    onSecondaryContainer = KuemmeroText,
-
-    tertiary = KuemmeroGreen,
-    onTertiary = Color.White,
-    tertiaryContainer = KuemmeroMint,
-    onTertiaryContainer = KuemmeroText,
-
     background = KuemmeroBackground,
     onBackground = KuemmeroText,
-
-    surface = Color.White,
+    surface = KuemmeroSurface,
     onSurface = KuemmeroText,
-    surfaceVariant = KuemmeroSurface,
-    onSurfaceVariant = KuemmeroText,
-    surfaceTint = KuemmeroGreen,
-
-    // Material3-Dialoge verwenden diese Surface-Container-Farben.
-    // Alle werden deshalb ausdrücklich auf KÜMMERO-Weiß gesetzt,
-    // damit kein Standard-Lila/Lavendel aus dem Material-Theme durchkommt.
-    surfaceBright = Color.White,
-    surfaceDim = KuemmeroBackground,
-    surfaceContainerLowest = Color.White,
-    surfaceContainerLow = Color.White,
-    surfaceContainer = Color.White,
-    surfaceContainerHigh = Color.White,
-    surfaceContainerHighest = Color.White,
-
-    inverseSurface = KuemmeroText,
-    inverseOnSurface = Color.White,
-
-    outline = KuemmeroGreen,
-    outlineVariant = KuemmeroGreenLight,
-
     error = KuemmeroError,
-    onError = Color.White,
-
-    scrim = Color.Black
+    onError = Color.White
 )
 
 
@@ -1968,7 +1938,9 @@ fun KuemmeroApp() {
         mutableStateOf(kuemmeroNaechsteDokumentNummer("AUF", Calendar.getInstance().get(Calendar.YEAR), auftraege.map { it.nummer }))
     }
     var datum by remember { mutableStateOf(datumFormat.format(heute)) }
-    var leistungsdatum by remember { mutableStateOf(datumFormat.format(heute)) }
+    var datumPickerOffen by remember { mutableStateOf(false) }
+    var leistungsdatum by remember { mutableStateOf("") }
+    var leistungsdatumPickerOffen by remember { mutableStateOf(false) }
     var gueltigBis by remember {
         val cal = Calendar.getInstance()
         cal.time = heute
@@ -1998,6 +1970,8 @@ fun KuemmeroApp() {
     var statusFilter by remember { mutableStateOf("Alle") }
     var zahlungsFilterOffen by remember { mutableStateOf(false) }
     var kundenAkteName by remember { mutableStateOf<String?>(null) }
+    var kundeBearbeiteName by remember { mutableStateOf<String?>(null) }
+    var kundeLoeschName by remember { mutableStateOf<String?>(null) }
     var kalenderOffen by remember { mutableStateOf(false) }
     var terminBereichOffen by remember { mutableStateOf(false) }
     var notizBereichOffen by remember { mutableStateOf(false) }
@@ -2026,6 +2000,7 @@ fun KuemmeroApp() {
     var kvNummer by remember { mutableStateOf(kuemmeroNaechsteDokumentNummer("KV", Calendar.getInstance().get(Calendar.YEAR), kostenvoranschlaege.map { it.nummer })) }
     var kvDatum by remember { mutableStateOf(datumFormat.format(heute)) }
     var kvGueltigBis by remember { mutableStateOf(datumFormat.format(Calendar.getInstance().apply { add(Calendar.DAY_OF_YEAR, 14) }.time)) }
+    var kvGueltigBisPickerOffen by remember { mutableStateOf(false) }
     var kvKunde by remember { mutableStateOf("") }
     var kvStrasse by remember { mutableStateOf("") }
     var kvOrt by remember { mutableStateOf("") }
@@ -2093,15 +2068,106 @@ fun KuemmeroApp() {
     }
 
     val feldFarben = OutlinedTextFieldDefaults.colors(
-        focusedContainerColor = KuemmeroMint,
-        unfocusedContainerColor = KuemmeroMint,
-        disabledContainerColor = KuemmeroMint,
-        errorContainerColor = KuemmeroMint,
+        focusedContainerColor = Color.White,
+        unfocusedContainerColor = Color.White,
+        disabledContainerColor = Color.White,
+        errorContainerColor = Color.White,
         focusedBorderColor = KuemmeroGreen,
         unfocusedBorderColor = Color(0xFF7A8A82),
         focusedLabelColor = KuemmeroGreen,
         unfocusedLabelColor = KuemmeroText
     )
+
+    // Auftragsdatum darf nicht frei eingegeben werden. Es wird ausschließlich
+    // über den Kalender ausgewählt, damit keine ungültigen Datumswerte entstehen.
+    if (datumPickerOffen) {
+        val bestehendesDatum = parseDeDatum(datum.trim())
+        val startCal = Calendar.getInstance().apply {
+            time = bestehendesDatum ?: Date()
+        }
+        android.app.DatePickerDialog(
+            context,
+            { _, jahr, monat, tag ->
+                val ausgewaehlt = Calendar.getInstance().apply {
+                    set(jahr, monat, tag, 0, 0, 0)
+                    set(Calendar.MILLISECOND, 0)
+                }.time
+                datum = datumFormat.format(ausgewaehlt)
+                datumPickerOffen = false
+            },
+            startCal.get(Calendar.YEAR),
+            startCal.get(Calendar.MONTH),
+            startCal.get(Calendar.DAY_OF_MONTH)
+        ).apply {
+            setOnCancelListener { datumPickerOffen = false }
+        }.show()
+    }
+
+    // Leistungsdatum darf nicht frei eingegeben werden. Es wird ausschließlich
+    // über den Kalender ausgewählt, damit keine ungültigen Datumswerte entstehen.
+    if (leistungsdatumPickerOffen) {
+        val basisDatum = parseDeDatum(datum.trim()) ?: Date()
+        val startCal = Calendar.getInstance().apply {
+            time = parseDeDatum(leistungsdatum.trim()) ?: basisDatum
+        }
+        android.app.DatePickerDialog(
+            context,
+            { _, jahr, monat, tag ->
+                val ausgewaehlt = Calendar.getInstance().apply {
+                    set(jahr, monat, tag, 0, 0, 0)
+                    set(Calendar.MILLISECOND, 0)
+                }.time
+                val basis = parseDeDatum(datum.trim())
+                if (basis == null || !ausgewaehlt.before(basis)) {
+                    leistungsdatum = datumFormat.format(ausgewaehlt)
+                } else {
+                    android.widget.Toast.makeText(context, "Das Leistungsdatum darf nicht vor dem Auftragsdatum liegen.", android.widget.Toast.LENGTH_SHORT).show()
+                }
+                leistungsdatumPickerOffen = false
+            },
+            startCal.get(Calendar.YEAR),
+            startCal.get(Calendar.MONTH),
+            startCal.get(Calendar.DAY_OF_MONTH)
+        ).apply {
+            datePicker.minDate = basisDatum.time
+            setOnCancelListener { leistungsdatumPickerOffen = false }
+        }.show()
+    }
+
+    // Gültig-bis-Datum beim Kostenvoranschlag darf nicht frei eingegeben werden.
+    // Es wird ausschließlich über den Kalender gesetzt und muss nach dem Angebotsdatum liegen.
+    if (kvGueltigBisPickerOffen) {
+        val basisDatum = parseDeDatum(kvDatum.trim()) ?: Date()
+        val bestehendesDatum = parseDeDatum(kvGueltigBis.trim())
+        val startCal = Calendar.getInstance().apply {
+            time = bestehendesDatum ?: Calendar.getInstance().apply {
+                time = basisDatum
+                add(Calendar.DAY_OF_YEAR, 14)
+            }.time
+        }
+        if (startCal.time.before(basisDatum)) startCal.time = basisDatum
+        android.app.DatePickerDialog(
+            context,
+            { _, jahr, monat, tag ->
+                val ausgewaehlt = Calendar.getInstance().apply {
+                    set(jahr, monat, tag, 0, 0, 0)
+                    set(Calendar.MILLISECOND, 0)
+                }.time
+                if (!ausgewaehlt.after(basisDatum)) {
+                    android.widget.Toast.makeText(context, "„Gültig bis“ muss nach dem Datum des Kostenvoranschlags liegen.", android.widget.Toast.LENGTH_SHORT).show()
+                } else {
+                    kvGueltigBis = datumFormat.format(ausgewaehlt)
+                }
+                kvGueltigBisPickerOffen = false
+            },
+            startCal.get(Calendar.YEAR),
+            startCal.get(Calendar.MONTH),
+            startCal.get(Calendar.DAY_OF_MONTH)
+        ).apply {
+            datePicker.minDate = basisDatum.time + 24L * 60L * 60L * 1000L
+            setOnCancelListener { kvGueltigBisPickerOffen = false }
+        }.show()
+    }
 
     LaunchedEffect(bearbeiteIndex) {
         if (bearbeiteIndex != null) {
@@ -2879,6 +2945,7 @@ fun KuemmeroApp() {
                                 status = "Abgerechnet",
                                 rechnungsnummer = rechnungsnummer,
                                 rechnungsdatum = rechnungsdatum,
+                                rechnungsbetragGespeichert = rechnungsEndbetrag(context, a),
                                 faelligAm = faelligAm
                             )
                         )
@@ -2900,7 +2967,7 @@ fun KuemmeroApp() {
     val rate = zahl(stundensatz, zahl(gespeicherterStundensatz(context)))
     val formularZuschlag = bearbeiteIndex?.let { old ->
         auftraege.getOrNull(old)?.zuschlagBetrag ?: 0.0
-    } ?: leistungsZuschlag(context, leistungsdatum.trim().ifBlank { datum.trim() }).second
+    } ?: leistungsZuschlag(context, leistungsdatum.trim().ifBlank { terminDatum.trim().ifBlank { datum.trim() } }).second
     val gesamt = runde2(gesamtbetrag(arbeitsstunden, materialKosten, fahrtKosten, rate) + formularZuschlag)
     val umsatz = auftraege.sumOf { runde2(gesamtbetrag(it.stunden, it.material, it.fahrt, it.stundensatz, it.erstellungskosten) + it.zuschlagBetrag) }
 
@@ -2930,10 +2997,8 @@ fun KuemmeroApp() {
             .getString(BACKUP_URI_KEY, null)
             ?.isNotBlank() == true
         AlertDialog(
-            containerColor = Color.White,
-            titleContentColor = KuemmeroGreen,
-            textContentColor = KuemmeroText,
             onDismissRequest = { sicherungBestaetigung = false },
+            containerColor = Color.White,
             title = { Text("Sicherung bestätigen") },
             text = {
                 Text(
@@ -2960,10 +3025,8 @@ fun KuemmeroApp() {
 
     if (dropboxBestaetigung) {
         AlertDialog(
-            containerColor = Color.White,
-            titleContentColor = KuemmeroGreen,
-            textContentColor = KuemmeroText,
             onDismissRequest = { dropboxBestaetigung = false },
+            containerColor = Color.White,
             title = { Text("Dropbox-Sicherung bestätigen") },
             text = {
                 Text("Soll jetzt eine aktuelle KÜMMERO-Datensicherung an Dropbox übergeben werden? Es wird erst nach deiner Bestätigung die Dropbox-App geöffnet.")
@@ -2991,13 +3054,8 @@ fun KuemmeroApp() {
             val leistungsdatumOk = a.leistungsdatum.isNotBlank() || a.terminDatum.isNotBlank() || a.datum.isNotBlank()
 
             AlertDialog(
-
-                containerColor = Color.White,
-
-                titleContentColor = KuemmeroGreen,
-
-                textContentColor = KuemmeroText,
                 onDismissRequest = { abschlusspruefungIndex = null },
+                containerColor = Color.White,
                 title = { Text("Auftrag abschließen") },
                 text = {
                     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -3031,10 +3089,8 @@ fun KuemmeroApp() {
 
     if (arbeitszeitAendernIndex != null) {
         AlertDialog(
-            containerColor = Color.White,
-            titleContentColor = KuemmeroGreen,
-            textContentColor = KuemmeroText,
             onDismissRequest = { arbeitszeitAendernIndex = null },
+            containerColor = Color.White,
             title = { Text("Arbeitszeit ändern") },
             text = {
                 OutlinedTextField(
@@ -3069,10 +3125,8 @@ fun KuemmeroApp() {
 
     if (kvLoeschIndex != null) {
         AlertDialog(
-            containerColor = Color.White,
-            titleContentColor = KuemmeroGreen,
-            textContentColor = KuemmeroText,
             onDismissRequest = { kvLoeschIndex = null },
+            containerColor = Color.White,
             title = { Text("Kostenvoranschlag löschen?") },
             text = { Text("Soll der Kostenvoranschlag wirklich gelöscht werden?") },
             confirmButton = {
@@ -3095,10 +3149,8 @@ fun KuemmeroApp() {
 
     if (mahnungEinstellungenOffen) {
         AlertDialog(
-            containerColor = Color.White,
-            titleContentColor = KuemmeroGreen,
-            textContentColor = KuemmeroText,
             onDismissRequest = { mahnungEinstellungenOffen = false },
+            containerColor = Color.White,
             title = { Text("⚙ Mahnung-Einstellungen") },
             text = {
                 Column(
@@ -3243,10 +3295,8 @@ fun KuemmeroApp() {
 
     if (mahnungSpeicherBestaetigungOffen) {
         AlertDialog(
-            containerColor = Color.White,
-            titleContentColor = KuemmeroGreen,
-            textContentColor = KuemmeroText,
             onDismissRequest = { mahnungSpeicherBestaetigungOffen = false },
+            containerColor = Color.White,
             title = { Text("Mahnung wirklich speichern?") },
             text = {
                 Text(
@@ -3278,10 +3328,8 @@ fun KuemmeroApp() {
 
     if (testMahnung1DialogOffen && mahnungTestmodus) {
         AlertDialog(
-            containerColor = Color.White,
-            titleContentColor = KuemmeroGreen,
-            textContentColor = KuemmeroText,
             onDismissRequest = { testMahnung1DialogOffen = false },
+            containerColor = Color.White,
             title = { Text("Test-Mahnung erstellen / ändern") },
             text = {
                 Column(
@@ -3311,10 +3359,8 @@ fun KuemmeroApp() {
 
     if (testMahnungLoeschBestaetigung && mahnungTestmodus) {
         AlertDialog(
-            containerColor = Color.White,
-            titleContentColor = KuemmeroGreen,
-            textContentColor = KuemmeroText,
             onDismissRequest = { testMahnungLoeschBestaetigung = false },
+            containerColor = Color.White,
             title = { Text("Test-Mahnung löschen?") },
             text = { Text("Nur die Test-Mahnung wird entfernt. Echte Rechnungsdaten bleiben unverändert.") },
             confirmButton = {
@@ -3334,10 +3380,8 @@ fun KuemmeroApp() {
 
     if (mahnung1Index != null) {
         AlertDialog(
-            containerColor = Color.White,
-            titleContentColor = KuemmeroGreen,
-            textContentColor = KuemmeroText,
             onDismissRequest = { mahnung1Index = null },
+            containerColor = Color.White,
             title = { Text("1. Mahnung erstellen") },
             text = {
                 Column(
@@ -3394,10 +3438,8 @@ fun KuemmeroApp() {
 
     if (mahnung2Index != null) {
         AlertDialog(
-            containerColor = Color.White,
-            titleContentColor = KuemmeroGreen,
-            textContentColor = KuemmeroText,
             onDismissRequest = { mahnung2Index = null },
+            containerColor = Color.White,
             title = { Text("2. Mahnung erstellen") },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -3443,10 +3485,8 @@ fun KuemmeroApp() {
         if (vorgang != null) {
             val istStorno = rechnungVorgangTyp == "STORNO"
             AlertDialog(
-                containerColor = Color.White,
-                titleContentColor = KuemmeroGreen,
-                textContentColor = KuemmeroText,
                 onDismissRequest = { rechnungVorgangIndex = null; rechnungVorgangTyp = "" },
+                containerColor = Color.White,
                 title = { Text(if (istStorno) "Rechnung stornieren" else "Rechnung berichtigen") },
                 text = {
                     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -3468,10 +3508,8 @@ fun KuemmeroApp() {
 
     if (rechnungNummerEditIndex != null) {
         AlertDialog(
-            containerColor = Color.White,
-            titleContentColor = KuemmeroGreen,
-            textContentColor = KuemmeroText,
             onDismissRequest = { rechnungNummerEditIndex = null },
+            containerColor = Color.White,
             title = { Text("Rechnungsnummer korrigieren") },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -3524,10 +3562,8 @@ fun KuemmeroApp() {
 
     if (kundenDialog) {
         AlertDialog(
-            containerColor = Color.White,
-            titleContentColor = KuemmeroGreen,
-            textContentColor = KuemmeroText,
             onDismissRequest = { kundenDialog = false },
+            containerColor = Color.White,
             title = { Text("Kundenverwaltung") },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -3588,8 +3624,6 @@ fun KuemmeroApp() {
         AlertDialog(
             onDismissRequest = { neuerKundeDialog = false },
             containerColor = Color.White,
-            titleContentColor = KuemmeroGreen,
-            textContentColor = KuemmeroText,
             title = { Text("Neuen Kunden anlegen", color = KuemmeroGreen, fontWeight = FontWeight.Bold) },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -3598,36 +3632,21 @@ fun KuemmeroApp() {
                         { neuerKundenName = it },
                         label = { Text("Kunde") },
                         singleLine = true,
-                        colors = OutlinedTextFieldDefaults.colors(
-                            focusedBorderColor = KuemmeroGreen,
-                            unfocusedBorderColor = KuemmeroGreen,
-                            focusedLabelColor = KuemmeroGreen,
-                            cursorColor = KuemmeroGreen
-                        )
+                        colors = feldFarben
                     )
                     OutlinedTextField(
                         neuerKundenAdresse,
                         { neuerKundenAdresse = it },
-                        label = { Text("Adresse") },
+                        label = { Text("Straße") },
                         singleLine = true,
-                        colors = OutlinedTextFieldDefaults.colors(
-                            focusedBorderColor = KuemmeroGreen,
-                            unfocusedBorderColor = KuemmeroGreen,
-                            focusedLabelColor = KuemmeroGreen,
-                            cursorColor = KuemmeroGreen
-                        )
+                        colors = feldFarben
                     )
                     OutlinedTextField(
                         neuerKundenOrt,
                         { neuerKundenOrt = it },
                         label = { Text("PLZ und Ort") },
                         singleLine = true,
-                        colors = OutlinedTextFieldDefaults.colors(
-                            focusedBorderColor = KuemmeroGreen,
-                            unfocusedBorderColor = KuemmeroGreen,
-                            focusedLabelColor = KuemmeroGreen,
-                            cursorColor = KuemmeroGreen
-                        )
+                        colors = feldFarben
                     )
                     OutlinedTextField(
                         neuerKundenTelefon,
@@ -3635,12 +3654,7 @@ fun KuemmeroApp() {
                         label = { Text("Telefon") },
                         singleLine = true,
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone),
-                        colors = OutlinedTextFieldDefaults.colors(
-                            focusedBorderColor = KuemmeroGreen,
-                            unfocusedBorderColor = KuemmeroGreen,
-                            focusedLabelColor = KuemmeroGreen,
-                            cursorColor = KuemmeroGreen
-                        )
+                        colors = feldFarben
                     )
                     OutlinedTextField(
                         neuerKundenEmail,
@@ -3648,19 +3662,22 @@ fun KuemmeroApp() {
                         label = { Text("E-Mail") },
                         singleLine = true,
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email),
-                        colors = OutlinedTextFieldDefaults.colors(
-                            focusedBorderColor = KuemmeroGreen,
-                            unfocusedBorderColor = KuemmeroGreen,
-                            focusedLabelColor = KuemmeroGreen,
-                            cursorColor = KuemmeroGreen
-                        )
+                        colors = feldFarben
                     )
                 }
             },
             confirmButton = {
                 Button(onClick = {
-                    if (neuerKundenName.isBlank()) {
-                        android.widget.Toast.makeText(context, "Bitte Kundennamen eingeben.", 0).show()
+                    val fehlendeKundendaten = when {
+                        neuerKundenName.isBlank() -> "Bitte Kundennamen eingeben."
+                        neuerKundenAdresse.isBlank() -> "Bitte Straße und Hausnummer eingeben."
+                        neuerKundenOrt.isBlank() -> "Bitte PLZ und Ort eingeben."
+                        neuerKundenEmail.isNotBlank() && !android.util.Patterns.EMAIL_ADDRESS.matcher(neuerKundenEmail.trim()).matches() ->
+                            "Bitte eine gültige E-Mail-Adresse eingeben."
+                        else -> ""
+                    }
+                    if (fehlendeKundendaten.isNotBlank()) {
+                        android.widget.Toast.makeText(context, fehlendeKundendaten, 0).show()
                     } else {
                         val k = Kunde(
                             neuerKundenName.trim(),
@@ -3669,18 +3686,49 @@ fun KuemmeroApp() {
                             neuerKundenTelefon.trim(),
                             neuerKundenEmail.trim()
                         )
-                        speichereOderAktualisiereKunde(context, k)
+                        val alterName = kundeBearbeiteName
+                        val kundenListeNeu = kunden.toMutableList()
+                        if (alterName != null) {
+                            val index = kundenListeNeu.indexOfFirst { it.name.equals(alterName, ignoreCase = true) }
+                            val neuerNameDoppelt = kundenListeNeu.withIndex().any { it.index != index && it.value.name.equals(k.name, ignoreCase = true) }
+                            if (neuerNameDoppelt) {
+                                android.widget.Toast.makeText(context, "Dieser Kundenname ist bereits vorhanden.", 0).show()
+                                return@Button
+                            }
+                            if (index >= 0) {
+                                kundenListeNeu[index] = k
+                                // Bestehende Aufträge und Kostenvoranschläge auf die geänderten Kundendaten umstellen.
+                                auftraege = auftraege.map { a ->
+                                    if (a.kunde.equals(alterName, ignoreCase = true)) a.copy(kunde = k.name, kundenStrasse = k.adresse, kundenOrt = k.ort) else a
+                                }
+                                kostenvoranschlaege = kostenvoranschlaege.map { kv ->
+                                    if (kv.kunde.equals(alterName, ignoreCase = true)) kv.copy(kunde = k.name, kundenStrasse = k.adresse, kundenOrt = k.ort) else kv
+                                }
+                                speichereAuftraege(context, auftraege)
+                                speichereKostenvoranschlaege(context, kostenvoranschlaege)
+                            }
+                        } else {
+                            val nameVorhanden = kundenListeNeu.any { it.name.equals(k.name, ignoreCase = true) }
+                            if (nameVorhanden) {
+                                android.widget.Toast.makeText(context, "Dieser Kundenname ist bereits vorhanden.", 0).show()
+                                return@Button
+                            }
+                            kundenListeNeu.add(k)
+                        }
+                        speichereKunden(context, kundenListeNeu)
                         kunden = ladeKunden(context)
                         kunde = k.name
                         strasse = k.adresse
                         ort = k.ort
+                        kundeBearbeiteName = null
                         neuerKundeDialog = false
-                        android.widget.Toast.makeText(context, "Kunde gespeichert.", 0).show()
+                        kundenAkteName = k.name
+                        android.widget.Toast.makeText(context, if (alterName != null) "Kunde geändert." else "Kunde gespeichert.", 0).show()
                     }
-                }) { Text("Speichern") }
+                }, colors = ButtonDefaults.buttonColors(containerColor = KuemmeroGreen)) { Text("Speichern", color = Color.White, fontWeight = FontWeight.Bold) }
             },
             dismissButton = {
-                TextButton(onClick = { neuerKundeDialog = false }) { Text("Abbrechen") }
+                TextButton(onClick = { neuerKundeDialog = false }, colors = ButtonDefaults.textButtonColors(contentColor = KuemmeroGreen)) { Text("Abbrechen") }
             }
         )
     }
@@ -3689,10 +3737,8 @@ fun KuemmeroApp() {
         val uri = fotoVorschauUri!!
         val bitmap = remember(uri) { ladeFotoBitmap(context, uri) }
         AlertDialog(
-            containerColor = Color.White,
-            titleContentColor = KuemmeroGreen,
-            textContentColor = KuemmeroText,
             onDismissRequest = { fotoVorschauUri = null },
+            containerColor = Color.White,
             title = { Text("Auftragsfoto") },
             text = {
                 if (bitmap != null) {
@@ -3724,10 +3770,8 @@ fun KuemmeroApp() {
 
     if (unterschriftDialog) {
         AlertDialog(
-            containerColor = Color.White,
-            titleContentColor = KuemmeroGreen,
-            textContentColor = KuemmeroText,
             onDismissRequest = { unterschriftDialog = false },
+            containerColor = Color.White,
             title = { Text("Kunden-Unterschrift") },
             text = {
                 Column {
@@ -3812,10 +3856,8 @@ fun KuemmeroApp() {
         val kundeAkte = kunden.firstOrNull { it.name.equals(name, ignoreCase = true) }
         val kundenAuftraege = auftraege.filter { it.kunde.equals(name, ignoreCase = true) }
         AlertDialog(
-            containerColor = Color.White,
-            titleContentColor = KuemmeroGreen,
-            textContentColor = KuemmeroText,
             onDismissRequest = { kundenAkteName = null },
+            containerColor = Color.White,
             title = { Text("Kundenakte") },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -3824,6 +3866,32 @@ fun KuemmeroApp() {
                     if (kundeAkte?.ort?.isNotBlank() == true) Text("Ort: ${kundeAkte.ort}")
                     if (kundeAkte?.telefon?.isNotBlank() == true) Text("Telefon: ${kundeAkte.telefon}")
                     if (kundeAkte?.email?.isNotBlank() == true) Text("E-Mail: ${kundeAkte.email}")
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        OutlinedButton(
+                            onClick = {
+                                kundeAkte?.let { k ->
+                                    kundeBearbeiteName = k.name
+                                    neuerKundenName = k.name
+                                    neuerKundenAdresse = k.adresse
+                                    neuerKundenOrt = k.ort
+                                    neuerKundenTelefon = k.telefon
+                                    neuerKundenEmail = k.email
+                                    kundenAkteName = null
+                                    neuerKundeDialog = true
+                                }
+                            },
+                            modifier = Modifier.weight(1f),
+                            colors = ButtonDefaults.outlinedButtonColors(contentColor = KuemmeroGreen)
+                        ) { Text("✏️ Ändern") }
+                        OutlinedButton(
+                            onClick = { kundeAkte?.let { kundeLoeschName = it.name } },
+                            modifier = Modifier.weight(1f),
+                            colors = ButtonDefaults.outlinedButtonColors(contentColor = KuemmeroError)
+                        ) { Text("🗑 Löschen") }
+                    }
                     HorizontalDivider()
                     Text("Aufträge: ${kundenAuftraege.size}", fontWeight = FontWeight.Bold)
                     Text("Umsatz: ${euro(kundenAuftraege.sumOf { runde2(gesamtbetrag(it.stunden, it.material, it.fahrt, it.stundensatz, it.erstellungskosten) + it.zuschlagBetrag) })}")
@@ -3857,16 +3925,61 @@ fun KuemmeroApp() {
                     }
                 }
             },
-            confirmButton = { TextButton(onClick = { kundenAkteName = null }) { Text("Schließen") } }
+            confirmButton = {
+                TextButton(
+                    onClick = { kundenAkteName = null },
+                    colors = ButtonDefaults.textButtonColors(contentColor = KuemmeroGreen)
+                ) { Text("Schließen") }
+            }
+        )
+    }
+
+    if (kundeLoeschName != null) {
+        val loeschName = kundeLoeschName!!
+        val anzahlAuftraege = auftraege.count { it.kunde.equals(loeschName, ignoreCase = true) }
+        AlertDialog(
+            onDismissRequest = { kundeLoeschName = null },
+            containerColor = Color.White,
+            title = { Text("Kunde löschen?", color = KuemmeroError, fontWeight = FontWeight.Bold) },
+            text = {
+                Text(
+                    if (anzahlAuftraege > 0) {
+                        "Soll der Kunde \"$loeschName\" wirklich gelöscht werden? Die $anzahlAuftraege zugehörigen Aufträge bleiben zur Dokumentation erhalten."
+                    } else {
+                        "Soll der Kunde \"$loeschName\" wirklich gelöscht werden?"
+                    }
+                )
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        val neueKunden = kunden.filterNot { it.name.equals(loeschName, ignoreCase = true) }
+                        speichereKunden(context, neueKunden)
+                        kunden = neueKunden
+                        if (kunde.equals(loeschName, ignoreCase = true)) {
+                            kunde = ""
+                            strasse = ""
+                            ort = ""
+                        }
+                        kundeLoeschName = null
+                        kundenAkteName = null
+                        android.widget.Toast.makeText(context, "Kunde gelöscht. Aufträge bleiben erhalten.", 0).show()
+                    },
+                    colors = ButtonDefaults.textButtonColors(contentColor = KuemmeroError)
+                ) { Text("Löschen", fontWeight = FontWeight.Bold) }
+            },
+            dismissButton = {
+                TextButton(onClick = { kundeLoeschName = null }, colors = ButtonDefaults.textButtonColors(contentColor = KuemmeroGreen)) {
+                    Text("Abbrechen")
+                }
+            }
         )
     }
 
     if (kalenderOffen) {
         AlertDialog(
-            containerColor = Color.White,
-            titleContentColor = KuemmeroGreen,
-            textContentColor = KuemmeroText,
             onDismissRequest = { kalenderOffen = false },
+            containerColor = Color.White,
             title = { Text("📅 Termine") },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -3890,16 +4003,14 @@ fun KuemmeroApp() {
                     }
                 }
             },
-            confirmButton = { TextButton(onClick = { kalenderOffen = false }, colors = ButtonDefaults.textButtonColors(contentColor = KuemmeroGreen)) { Text("Schließen") } }
+            confirmButton = { TextButton(onClick = { kalenderOffen = false }) { Text("Schließen") } }
         )
     }
 
     if (papierkorbOffen) {
         AlertDialog(
-            containerColor = Color.White,
-            titleContentColor = KuemmeroGreen,
-            textContentColor = KuemmeroText,
             onDismissRequest = { papierkorbOffen = false },
+            containerColor = Color.White,
             title = { Text("🗑 Papierkorb") },
             text = {
                 if (papierkorbEintraege.isEmpty()) Text("Der Papierkorb ist leer.")
@@ -3948,10 +4059,8 @@ fun KuemmeroApp() {
 
     if (papierkorbLoeschBestaetigung) {
         AlertDialog(
-            containerColor = Color.White,
-            titleContentColor = KuemmeroGreen,
-            textContentColor = KuemmeroText,
             onDismissRequest = { papierkorbLoeschBestaetigung = false },
+            containerColor = Color.White,
             title = { Text("Papierkorb endgültig leeren?") },
             text = { Text("Alle gelöschten Aufträge werden endgültig entfernt.") },
             confirmButton = {
@@ -3968,10 +4077,8 @@ fun KuemmeroApp() {
 
     loeschIndex?.let { index ->
         AlertDialog(
-            containerColor = Color.White,
-            titleContentColor = KuemmeroGreen,
-            textContentColor = KuemmeroText,
             onDismissRequest = { loeschIndex = null },
+            containerColor = Color.White,
             title = { Text("Auftrag löschen?") },
             text = { Text("Soll der Auftrag wirklich gelöscht werden?") },
             confirmButton = {
@@ -3999,10 +4106,8 @@ fun KuemmeroApp() {
     MaterialTheme(colorScheme = KuemmeroColors) {
         if (kvKundenDialog) {
         AlertDialog(
-            containerColor = Color.White,
-            titleContentColor = KuemmeroGreen,
-            textContentColor = KuemmeroText,
             onDismissRequest = { kvKundenDialog = false },
+            containerColor = Color.White,
             title = { Text("Kunde auswählen") },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -4049,6 +4154,28 @@ fun KuemmeroApp() {
     }
 
     Scaffold(
+            modifier = Modifier.pointerInput(hauptseite) {
+                var gesamtWisch = 0f
+                var wischAusgeloest = false
+                detectHorizontalDragGestures(
+                    onHorizontalDrag = { change, dragAmount ->
+                        change.consume()
+                        gesamtWisch += dragAmount
+                        if (!wischAusgeloest && kotlin.math.abs(gesamtWisch) >= 100f) {
+                            wischAusgeloest = true
+                            wischSeite(gesamtWisch)
+                        }
+                    },
+                    onDragEnd = {
+                        gesamtWisch = 0f
+                        wischAusgeloest = false
+                    },
+                    onDragCancel = {
+                        gesamtWisch = 0f
+                        wischAusgeloest = false
+                    }
+                )
+            },
             topBar = {
                 TopAppBar(
                     title = {
@@ -4353,7 +4480,14 @@ fun KuemmeroApp() {
                                 auftragFormOffen = true
                                 nummer = a.nummer
                                 datum = a.datum
-                                leistungsdatum = a.leistungsdatum.ifBlank { a.terminDatum.ifBlank { a.datum } }
+                                leistungsdatum = run {
+                                    val gespeichert = a.leistungsdatum.trim()
+                                    if (gespeichert.isBlank()) "" else {
+                                        val auftragsDatum = parseDeDatum(a.datum.trim())
+                                        val leistungsDatum = parseDeDatum(gespeichert)
+                                        if (auftragsDatum == null || leistungsDatum == null || leistungsDatum.before(auftragsDatum)) "" else gespeichert
+                                    }
+                                }
                                 gueltigBis = a.gueltigBis
                                 kunde = a.kunde
                                 strasse = a.kundenStrasse
@@ -4400,7 +4534,8 @@ fun KuemmeroApp() {
                                 kvBearbeiteIndex = null
                                 kvNummer = kuemmeroNaechsteDokumentNummer("KV", Calendar.getInstance().get(Calendar.YEAR), kostenvoranschlaege.map { it.nummer })
                                 kvDatum = datumFormat.format(Date())
-                                kvGueltigBis = ""
+                                kvGueltigBis = datumFormat.format(Calendar.getInstance().apply { add(Calendar.DAY_OF_YEAR, 14) }.time)
+                                kvGueltigBisPickerOffen = false
                                 kvKunde = a.kunde
                                 kvStrasse = a.kundenStrasse
                                 kvOrt = a.kundenOrt
@@ -4444,6 +4579,20 @@ fun KuemmeroApp() {
 
                     item {
                         OutlinedButton(
+                            onClick = {
+                                ToneGenerator(AudioManager.STREAM_NOTIFICATION, 80)
+                                    .startTone(ToneGenerator.TONE_PROP_BEEP, 150)
+                                loeschIndex = detailIndex
+                            },
+                            modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp),
+                            shape = RoundedCornerShape(26.dp),
+                            border = BorderStroke(2.dp, KuemmeroError),
+                            colors = ButtonDefaults.outlinedButtonColors(contentColor = KuemmeroError)
+                        ) { Text("🗑 Auftrag löschen", fontWeight = FontWeight.Bold) }
+                    }
+
+                    item {
+                        OutlinedButton(
                             onClick = { auftragDetailIndex = null; hauptseite = "Aufträge" },
                             modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp),
                             shape = RoundedCornerShape(26.dp),
@@ -4459,6 +4608,7 @@ fun KuemmeroApp() {
             LazyColumn(
                 state = listeState,
                 modifier = Modifier.padding(padding).padding(16.dp),
+                contentPadding = PaddingValues(bottom = 110.dp),
                 verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
                 if (auftragFormOffen) {
@@ -4582,28 +4732,49 @@ fun KuemmeroApp() {
                 }
                 item {
                     OutlinedTextField(
-                        datum, { datum = it },
+                        value = datum,
+                        onValueChange = { },
+                        readOnly = true,
                         label = { Text("Datum") },
                         colors = feldFarben,
-                        modifier = Modifier.fillMaxWidth()
+                        modifier = Modifier.fillMaxWidth().clickable { datumPickerOffen = true },
+                        trailingIcon = {
+                            TextButton(onClick = { datumPickerOffen = true }) { Text("📅") }
+                        }
                     )
                 }
                 item {
-                    OutlinedTextField(
-                        leistungsdatum, { leistungsdatum = it },
-                        label = { Text("Leistungsdatum") },
-                        placeholder = { Text("TT.MM.JJJJ") },
-                        colors = feldFarben,
-                        modifier = Modifier.fillMaxWidth()
-                    )
-                }
-                item {
-                    OutlinedTextField(
-                        gueltigBis, { gueltigBis = it },
-                        label = { Text("Gültig bis") },
-                        colors = feldFarben,
-                        modifier = Modifier.fillMaxWidth()
-                    )
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        OutlinedTextField(
+                            value = leistungsdatum,
+                            onValueChange = { },
+                            readOnly = true,
+                            label = { Text("Leistungsdatum (optional)") },
+                            placeholder = { Text("Noch kein Leistungsdatum festgelegt") },
+                            colors = feldFarben,
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+                            OutlinedButton(
+                                onClick = { leistungsdatumPickerOffen = true },
+                                modifier = Modifier.weight(1f),
+                                border = BorderStroke(2.dp, KuemmeroGreen),
+                                colors = ButtonDefaults.outlinedButtonColors(contentColor = KuemmeroGreen)
+                            ) {
+                                Text("📅 Datum auswählen", fontWeight = FontWeight.Bold)
+                            }
+                            if (leistungsdatum.isNotBlank()) {
+                                OutlinedButton(
+                                    onClick = { leistungsdatum = "" },
+                                    modifier = Modifier.weight(1f),
+                                    border = BorderStroke(2.dp, KuemmeroError),
+                                    colors = ButtonDefaults.outlinedButtonColors(contentColor = KuemmeroError)
+                                ) {
+                                    Text("Löschen", fontWeight = FontWeight.Bold)
+                                }
+                            }
+                        }
+                    }
                 }
                 item {
                     OutlinedTextField(
@@ -4871,12 +5042,13 @@ fun KuemmeroApp() {
                                     bearbeiteIndex?.let { auftraege.getOrNull(it)?.arbeitsEnde } ?: 0L,
                                     bearbeiteIndex?.let { auftraege.getOrNull(it)?.arbeitsSekunden } ?: 0L,
                                     erstellungskosten = bearbeiteIndex?.let { auftraege.getOrNull(it)?.erstellungskosten } ?: 0.0,
-                                    leistungsdatum = leistungsdatum.trim().ifBlank { datum.trim() },
+                                    leistungsdatum = leistungsdatum.trim(),
                                     fahrtKm = zahl(fahrtKm),
                                     fahrtKostenProKm = fahrtSatz,
                                     protokoll = protokoll.trim(),
-                                    zuschlagBezeichnung = bearbeiteIndex?.let { old -> val alt = auftraege.getOrNull(old); if (alt != null && alt.leistungsdatum == leistungsdatum.trim().ifBlank { datum.trim() }) alt.zuschlagBezeichnung else leistungsZuschlag(context, leistungsdatum.trim().ifBlank { datum.trim() }).first } ?: leistungsZuschlag(context, leistungsdatum.trim().ifBlank { datum.trim() }).first,
-                                    zuschlagBetrag = bearbeiteIndex?.let { old -> val alt = auftraege.getOrNull(old); if (alt != null && alt.leistungsdatum == leistungsdatum.trim().ifBlank { datum.trim() }) alt.zuschlagBetrag else leistungsZuschlag(context, leistungsdatum.trim().ifBlank { datum.trim() }).second } ?: leistungsZuschlag(context, leistungsdatum.trim().ifBlank { datum.trim() }).second
+                                    rechnungsbetragGespeichert = bearbeiteIndex?.let { auftraege.getOrNull(it)?.rechnungsbetragGespeichert } ?: 0.0,
+                                    zuschlagBezeichnung = bearbeiteIndex?.let { old -> val alt = auftraege.getOrNull(old); if (alt != null && alt.leistungsdatum == leistungsdatum.trim().ifBlank { datum.trim() }) alt.zuschlagBezeichnung else leistungsZuschlag(context, leistungsdatum.trim().ifBlank { terminDatum.trim().ifBlank { datum.trim() } }).first } ?: leistungsZuschlag(context, leistungsdatum.trim().ifBlank { terminDatum.trim().ifBlank { datum.trim() } }).first,
+                                    zuschlagBetrag = bearbeiteIndex?.let { old -> val alt = auftraege.getOrNull(old); if (alt != null && alt.leistungsdatum == leistungsdatum.trim().ifBlank { datum.trim() }) alt.zuschlagBetrag else leistungsZuschlag(context, leistungsdatum.trim().ifBlank { terminDatum.trim().ifBlank { datum.trim() } }).second } ?: leistungsZuschlag(context, leistungsdatum.trim().ifBlank { terminDatum.trim().ifBlank { datum.trim() } }).second
                                 )
                                 val index = bearbeiteIndex
                                 if (index != null) {
@@ -4890,7 +5062,8 @@ fun KuemmeroApp() {
                                     android.widget.Toast.makeText(context, "Auftrag gespeichert.", 0).show()
                                 }
                                 auftragFormOffen = false
-                                leistungsdatum = datumFormat.format(Date())
+                                leistungsdatum = ""
+                                leistungsdatumPickerOffen = false
                                 kunde = ""
                                 strasse = ""
                                 ort = ""
@@ -5088,7 +5261,9 @@ fun KuemmeroApp() {
                                 auftragFormOffen = true
                                 nummer = kuemmeroNaechsteDokumentNummer("AUF", Calendar.getInstance().get(Calendar.YEAR), auftraege.map { it.nummer })
                                 datum = datumJetzt
-                                leistungsdatum = datumJetzt
+                                // Leistungsdatum bei einem neuen Auftrag bewusst leer lassen.
+                                // Es wird erst eingetragen, wenn die Leistung tatsächlich feststeht/erfolgt.
+                                leistungsdatum = ""
                                 gueltigBis = ""
                                 kunde = ""
                                 strasse = ""
@@ -5132,31 +5307,45 @@ fun KuemmeroApp() {
                         modifier = Modifier.fillMaxWidth()
                     )
                     Spacer(Modifier.height(10.dp))
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .horizontalScroll(rememberScrollState()),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    Column(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
-                        listOf("Alle", "Offen", "In Bearbeitung", "Erledigt", "Abgerechnet").forEach { option ->
-                            val aktiv = statusFilter == option
-                            Surface(
-                                modifier = Modifier
-                                    .height(42.dp)
-                                    .clickable { statusFilter = option },
-                                shape = RoundedCornerShape(21.dp),
-                                color = if (aktiv) KuemmeroGreen else KuemmeroMint,
-                                border = BorderStroke(1.5.dp, if (aktiv) KuemmeroGreen else Color(0xFF7A8A82))
+                        listOf(
+                            listOf("Alle", "Offen"),
+                            listOf("In Bearbeitung", "Erledigt"),
+                            listOf("Abgerechnet")
+                        ).forEach { zeile ->
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
                             ) {
-                                Box(
-                                    modifier = Modifier.padding(horizontal = 16.dp),
-                                    contentAlignment = Alignment.Center
-                                ) {
-                                    Text(
-                                        option,
-                                        color = if (aktiv) Color.White else KuemmeroGreen,
-                                        fontWeight = FontWeight.Bold
-                                    )
+                                zeile.forEach { option ->
+                                    val aktiv = statusFilter == option
+                                    Surface(
+                                        modifier = Modifier
+                                            .weight(1f)
+                                            .height(42.dp)
+                                            .clickable { statusFilter = option },
+                                        shape = RoundedCornerShape(21.dp),
+                                        color = if (aktiv) KuemmeroGreen else KuemmeroMint,
+                                        border = BorderStroke(1.5.dp, if (aktiv) KuemmeroGreen else Color(0xFF7A8A82))
+                                    ) {
+                                        Box(
+                                            modifier = Modifier.fillMaxSize(),
+                                            contentAlignment = Alignment.Center
+                                        ) {
+                                            Text(
+                                                option,
+                                                color = if (aktiv) Color.White else KuemmeroGreen,
+                                                fontWeight = FontWeight.Bold,
+                                                maxLines = 1
+                                            )
+                                        }
+                                    }
+                                }
+                                if (zeile.size == 1) {
+                                    Spacer(Modifier.weight(1f))
                                 }
                             }
                         }
@@ -5463,7 +5652,16 @@ fun KuemmeroApp() {
                                     auftragFormOffen = true
                                     nummer = a.nummer.ifBlank { nummer }
                                     datum = a.datum.ifBlank { datum }
-                                    leistungsdatum = a.leistungsdatum.ifBlank { a.terminDatum.ifBlank { a.datum.ifBlank { datum } } }
+                                    // Leistungsdatum ist wirklich optional: kein automatischer Fallback auf Termin- oder Auftragsdatum.
+                                    // Offensichtlich veraltete Datumswerte vor dem Auftragsdatum werden beim Bearbeiten entfernt.
+                                    leistungsdatum = run {
+                                        val gespeichertes = a.leistungsdatum.trim()
+                                        if (gespeichertes.isBlank()) "" else {
+                                            val auftragsDatum = parseDeDatum(a.datum.trim())
+                                            val leistungsDatum = parseDeDatum(gespeichertes)
+                                            if (auftragsDatum == null || leistungsDatum == null || leistungsDatum.before(auftragsDatum)) "" else gespeichertes
+                                        }
+                                    }
                                     gueltigBis = a.gueltigBis.ifBlank { gueltigBis }
                                     kunde = a.kunde
                                     strasse = a.kundenStrasse
@@ -5662,46 +5860,27 @@ fun KuemmeroApp() {
                 } // Ende Auftragsliste
             }
         } else if (hauptseite == "Buchhaltung") {
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(padding)
-            ) {
-                BuchhaltungScreen(
-                    context = context,
-                    auftraege = auftraege,
-                    onBack = { hauptseite = "Mehr" },
-                    onRechnungClick = { rechnung ->
-                        val index = auftraege.indexOfFirst {
-                            it.rechnungsnummer == rechnung.rechnungsnummer &&
-                                    it.kunde == rechnung.kunde
-                        }
-                        if (index >= 0) {
-                            auftragDetailIndex = index
-                            hauptseite = "Aufträge"
-                        } else {
-                            android.widget.Toast.makeText(
-                                context,
-                                "Zugehöriger Auftrag wurde nicht gefunden.",
-                                android.widget.Toast.LENGTH_SHORT
-                            ).show()
-                        }
-                    },
-                    onOffenerAuftragClick = { auftrag ->
-                        val index = auftraege.indexOfFirst { it.nummer == auftrag.nummer }
-                        if (index >= 0) {
-                            auftragDetailIndex = index
-                            hauptseite = "Aufträge"
-                        } else {
-                            android.widget.Toast.makeText(
-                                context,
-                                "Zugehöriger Auftrag wurde nicht gefunden.",
-                                android.widget.Toast.LENGTH_SHORT
-                            ).show()
-                        }
+            BuchhaltungScreen(
+                context = context,
+                auftraege = auftraege,
+                onBack = { hauptseite = "Mehr" },
+                onRechnungClick = { rechnung ->
+                    val index = auftraege.indexOfFirst { it.nummer == rechnung.nummer }
+                    if (index >= 0) {
+                        hauptseite = "Aufträge"
+                        auftragFormOffen = false
+                        auftragDetailIndex = index
                     }
-                )
-            }
+                },
+                onOffenerAuftragClick = { auftrag ->
+                    val index = auftraege.indexOfFirst { it.nummer == auftrag.nummer }
+                    if (index >= 0) {
+                        hauptseite = "Aufträge"
+                        auftragFormOffen = false
+                        auftragDetailIndex = index
+                    }
+                }
+            )
         } else {
             LazyColumn(
                 modifier = Modifier.padding(padding).padding(16.dp),
@@ -5835,7 +6014,7 @@ fun KuemmeroApp() {
                                         bearbeiteIndex = null
                                         nummer = kuemmeroNaechsteDokumentNummer("AUF", Calendar.getInstance().get(Calendar.YEAR), auftraege.map { it.nummer })
                                         datum = datumJetzt
-                                        leistungsdatum = datumJetzt
+                                        leistungsdatum = ""
                                         gueltigBis = ""
                                         kunde = ""; strasse = ""; ort = ""; leistung = ""
                                         stunden = ""; material = ""; materialBonUri = ""; fahrtKm = ""
@@ -5880,14 +6059,14 @@ fun KuemmeroApp() {
                                         auftragFormOffen = false
                                         auftragDetailIndex = null
                                         bearbeiteIndex = null
-                                        statusFilter = "In Bearbeitung"
+                                        statusFilter = "Alle"
                                         zahlungsFilterOffen = false
                                         auftragsSuche = ""
                                     },
                                     modifier = Modifier.weight(1f).heightIn(min = 56.dp),
                                     shape = RoundedCornerShape(18.dp),
                                     colors = ButtonDefaults.buttonColors(containerColor = KuemmeroGreen)
-                                ) { Text("⏱ Arbeitszeit", fontWeight = FontWeight.Bold) }
+                                ) { Text("🕒 Aufträge / Arbeitszeit", fontWeight = FontWeight.Bold) }
                             }
                         }
                         item {
@@ -5984,6 +6163,27 @@ fun KuemmeroApp() {
                                         if (k.telefon.isNotBlank()) Text("☎ ${k.telefon}", color = KuemmeroText)
                                         if (k.email.isNotBlank()) Text("✉ ${k.email}", color = KuemmeroText)
                                         Text("Aufträge: ${auftraege.count { it.kunde == k.name }}", color = KuemmeroText)
+                                        Row(
+                                            modifier = Modifier.fillMaxWidth(),
+                                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                        ) {
+                                            TextButton(
+                                                onClick = {
+                                                    kundeBearbeiteName = k.name
+                                                    neuerKundenName = k.name
+                                                    neuerKundenAdresse = k.adresse
+                                                    neuerKundenOrt = k.ort
+                                                    neuerKundenTelefon = k.telefon
+                                                    neuerKundenEmail = k.email
+                                                    neuerKundeDialog = true
+                                                },
+                                                colors = ButtonDefaults.textButtonColors(contentColor = KuemmeroGreen)
+                                            ) { Text("✏️ Ändern", fontWeight = FontWeight.Bold) }
+                                            TextButton(
+                                                onClick = { kundeLoeschName = k.name },
+                                                colors = ButtonDefaults.textButtonColors(contentColor = KuemmeroError)
+                                            ) { Text("🗑 Löschen", fontWeight = FontWeight.Bold) }
+                                        }
                                         Text("Kundenakte öffnen →", color = KuemmeroGreen, fontWeight = FontWeight.Bold)
                                     }
                                 }
@@ -6033,6 +6233,7 @@ fun KuemmeroApp() {
                                         kvNummer = kuemmeroNaechsteDokumentNummer("KV", Calendar.getInstance().get(Calendar.YEAR), kostenvoranschlaege.map { it.nummer })
                                         kvDatum = datumFormat.format(Date())
                                         kvGueltigBis = datumFormat.format(Calendar.getInstance().apply { add(Calendar.DAY_OF_YEAR, 14) }.time)
+                                        kvGueltigBisPickerOffen = false
                                         kvKunde = ""
                                         kvStrasse = ""
                                         kvOrt = ""
@@ -6092,7 +6293,13 @@ fun KuemmeroApp() {
                                                     kvBearbeiteIndex = index
                                                     kvNummer = k.nummer
                                                     kvDatum = k.datum
-                                                    kvGueltigBis = k.gueltigBis
+                                                    val kvBasisDatum = try { datumFormat.parse(k.datum) ?: Date() } catch (_: Exception) { Date() }
+                                                    val kvGespeichertesGueltigBis = try { datumFormat.parse(k.gueltigBis) } catch (_: Exception) { null }
+                                                    kvGueltigBis = if (kvGespeichertesGueltigBis == null || !kvGespeichertesGueltigBis.after(kvBasisDatum)) {
+                                                        datumFormat.format(Calendar.getInstance().apply { time = kvBasisDatum; add(Calendar.DAY_OF_YEAR, 14) }.time)
+                                                    } else {
+                                                        k.gueltigBis
+                                                    }
                                                     kvKunde = k.kunde
                                                     kvStrasse = k.kundenStrasse
                                                     kvOrt = k.kundenOrt
@@ -6137,7 +6344,7 @@ fun KuemmeroApp() {
                                                         zahlungsstatus = "Offen",
                                                         fotosVorher = k.fotosVorher,
                                                         erstellungskosten = k.erstellungskosten,
-                                                        leistungsdatum = k.datum,
+                                                        leistungsdatum = "",
                                                         fahrtKm = k.fahrtKm,
                                                         fahrtKostenProKm = k.fahrtKostenProKm,
                                                         zuschlagBezeichnung = k.zuschlagBezeichnung,
@@ -6200,7 +6407,17 @@ fun KuemmeroApp() {
                                         )
                                         OutlinedTextField(kvNummer, { kvNummer = it }, label = { Text("Nummer") }, colors = feldFarben, modifier = Modifier.fillMaxWidth())
                                         OutlinedTextField(kvDatum, { kvDatum = it }, label = { Text("Datum") }, colors = feldFarben, modifier = Modifier.fillMaxWidth())
-                                        OutlinedTextField(kvGueltigBis, { kvGueltigBis = it }, label = { Text("Gültig bis") }, colors = feldFarben, modifier = Modifier.fillMaxWidth())
+                                        OutlinedTextField(
+                                            value = kvGueltigBis,
+                                            onValueChange = { },
+                                            label = { Text("Gültig bis") },
+                                            readOnly = true,
+                                            colors = feldFarben,
+                                            modifier = Modifier.fillMaxWidth().clickable { kvGueltigBisPickerOffen = true },
+                                            trailingIcon = {
+                                                TextButton(onClick = { kvGueltigBisPickerOffen = true }) { Text("📅") }
+                                            }
+                                        )
                                         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                                             Text("Kunde", color = KuemmeroGreen, fontWeight = FontWeight.Bold)
                                             OutlinedButton(
@@ -6302,8 +6519,12 @@ fun KuemmeroApp() {
                                         )
                                         Button(
                                             onClick = {
+                                                val kvDatumParsed = try { datumFormat.parse(kvDatum.trim()) } catch (_: Exception) { null }
+                                                val kvGueltigBisParsed = try { datumFormat.parse(kvGueltigBis.trim()) } catch (_: Exception) { null }
                                                 if (kvKunde.isBlank()) {
                                                     android.widget.Toast.makeText(context, "Bitte Kundennamen eingeben.", 0).show()
+                                                } else if (kvDatumParsed == null || kvGueltigBisParsed == null || !kvGueltigBisParsed.after(kvDatumParsed)) {
+                                                    android.widget.Toast.makeText(context, "Gültig bis muss nach dem Datum liegen.", android.widget.Toast.LENGTH_LONG).show()
                                                 } else {
                                                     val k = Kostenvoranschlag(
                                                         kvNummer.trim(), kvDatum.trim(), kvGueltigBis.trim(),
@@ -7147,10 +7368,8 @@ fun KuemmeroApp() {
 
     if (leistungspositionDialog) {
         AlertDialog(
-            containerColor = Color.White,
-            titleContentColor = KuemmeroGreen,
-            textContentColor = KuemmeroText,
             onDismissRequest = { leistungspositionDialog = false },
+            containerColor = Color.White,
             title = { Text(if (leistungspositionBearbeiteIndex == null) "Neue Leistung" else "Leistung bearbeiten") },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -7211,10 +7430,8 @@ fun KuemmeroApp() {
         val position = idx?.let { leistungspositionen.getOrNull(it) }
         if (position != null) {
             AlertDialog(
-            containerColor = Color.White,
-            titleContentColor = KuemmeroGreen,
-            textContentColor = KuemmeroText,
                 onDismissRequest = { leistungsPreisIndex = null },
+                containerColor = Color.White,
                 title = { Text("Standardpreis ändern") },
                 text = {
                     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -7251,10 +7468,8 @@ fun KuemmeroApp() {
         val idx = leistungspositionLoeschIndex
         val name = idx?.let { leistungspositionen.getOrNull(it)?.name } ?: "Leistung"
         AlertDialog(
-            containerColor = Color.White,
-            titleContentColor = KuemmeroGreen,
-            textContentColor = KuemmeroText,
             onDismissRequest = { leistungspositionLoeschIndex = null },
+            containerColor = Color.White,
             title = { Text("Leistung löschen?") },
             text = { Text("Soll \"$name\" wirklich aus deiner Leistungsliste gelöscht werden?") },
             confirmButton = {
@@ -7274,10 +7489,8 @@ fun KuemmeroApp() {
 
     if (leistungsAuswahlZiel != null) {
         AlertDialog(
-            containerColor = Color.White,
-            titleContentColor = KuemmeroGreen,
-            textContentColor = KuemmeroText,
             onDismissRequest = { leistungsAuswahlZiel = null },
+            containerColor = Color.White,
             title = { Text("Leistungsposition auswählen") },
             text = {
                 val aktuellerText = if (leistungsAuswahlZiel == "auftrag") leistung else kvLeistung
@@ -7360,10 +7573,8 @@ fun KuemmeroApp() {
 
     if (leistungsPreisDialog) {
         AlertDialog(
-            containerColor = Color.White,
-            titleContentColor = KuemmeroGreen,
-            textContentColor = KuemmeroText,
             onDismissRequest = { leistungsPreisDialog = false },
+            containerColor = Color.White,
             title = { Text("Preisvorschlag") },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
