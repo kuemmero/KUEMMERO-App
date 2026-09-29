@@ -1689,14 +1689,38 @@ private val KuemmeroError = Color(0xFFC62828)
 private val KuemmeroColors = lightColorScheme(
     primary = KuemmeroGreen,
     onPrimary = Color.White,
+    primaryContainer = KuemmeroMint,
+    onPrimaryContainer = KuemmeroText,
+    inversePrimary = KuemmeroGreenLight,
+
     secondary = KuemmeroGreenLight,
     onSecondary = Color.White,
+    secondaryContainer = KuemmeroMint,
+    onSecondaryContainer = KuemmeroText,
+
+    tertiary = KuemmeroGreen,
+    onTertiary = Color.White,
+    tertiaryContainer = KuemmeroMint,
+    onTertiaryContainer = KuemmeroText,
+
     background = KuemmeroBackground,
     onBackground = KuemmeroText,
-    surface = KuemmeroSurface,
+
+    surface = Color.White,
     onSurface = KuemmeroText,
+    surfaceVariant = KuemmeroSurface,
+    onSurfaceVariant = KuemmeroText,
+    surfaceTint = KuemmeroGreen,
+    inverseSurface = KuemmeroText,
+    inverseOnSurface = Color.White,
+
+    outline = KuemmeroGreen,
+    outlineVariant = KuemmeroGreenLight,
+
     error = KuemmeroError,
-    onError = Color.White
+    onError = Color.White,
+
+    scrim = Color.Black
 )
 
 
