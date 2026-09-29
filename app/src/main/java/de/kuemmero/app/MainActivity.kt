@@ -203,6 +203,8 @@ data class Auftrag(
     val stornoNummer: String = "",
     // Eigenes Auftragsprotokoll: Verlauf/Arbeitsschritte/Bemerkungen zum Auftrag.
     val protokoll: String = "",
+    // Final geprüfter Rechnungsbetrag; bleibt nach Rechnungskorrekturen als Belegwert erhalten.
+    val rechnungsbetragGespeichert: Double = 0.0,
     // Zum Zeitpunkt des Auftrags festgehaltener Wochenend-/Feiertagszuschlag.
     val zuschlagBezeichnung: String = "",
     val zuschlagBetrag: Double = 0.0
