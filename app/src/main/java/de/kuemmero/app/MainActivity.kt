@@ -3506,40 +3506,73 @@ fun KuemmeroApp() {
     if (neuerKundeDialog) {
         AlertDialog(
             onDismissRequest = { neuerKundeDialog = false },
-            title = { Text("Neuen Kunden anlegen") },
+            containerColor = Color.White,
+            titleContentColor = KuemmeroGreen,
+            textContentColor = KuemmeroText,
+            title = { Text("Neuen Kunden anlegen", color = KuemmeroGreen, fontWeight = FontWeight.Bold) },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     OutlinedTextField(
                         neuerKundenName,
                         { neuerKundenName = it },
                         label = { Text("Kunde") },
-                        singleLine = true
+                        singleLine = true,
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedBorderColor = KuemmeroGreen,
+                            unfocusedBorderColor = KuemmeroGreen,
+                            focusedLabelColor = KuemmeroGreen,
+                            cursorColor = KuemmeroGreen
+                        )
                     )
                     OutlinedTextField(
                         neuerKundenAdresse,
                         { neuerKundenAdresse = it },
                         label = { Text("Adresse") },
-                        singleLine = true
+                        singleLine = true,
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedBorderColor = KuemmeroGreen,
+                            unfocusedBorderColor = KuemmeroGreen,
+                            focusedLabelColor = KuemmeroGreen,
+                            cursorColor = KuemmeroGreen
+                        )
                     )
                     OutlinedTextField(
                         neuerKundenOrt,
                         { neuerKundenOrt = it },
                         label = { Text("PLZ und Ort") },
-                        singleLine = true
+                        singleLine = true,
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedBorderColor = KuemmeroGreen,
+                            unfocusedBorderColor = KuemmeroGreen,
+                            focusedLabelColor = KuemmeroGreen,
+                            cursorColor = KuemmeroGreen
+                        )
                     )
                     OutlinedTextField(
                         neuerKundenTelefon,
                         { neuerKundenTelefon = it },
                         label = { Text("Telefon") },
                         singleLine = true,
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone)
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone),
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedBorderColor = KuemmeroGreen,
+                            unfocusedBorderColor = KuemmeroGreen,
+                            focusedLabelColor = KuemmeroGreen,
+                            cursorColor = KuemmeroGreen
+                        )
                     )
                     OutlinedTextField(
                         neuerKundenEmail,
                         { neuerKundenEmail = it },
                         label = { Text("E-Mail") },
                         singleLine = true,
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email)
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email),
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedBorderColor = KuemmeroGreen,
+                            unfocusedBorderColor = KuemmeroGreen,
+                            focusedLabelColor = KuemmeroGreen,
+                            cursorColor = KuemmeroGreen
+                        )
                     )
                 }
             },
