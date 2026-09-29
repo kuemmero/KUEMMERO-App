@@ -1711,6 +1711,18 @@ private val KuemmeroColors = lightColorScheme(
     surfaceVariant = KuemmeroSurface,
     onSurfaceVariant = KuemmeroText,
     surfaceTint = KuemmeroGreen,
+
+    // Material3-Dialoge verwenden diese Surface-Container-Farben.
+    // Alle werden deshalb ausdrücklich auf KÜMMERO-Weiß gesetzt,
+    // damit kein Standard-Lila/Lavendel aus dem Material-Theme durchkommt.
+    surfaceBright = Color.White,
+    surfaceDim = KuemmeroBackground,
+    surfaceContainerLowest = Color.White,
+    surfaceContainerLow = Color.White,
+    surfaceContainer = Color.White,
+    surfaceContainerHigh = Color.White,
+    surfaceContainerHighest = Color.White,
+
     inverseSurface = KuemmeroText,
     inverseOnSurface = Color.White,
 
