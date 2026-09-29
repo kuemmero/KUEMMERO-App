@@ -3524,6 +3524,9 @@ fun KuemmeroApp() {
 
     if (kundenDialog) {
         AlertDialog(
+            containerColor = Color.White,
+            titleContentColor = KuemmeroGreen,
+            textContentColor = KuemmeroText,
             onDismissRequest = { kundenDialog = false },
             title = { Text("Kundenverwaltung") },
             text = {
@@ -3860,6 +3863,9 @@ fun KuemmeroApp() {
 
     if (kalenderOffen) {
         AlertDialog(
+            containerColor = Color.White,
+            titleContentColor = KuemmeroGreen,
+            textContentColor = KuemmeroText,
             onDismissRequest = { kalenderOffen = false },
             title = { Text("📅 Termine") },
             text = {
@@ -7268,6 +7274,9 @@ fun KuemmeroApp() {
 
     if (leistungsAuswahlZiel != null) {
         AlertDialog(
+            containerColor = Color.White,
+            titleContentColor = KuemmeroGreen,
+            textContentColor = KuemmeroText,
             onDismissRequest = { leistungsAuswahlZiel = null },
             title = { Text("Leistungsposition auswählen") },
             text = {
