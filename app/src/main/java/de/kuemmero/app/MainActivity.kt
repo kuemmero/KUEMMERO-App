@@ -3993,6 +3993,9 @@ fun KuemmeroApp() {
     MaterialTheme(colorScheme = KuemmeroColors) {
         if (kvKundenDialog) {
         AlertDialog(
+            containerColor = Color.White,
+            titleContentColor = KuemmeroGreen,
+            textContentColor = KuemmeroText,
             onDismissRequest = { kvKundenDialog = false },
             title = { Text("Kunde auswählen") },
             text = {
@@ -7138,6 +7141,9 @@ fun KuemmeroApp() {
 
     if (leistungspositionDialog) {
         AlertDialog(
+            containerColor = Color.White,
+            titleContentColor = KuemmeroGreen,
+            textContentColor = KuemmeroText,
             onDismissRequest = { leistungspositionDialog = false },
             title = { Text(if (leistungspositionBearbeiteIndex == null) "Neue Leistung" else "Leistung bearbeiten") },
             text = {
@@ -7199,6 +7205,9 @@ fun KuemmeroApp() {
         val position = idx?.let { leistungspositionen.getOrNull(it) }
         if (position != null) {
             AlertDialog(
+            containerColor = Color.White,
+            titleContentColor = KuemmeroGreen,
+            textContentColor = KuemmeroText,
                 onDismissRequest = { leistungsPreisIndex = null },
                 title = { Text("Standardpreis ändern") },
                 text = {
@@ -7236,6 +7245,9 @@ fun KuemmeroApp() {
         val idx = leistungspositionLoeschIndex
         val name = idx?.let { leistungspositionen.getOrNull(it)?.name } ?: "Leistung"
         AlertDialog(
+            containerColor = Color.White,
+            titleContentColor = KuemmeroGreen,
+            textContentColor = KuemmeroText,
             onDismissRequest = { leistungspositionLoeschIndex = null },
             title = { Text("Leistung löschen?") },
             text = { Text("Soll \"$name\" wirklich aus deiner Leistungsliste gelöscht werden?") },
@@ -7339,6 +7351,9 @@ fun KuemmeroApp() {
 
     if (leistungsPreisDialog) {
         AlertDialog(
+            containerColor = Color.White,
+            titleContentColor = KuemmeroGreen,
+            textContentColor = KuemmeroText,
             onDismissRequest = { leistungsPreisDialog = false },
             title = { Text("Preisvorschlag") },
             text = {
