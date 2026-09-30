@@ -12,6 +12,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -390,6 +391,9 @@ fun BuchhaltungScreen(
         modifier = Modifier
             .fillMaxSize()
             .background(BuchBackground)
+            .statusBarsPadding()
+            .navigationBarsPadding()
+            .imePadding()
             .padding(horizontal = 16.dp),
         verticalArrangement = Arrangement.spacedBy(14.dp),
         contentPadding = PaddingValues(top = 10.dp, bottom = 18.dp)
@@ -592,7 +596,10 @@ fun BuchhaltungScreen(
                     colors = CardDefaults.cardColors(containerColor = Color.White)
                 ) {
                     Column(
-                        modifier = Modifier.padding(16.dp),
+                        modifier = Modifier
+                            .padding(16.dp)
+                            .heightIn(max = 520.dp)
+                            .verticalScroll(rememberScrollState()),
                         verticalArrangement = Arrangement.spacedBy(10.dp)
                     ) {
                         Text("Neue Buchung", fontSize = 20.sp, fontWeight = FontWeight.Bold, color = BuchGreenDark)
@@ -1064,7 +1071,10 @@ fun BuchhaltungScreen(
             title = { Text("Neuen Beleg erfassen", fontWeight = FontWeight.Bold, color = BuchGreenDark) },
             text = {
                 Column(
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(max = 520.dp)
+                        .verticalScroll(rememberScrollState()),
                     verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     OutlinedTextField(
