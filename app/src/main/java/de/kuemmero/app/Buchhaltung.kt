@@ -706,6 +706,92 @@ fun BuchhaltungScreen(
 
         item {
             Text(
+                "Aufträge – Übersicht",
+                fontSize = 21.sp,
+                fontWeight = FontWeight.Bold,
+                color = Color(0xFF102A20)
+            )
+        }
+
+        if (auftraege.isEmpty()) {
+            item {
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(18.dp),
+                    colors = CardDefaults.cardColors(containerColor = Color.White)
+                ) {
+                    Text(
+                        "Keine Aufträge vorhanden.",
+                        modifier = Modifier.padding(18.dp),
+                        color = Color(0xFF60716A)
+                    )
+                }
+            }
+        } else {
+            items(auftraege.take(20)) { auftrag ->
+                Card(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable { onOffenerAuftragClick(auftrag) },
+                    shape = RoundedCornerShape(18.dp),
+                    colors = CardDefaults.cardColors(containerColor = Color.White)
+                ) {
+                    Column(
+                        modifier = Modifier.padding(14.dp),
+                        verticalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
+                        Text(
+                            auftrag.kunde.ifBlank { "Kunde" },
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 17.sp,
+                            color = BuchGreenDark
+                        )
+                        Text(
+                            "Auftrag: ${auftrag.nummer.ifBlank { "ohne Nummer" }}",
+                            fontWeight = FontWeight.SemiBold
+                        )
+                        if (auftrag.datum.isNotBlank()) {
+                            Text("Datum: ${auftrag.datum}", color = Color(0xFF45554F))
+                        }
+                        if (auftrag.leistung.isNotBlank()) {
+                            Text(auftrag.leistung, fontSize = 13.sp, color = Color(0xFF45554F))
+                        }
+                        Text(
+                            "Status: ${auftrag.status.ifBlank { "Unbekannt" }}",
+                            fontWeight = FontWeight.SemiBold,
+                            color = BuchGreen
+                        )
+                        Text(
+                            "Zahlung: ${auftrag.zahlungsstatus.ifBlank { "—" }}",
+                            fontSize = 13.sp,
+                            color = Color(0xFF60716A)
+                        )
+                        if (auftrag.rechnungsnummer.isNotBlank()) {
+                            Text(
+                                "Rechnung: ${auftrag.rechnungsnummer}",
+                                fontSize = 13.sp,
+                                color = BuchGreen
+                            )
+                        } else {
+                            Text(
+                                "Noch keine Rechnung",
+                                fontSize = 13.sp,
+                                color = Color(0xFFB35A00)
+                            )
+                        }
+                        Text(
+                            "↗ Auftrag öffnen / Info",
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = BuchGreen
+                        )
+                    }
+                }
+            }
+        }
+
+        item {
+            Text(
                 "Schnellzugriff",
                 fontSize = 21.sp,
                 fontWeight = FontWeight.Bold,
