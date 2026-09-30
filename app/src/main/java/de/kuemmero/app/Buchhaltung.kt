@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -252,6 +253,7 @@ fun BuchhaltungScreen(
     var betrag by remember { mutableStateOf("") }
     var auswertungOffen by remember { mutableStateOf(false) }
     var rechnungenOffen by remember { mutableStateOf(false) }
+    var auftraegeOffen by remember { mutableStateOf(false) }
     var offeneAuftraegeOffen by remember { mutableStateOf(false) }
     var belege by remember { mutableStateOf(ladeBelege(context)) }
     var belegeOffen by remember { mutableStateOf(false) }
@@ -682,7 +684,7 @@ fun BuchhaltungScreen(
                     "Aufträge",
                     "${auftraege.size} insgesamt",
                     BuchBlue
-                ) { }
+                ) { auftraegeOffen = true }
 
                 BuchActionTile(
                     "✓",
@@ -806,6 +808,92 @@ fun BuchhaltungScreen(
                 }
             }
         }
+    }
+
+    if (auftraegeOffen) {
+        AlertDialog(
+            onDismissRequest = { auftraegeOffen = false },
+            title = {
+                Text(
+                    "Alle Aufträge (${auftraege.size})",
+                    fontWeight = FontWeight.Bold,
+                    color = BuchGreenDark
+                )
+            },
+            text = {
+                if (auftraege.isEmpty()) {
+                    Text("Noch keine Aufträge vorhanden.")
+                } else {
+                    LazyColumn(
+                        modifier = Modifier.heightIn(max = 430.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        items(auftraege) { auftrag ->
+                            Card(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clickable {
+                                        auftraegeOffen = false
+                                        onOffenerAuftragClick(auftrag)
+                                    },
+                                colors = CardDefaults.cardColors(
+                                    containerColor = BuchBlue
+                                ),
+                                shape = RoundedCornerShape(16.dp)
+                            ) {
+                                Column(
+                                    Modifier.padding(12.dp),
+                                    verticalArrangement = Arrangement.spacedBy(3.dp)
+                                ) {
+                                    Text(
+                                        auftrag.kunde.ifBlank { "Kunde" },
+                                        fontWeight = FontWeight.Bold,
+                                        color = BuchGreenDark
+                                    )
+                                    Text(
+                                        "Auftrag: ${auftrag.nummer.ifBlank { "ohne Nummer" }}",
+                                        fontWeight = FontWeight.SemiBold
+                                    )
+                                    if (auftrag.datum.isNotBlank()) {
+                                        Text("Datum: ${auftrag.datum}")
+                                    }
+                                    if (auftrag.leistung.isNotBlank()) {
+                                        Text(
+                                            auftrag.leistung,
+                                            fontSize = 13.sp,
+                                            color = Color(0xFF304A40)
+                                        )
+                                    }
+                                    Text(
+                                        "Status: ${auftrag.status} • Zahlung: ${auftrag.zahlungsstatus}",
+                                        fontSize = 12.sp,
+                                        color = Color(0xFF60716A)
+                                    )
+                                    if (auftrag.rechnungsnummer.isNotBlank()) {
+                                        Text(
+                                            "Rechnung: ${auftrag.rechnungsnummer}",
+                                            fontSize = 12.sp,
+                                            color = BuchGreen
+                                        )
+                                    } else {
+                                        Text(
+                                            "Noch keine Rechnung",
+                                            fontSize = 12.sp,
+                                            color = Color(0xFFB35A00)
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { auftraegeOffen = false }) {
+                    Text("Schließen", color = BuchGreen, fontWeight = FontWeight.Bold)
+                }
+            }
+        )
     }
 
     if (rechnungenOffen) {
