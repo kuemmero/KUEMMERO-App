@@ -814,12 +814,10 @@ fun BuchhaltungScreen(
         val positionen = auftraege.flatMap { a -> a.bueroKosten.map { k -> Triple(a, k.bezeichnung, k.betrag) } }
         AlertDialog(
             onDismissRequest = { bueroAufschluesselungOffen = false },
-            colors = AlertDialogDefaults.colors(
-                containerColor = Color.White,
-                titleContentColor = BuchGreenDark,
-                textContentColor = Color(0xFF45554F),
-                iconContentColor = BuchGreen
-            ),
+            containerColor = Color.White,
+            titleContentColor = BuchGreenDark,
+            textContentColor = Color(0xFF45554F),
+            iconContentColor = BuchGreen,
             title = { Text("Büro & Verwaltung – Einzelaufstellung", fontWeight = FontWeight.Bold, color = BuchGreenDark) },
             text = {
                 if (positionen.isEmpty()) Text("Noch keine Büro-Kosten bei Aufträgen hinterlegt.")
