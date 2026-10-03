@@ -2049,6 +2049,7 @@ fun KuemmeroApp() {
     var globaleSuche by remember { mutableStateOf("") }
     var rechnungArchivSuche by remember { mutableStateOf("") }
     var rechnungArchivJahr by remember { mutableStateOf("Alle") }
+    var rechnungArchivStatus by remember { mutableStateOf("Alle") }
     var kostenvoranschlaege by remember { mutableStateOf(ladeKostenvoranschlaege(context)) }
     var leistungspositionen by remember { mutableStateOf(ladeLeistungspositionen(context)) }
     var leistungspositionDialog by remember { mutableStateOf(false) }
@@ -4209,12 +4210,30 @@ fun KuemmeroApp() {
                     }
                     HorizontalDivider()
                     Text("Aufträge: ${kundenAuftraege.size}", fontWeight = FontWeight.Bold)
-                    Text("Umsatz: ${euro(kundenAuftraege.sumOf { runde2(gesamtbetrag(it.stunden, it.material, it.fahrt, it.stundensatz, it.erstellungskosten) + it.zuschlagBetrag) })}")
-                    val offen = kundenAuftraege.filter { it.zahlungsstatus != "Bezahlt" }
-                    Text("Offene Zahlungen: ${euro(offen.sumOf { runde2(gesamtbetrag(it.stunden, it.material, it.fahrt, it.stundensatz, it.erstellungskosten) + it.zuschlagBetrag) })}", color = if (offen.isEmpty()) KuemmeroGreen else KuemmeroError, fontWeight = FontWeight.Bold)
+                    fun kundenBetrag(a: Auftrag): Double =
+                        if (a.rechnungsbetragGespeichert > 0.0) a.rechnungsbetragGespeichert
+                        else runde2(gesamtbetrag(a.stunden, a.material, a.fahrt, a.stundensatz, a.erstellungskosten) + a.zuschlagBetrag)
+                    val umsatz = kundenAuftraege
+                        .filter { it.rechnungsstatus != "Storniert" }
+                        .sumOf { kundenBetrag(it) }
+                    Text("Umsatz: ${euro(umsatz)}")
+                    val offen = kundenAuftraege.filter {
+                        it.rechnungsnummer.isNotBlank() &&
+                        it.rechnungsstatus != "Storniert" &&
+                        it.zahlungsstatus != "Bezahlt"
+                    }
+                    Text(
+                        "Offene Zahlungen: ${euro(offen.sumOf { kundenBetrag(it) })}",
+                        color = if (offen.isEmpty()) KuemmeroGreen else KuemmeroError,
+                        fontWeight = FontWeight.Bold
+                    )
                     val kundenKVs = kostenvoranschlaege.filter { it.kunde.equals(name, ignoreCase = true) }
                     Text("Kostenvoranschläge: ${kundenKVs.size}", fontWeight = FontWeight.Bold)
-                    val rechnungen = kundenAuftraege.filter { it.rechnungsnummer.isNotBlank() }
+                    val rechnungen = kundenAuftraege
+                        .filter { it.rechnungsnummer.isNotBlank() }
+                        .sortedWith(compareByDescending<Auftrag> {
+                            parseDeDatum(it.rechnungsdatum)?.time ?: 0L
+                        }.thenByDescending { it.rechnungsnummer })
                     val mahnungen = rechnungen.filter { it.mahnung1Erstellt || it.mahnung2Erstellt }
                     Text("Rechnungen: ${rechnungen.size}", fontWeight = FontWeight.Bold)
                     Text(
@@ -4226,15 +4245,22 @@ fun KuemmeroApp() {
                         color = if (mahnungen.any { it.mahnung1Erstellt || it.mahnung2Erstellt }) KuemmeroError else KuemmeroGreen,
                         fontWeight = FontWeight.Bold
                     )
-                    rechnungen.takeLast(5).reversed().forEach { r ->
+                    rechnungen.take(5).forEach { r ->
                         val mahnstatus = when {
                             r.mahnung2Erstellt -> "2. Mahnung"
                             r.mahnung1Erstellt -> "1. Mahnung"
                             else -> "keine Mahnung"
                         }
+                        val zahlstatus = if (r.zahlungsstatus == "Bezahlt") "Bezahlt" else "Offen"
+                        val statusZusatz = if (r.rechnungsstatus.isNotBlank()) " · ${r.rechnungsstatus}" else ""
                         Text(
-                            "${r.rechnungsnummer} · ${euro(runde2(gesamtbetrag(r.stunden, r.material, r.fahrt, r.stundensatz, r.erstellungskosten) + r.zuschlagBetrag))} · ${if (r.zahlungsstatus == "Bezahlt") "Bezahlt" else "Offen"} · $mahnstatus",
-                            color = if (r.zahlungsstatus == "Bezahlt") KuemmeroGreen else if (r.mahnung2Erstellt || r.mahnung1Erstellt) KuemmeroError else KuemmeroText,
+                            "${r.rechnungsnummer} · ${euro(kundenBetrag(r))} · $zahlstatus$statusZusatz · $mahnstatus",
+                            color = when {
+                                r.rechnungsstatus == "Storniert" -> KuemmeroError
+                                r.zahlungsstatus == "Bezahlt" -> KuemmeroGreen
+                                r.mahnung2Erstellt || r.mahnung1Erstellt -> KuemmeroError
+                                else -> KuemmeroText
+                            },
                             style = MaterialTheme.typography.bodySmall
                         )
                     }
@@ -7737,11 +7763,28 @@ fun KuemmeroApp() {
                             )
                         }
                         item {
-                            Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                listOf("Alle", SimpleDateFormat("yyyy", Locale.GERMANY).format(Date()), (Calendar.getInstance().get(Calendar.YEAR) - 1).toString()).forEach { jahr ->
-                                    val aktiv = rechnungArchivJahr == jahr
-                                    Surface(Modifier.height(42.dp).clickable { rechnungArchivJahr = jahr }, shape = RoundedCornerShape(21.dp), color = if (aktiv) KuemmeroGreen else KuemmeroMint, border = BorderStroke(1.5.dp, KuemmeroGreen)) {
-                                        Box(Modifier.padding(horizontal = 16.dp), contentAlignment = Alignment.Center) { Text(jahr, color = if (aktiv) Color.White else KuemmeroText, fontWeight = FontWeight.SemiBold) }
+                            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                    listOf("Alle", SimpleDateFormat("yyyy", Locale.GERMANY).format(Date()), (Calendar.getInstance().get(Calendar.YEAR) - 1).toString()).forEach { jahr ->
+                                        val aktiv = rechnungArchivJahr == jahr
+                                        Surface(Modifier.height(42.dp).clickable { rechnungArchivJahr = jahr }, shape = RoundedCornerShape(21.dp), color = if (aktiv) KuemmeroGreen else KuemmeroMint, border = BorderStroke(1.5.dp, KuemmeroGreen)) {
+                                            Box(Modifier.padding(horizontal = 16.dp), contentAlignment = Alignment.Center) { Text(jahr, color = if (aktiv) Color.White else KuemmeroText, fontWeight = FontWeight.SemiBold) }
+                                        }
+                                    }
+                                }
+                                Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                    listOf("Alle", "Offen", "Bezahlt", "Berichtigt", "Storniert").forEach { status ->
+                                        val aktiv = rechnungArchivStatus == status
+                                        Surface(
+                                            Modifier.height(38.dp).clickable { rechnungArchivStatus = status },
+                                            shape = RoundedCornerShape(19.dp),
+                                            color = if (aktiv) KuemmeroGreen else KuemmeroMint,
+                                            border = BorderStroke(1.dp, KuemmeroGreen)
+                                        ) {
+                                            Box(Modifier.padding(horizontal = 14.dp), contentAlignment = Alignment.Center) {
+                                                Text(status, color = if (aktiv) Color.White else KuemmeroText, fontWeight = FontWeight.SemiBold, fontSize = 12.sp)
+                                            }
+                                        }
                                     }
                                 }
                             }
@@ -7749,8 +7792,18 @@ fun KuemmeroApp() {
                         val archiv = auftraege.filter { a ->
                             a.rechnungsnummer.isNotBlank() &&
                             (rechnungArchivJahr == "Alle" || a.rechnungsdatum.endsWith(rechnungArchivJahr)) &&
+                            (rechnungArchivStatus == "Alle" ||
+                                when (rechnungArchivStatus) {
+                                    "Bezahlt" -> a.zahlungsstatus == "Bezahlt"
+                                    "Storniert" -> a.rechnungsstatus == "Storniert"
+                                    "Berichtigt" -> a.rechnungsstatus == "Berichtigt"
+                                    "Offen" -> a.zahlungsstatus != "Bezahlt" && a.rechnungsstatus != "Storniert"
+                                    else -> true
+                                }) &&
                             (rechnungArchivSuche.isBlank() || listOf(a.kunde, a.rechnungsnummer, a.leistung).any { it.contains(rechnungArchivSuche, ignoreCase = true) })
-                        }.sortedByDescending { it.rechnungsdatum }
+                        }.sortedWith(compareByDescending<Auftrag> {
+                            parseDeDatum(it.rechnungsdatum)?.time ?: 0L
+                        }.thenByDescending { it.rechnungsnummer })
                         if (archiv.isEmpty()) {
                             item { Card(Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = KuemmeroSurface), shape = RoundedCornerShape(18.dp)) { Text("Keine Rechnungen im Archiv gefunden.", Modifier.padding(16.dp), color = KuemmeroText) } }
                         } else {
@@ -7760,7 +7813,13 @@ fun KuemmeroApp() {
                                     Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(5.dp)) {
                                         Text(a.rechnungsnummer, color = KuemmeroGreen, fontWeight = FontWeight.Bold)
                                         Text(a.kunde.ifBlank { "Kunde" }, color = KuemmeroText, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-                                        Text("${a.rechnungsdatum.ifBlank { "ohne Rechnungsdatum" }} · ${euro(runde2(gesamtbetrag(a.stunden, a.material, a.fahrt, a.stundensatz, a.erstellungskosten) + a.zuschlagBetrag))}", color = KuemmeroText)
+                                        val archivBetrag = if (a.rechnungsbetragGespeichert > 0.0) a.rechnungsbetragGespeichert else runde2(gesamtbetrag(a.stunden, a.material, a.fahrt, a.stundensatz, a.erstellungskosten) + a.zuschlagBetrag)
+                                        Text("${a.rechnungsdatum.ifBlank { "ohne Rechnungsdatum" }} · ${euro(archivBetrag)}", color = KuemmeroText)
+                                        Text(
+                                            "Zahlung: ${a.zahlungsstatus.ifBlank { "Offen" }}",
+                                            color = if (a.zahlungsstatus == "Bezahlt") KuemmeroGreen else KuemmeroText,
+                                            fontWeight = FontWeight.SemiBold
+                                        )
                                         if (a.rechnungsstatus.isNotBlank()) Text("Status: ${a.rechnungsstatus}", color = if (a.rechnungsstatus == "Storniert") KuemmeroError else KuemmeroGreen, fontWeight = FontWeight.SemiBold)
                                         if (a.rechnungUrsprungsnummer.isNotBlank()) Text("Bezug: ${a.rechnungUrsprungsnummer}", color = KuemmeroText, fontSize = 12.sp)
                                         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
