@@ -253,6 +253,8 @@ data class Auftrag(
     val zuschlagBetrag: Double = 0.0,
     // Endbetrag der tatsächlich erzeugten Rechnung, inklusive USt falls Regelbesteuerung.
     val rechnungsbetragGespeichert: Double = 0.0,
+    val kundenTelefon: String = "",
+    val kundenEmail: String = "",
     // Individuelle Büro-/Verwaltungskosten, die diesem Auftrag zugeordnet sind.
     val bueroKosten: List<BueroKosten> = emptyList()
 )
@@ -371,7 +373,9 @@ data class Kostenvoranschlag(
     val fahrtKostenProKm: Double = 0.40,
     // Zum Zeitpunkt des Kostenvoranschlags festgehaltener Zuschlag.
     val zuschlagBezeichnung: String = "",
-    val zuschlagBetrag: Double = 0.0
+    val zuschlagBetrag: Double = 0.0,
+    val kundenTelefon: String = "",
+    val kundenEmail: String = ""
 )
 
 private fun ladeKostenvoranschlaege(context: Context): List<Kostenvoranschlag> {
@@ -390,7 +394,9 @@ private fun ladeKostenvoranschlaege(context: Context): List<Kostenvoranschlag> {
             fahrtKm = o.optDouble("fahrtKm", 0.0),
             fahrtKostenProKm = o.optDouble("fahrtKostenProKm", context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE).getString(FAHRTKOSTEN_PRO_KM_KEY, "0.40")?.replace(",", ".")?.toDoubleOrNull() ?: 0.40),
             zuschlagBezeichnung = o.optString("zuschlagBezeichnung", ""),
-            zuschlagBetrag = o.optDouble("zuschlagBetrag", 0.0)
+            zuschlagBetrag = o.optDouble("zuschlagBetrag", 0.0),
+            kundenTelefon = o.optString("kundenTelefon", ""),
+            kundenEmail = o.optString("kundenEmail", "")
         )
     }
 }
@@ -407,6 +413,8 @@ private fun speichereKostenvoranschlaege(context: Context, liste: List<Kostenvor
             put("erstellungskosten", k.erstellungskosten)
             put("zuschlagBezeichnung", k.zuschlagBezeichnung)
             put("zuschlagBetrag", k.zuschlagBetrag)
+            put("kundenTelefon", k.kundenTelefon)
+            put("kundenEmail", k.kundenEmail)
         })
     }
     context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
@@ -531,6 +539,8 @@ private fun ladeAuftraege(context: Context): List<Auftrag> {
             zuschlagBezeichnung = o.optString("zuschlagBezeichnung", ""),
             zuschlagBetrag = o.optDouble("zuschlagBetrag", 0.0),
             rechnungsbetragGespeichert = o.optDouble("rechnungsbetragGespeichert", 0.0),
+            kundenTelefon = o.optString("kundenTelefon", ""),
+            kundenEmail = o.optString("kundenEmail", ""),
             bueroKosten = o.optJSONArray("bueroKosten")?.let { arr ->
                 List(arr.length()) { j ->
                     val b = arr.optJSONObject(j) ?: JSONObject()
@@ -926,7 +936,9 @@ private fun erstellePdf(
     fahrtKm: Double = 0.0,
     fahrtSatz: Double = 0.40,
     zuschlagBezeichnung: String = "",
-    zuschlagBetrag: Double = 0.0
+    zuschlagBetrag: Double = 0.0,
+    kundenTelefon: String = "",
+    kundenEmail: String = ""
 ): PdfDocument {
     val pdf = PdfDocument()
     val page = pdf.startPage(PdfDocument.PageInfo.Builder(595, 842, 1).create())
@@ -1662,7 +1674,7 @@ private fun druckePdf(
                 context, nummer, datum, gueltigBis,
                 auftrag.kunde, auftrag.kundenStrasse, auftrag.kundenOrt, auftrag.leistung,
                 auftrag.stunden, auftrag.material, auftrag.fahrt, auftrag.stundensatz,
-                auftrag.unterschriftPfad, auftrag.unterschriftDatum, auftrag.fotosVorher, auftrag.fotosNachher, dokumentTitel, auftrag.erstellungskosten, auftrag.fahrtKm, auftrag.fahrtKostenProKm, auftrag.zuschlagBezeichnung, auftrag.zuschlagBetrag
+                auftrag.unterschriftPfad, auftrag.unterschriftDatum, auftrag.fotosVorher, auftrag.fotosNachher, dokumentTitel, auftrag.erstellungskosten, auftrag.fahrtKm, auftrag.fahrtKostenProKm, auftrag.zuschlagBezeichnung, auftrag.zuschlagBetrag, auftrag.kundenTelefon, auftrag.kundenEmail
             )
             val info = PrintDocumentInfo.Builder(dateiname)
                 .setContentType(PrintDocumentInfo.CONTENT_TYPE_DOCUMENT)
@@ -1972,6 +1984,8 @@ fun KuemmeroApp() {
     var kunde by remember { mutableStateOf("") }
     var strasse by remember { mutableStateOf("") }
     var ort by remember { mutableStateOf("") }
+    var kundenTelefon by remember { mutableStateOf("") }
+    var kundenEmail by remember { mutableStateOf("") }
     var leistung by remember { mutableStateOf("") }
     var stunden by remember { mutableStateOf("") }
     var material by remember { mutableStateOf("") }
@@ -2070,6 +2084,8 @@ fun KuemmeroApp() {
     var kvKunde by remember { mutableStateOf("") }
     var kvStrasse by remember { mutableStateOf("") }
     var kvOrt by remember { mutableStateOf("") }
+    var kvKundenTelefon by remember { mutableStateOf("") }
+    var kvKundenEmail by remember { mutableStateOf("") }
     var kvLeistung by remember { mutableStateOf("") }
     var leistungsAuswahlZiel by remember { mutableStateOf<String?>(null) }
     var leistungsPreisDialog by remember { mutableStateOf(false) }
@@ -2917,7 +2933,6 @@ fun KuemmeroApp() {
         )
     }
 
-
     val fotoLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.OpenMultipleDocuments()
     ) { uris ->
@@ -2973,7 +2988,7 @@ fun KuemmeroApp() {
                     context, nummer, datum, gueltigBis,
                     a.kunde, a.kundenStrasse, a.kundenOrt, a.leistung,
                     a.stunden, a.material, a.fahrt, a.stundensatz, a.unterschriftPfad, a.unterschriftDatum,
-                    a.fotosVorher, a.fotosNachher, "ANGEBOT", a.erstellungskosten, a.fahrtKm, a.fahrtKostenProKm, a.zuschlagBezeichnung, a.zuschlagBetrag
+                    a.fotosVorher, a.fotosNachher, "ANGEBOT", a.erstellungskosten, a.fahrtKm, a.fahrtKostenProKm, a.zuschlagBezeichnung, a.zuschlagBetrag, a.kundenTelefon, a.kundenEmail
                 )
             } else {
                 erstellePdf(
@@ -3678,6 +3693,8 @@ fun KuemmeroApp() {
                                             kunde = k.name
                                             strasse = k.adresse
                                             ort = k.ort
+                                            kundenTelefon = k.telefon
+                                            kundenEmail = k.email
                                             kundenDialog = false
                                         }
                                         .padding(12.dp)
@@ -3792,10 +3809,10 @@ fun KuemmeroApp() {
                                 kundenListeNeu[index] = k
                                 // Bestehende Aufträge und Kostenvoranschläge auf die geänderten Kundendaten umstellen.
                                 auftraege = auftraege.map { a ->
-                                    if (a.kunde.equals(alterName, ignoreCase = true)) a.copy(kunde = k.name, kundenStrasse = k.adresse, kundenOrt = k.ort) else a
+                                    if (a.kunde.equals(alterName, ignoreCase = true)) a.copy(kunde = k.name, kundenStrasse = k.adresse, kundenOrt = k.ort, kundenTelefon = k.telefon, kundenEmail = k.email) else a
                                 }
                                 kostenvoranschlaege = kostenvoranschlaege.map { kv ->
-                                    if (kv.kunde.equals(alterName, ignoreCase = true)) kv.copy(kunde = k.name, kundenStrasse = k.adresse, kundenOrt = k.ort) else kv
+                                    if (kv.kunde.equals(alterName, ignoreCase = true)) kv.copy(kunde = k.name, kundenStrasse = k.adresse, kundenOrt = k.ort, kundenTelefon = k.telefon, kundenEmail = k.email) else kv
                                 }
                                 speichereAuftraege(context, auftraege)
                                 speichereKostenvoranschlaege(context, kostenvoranschlaege)
@@ -3813,6 +3830,8 @@ fun KuemmeroApp() {
                         kunde = k.name
                         strasse = k.adresse
                         ort = k.ort
+                        kundenTelefon = k.telefon
+                        kundenEmail = k.email
                         kundeBearbeiteName = null
                         neuerKundeDialog = false
                         kundenAkteName = k.name
@@ -4430,6 +4449,8 @@ fun KuemmeroApp() {
                                     kvKunde = k.name
                                     kvStrasse = k.adresse
                                     kvOrt = k.ort
+                                    kvKundenTelefon = k.telefon
+                                    kvKundenEmail = k.email
                                     kvKundenDialog = false
                                 },
                                 modifier = Modifier.fillMaxWidth(),
@@ -4823,6 +4844,8 @@ fun KuemmeroApp() {
                                 kunde = a.kunde
                                 strasse = a.kundenStrasse
                                 ort = a.kundenOrt
+                                kundenTelefon = a.kundenTelefon
+                                kundenEmail = a.kundenEmail
                                 leistung = a.leistung
                                 stunden = a.stunden.toString().replace(".", ",")
                                 material = a.material.toString().replace(".", ",")
@@ -4871,6 +4894,8 @@ fun KuemmeroApp() {
                                 kvKunde = a.kunde
                                 kvStrasse = a.kundenStrasse
                                 kvOrt = a.kundenOrt
+                                kvKundenTelefon = a.kundenTelefon
+                                kvKundenEmail = a.kundenEmail
                                 kvLeistung = a.leistung
                                 kvStunden = a.stunden.toString().replace(".", ",")
                                 kvMaterial = a.material.toString().replace(".", ",")
@@ -5414,6 +5439,8 @@ fun KuemmeroApp() {
                                     rechnungsbetragGespeichert = bearbeiteIndex?.let { auftraege.getOrNull(it)?.rechnungsbetragGespeichert } ?: 0.0,
                                     zuschlagBezeichnung = bearbeiteIndex?.let { old -> val alt = auftraege.getOrNull(old); if (alt != null && alt.leistungsdatum == leistungsdatum.trim().ifBlank { datum.trim() }) alt.zuschlagBezeichnung else leistungsZuschlag(context, leistungsdatum.trim().ifBlank { terminDatum.trim().ifBlank { datum.trim() } }).first } ?: leistungsZuschlag(context, leistungsdatum.trim().ifBlank { terminDatum.trim().ifBlank { datum.trim() } }).first,
                                     zuschlagBetrag = bearbeiteIndex?.let { old -> val alt = auftraege.getOrNull(old); if (alt != null && alt.leistungsdatum == leistungsdatum.trim().ifBlank { datum.trim() }) alt.zuschlagBetrag else leistungsZuschlag(context, leistungsdatum.trim().ifBlank { terminDatum.trim().ifBlank { datum.trim() } }).second } ?: leistungsZuschlag(context, leistungsdatum.trim().ifBlank { terminDatum.trim().ifBlank { datum.trim() } }).second,
+                                    kundenTelefon = kundenTelefon.trim(),
+                                    kundenEmail = kundenEmail.trim(),
                                     bueroKosten = bueroKosten
                                 )
                                 val index = bearbeiteIndex
@@ -5433,6 +5460,8 @@ fun KuemmeroApp() {
                                 kunde = ""
                                 strasse = ""
                                 ort = ""
+                                kundenTelefon = ""
+                                kundenEmail = ""
                                 leistung = ""
                                 stunden = ""
                                 material = ""
@@ -6717,7 +6746,9 @@ fun KuemmeroApp() {
                                                         fahrtKm = k.fahrtKm,
                                                         fahrtKostenProKm = k.fahrtKostenProKm,
                                                         zuschlagBezeichnung = k.zuschlagBezeichnung,
-                                                        zuschlagBetrag = k.zuschlagBetrag
+                                                        zuschlagBetrag = k.zuschlagBetrag,
+                                                        kundenTelefon = k.kundenTelefon,
+                                                        kundenEmail = k.kundenEmail
                                                     )
                                                     auftraege = auftraege + a
                                                     speichereAuftraege(context, auftraege)
@@ -6743,6 +6774,8 @@ fun KuemmeroApp() {
                                                         k.stunden, k.material, k.materialBonUri, k.fahrt, k.stundensatz,
                                                         fotosVorher = k.fotosVorher,
                                                         erstellungskosten = k.erstellungskosten,
+                                                        kundenTelefon = k.kundenTelefon,
+                                                        kundenEmail = k.kundenEmail,
                                                         zuschlagBezeichnung = k.zuschlagBezeichnung,
                                                         zuschlagBetrag = k.zuschlagBetrag
                                                     )
@@ -6903,7 +6936,9 @@ fun KuemmeroApp() {
                                                         fahrtKm = zahl(kvFahrtKm),
                                                         fahrtKostenProKm = fahrtSatz,
                                                         zuschlagBezeichnung = if (kvBearbeiteIndex != null) kvZuschlagBezeichnung else if (kvZuschlagBezeichnung.isNotBlank()) kvZuschlagBezeichnung else leistungsZuschlag(context, kvDatum).first,
-                                                        zuschlagBetrag = if (kvBearbeiteIndex != null) kvZuschlagBetrag else if (kvZuschlagBezeichnung.isNotBlank()) kvZuschlagBetrag else leistungsZuschlag(context, kvDatum).second
+                                                        zuschlagBetrag = if (kvBearbeiteIndex != null) kvZuschlagBetrag else if (kvZuschlagBezeichnung.isNotBlank()) kvZuschlagBetrag else leistungsZuschlag(context, kvDatum).second,
+                                                        kundenTelefon = kvKundenTelefon.trim(),
+                                                        kundenEmail = kvKundenEmail.trim()
                                                     )
                                                     val list = kostenvoranschlaege.toMutableList()
                                                     if (kvBearbeiteIndex != null) list[kvBearbeiteIndex!!] = k else list.add(k)
