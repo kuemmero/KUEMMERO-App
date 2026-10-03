@@ -1754,6 +1754,20 @@ data class Leistungsposition(
 
 private const val LEISTUNGSPOSITIONEN_KEY = "leistungspositionen"
 
+// Diese Positionen haben keinen voreingestellten Preis. Beim Auswählen wird
+// deshalb trotzdem der Preisdialog geöffnet, damit der Betrag je Vorgang
+// festgelegt werden kann.
+private val KUEMMERO_PREIS_AUF_ANFRAGE = setOf(
+    "Büroarbeit",
+    "Rechnungserstellung / Abrechnung",
+    "Kostenvoranschlag erstellen",
+    "Angebot erstellen",
+    "Porto / Briefversand",
+    "Schriftverkehr / Kundenverwaltung",
+    "Mahnwesen / Zahlungserinnerung",
+    "Dokumentenablage / Dokumentation"
+)
+
 private val KUEMMERO_STANDARD_LEISTUNGEN = listOf(
     Leistungsposition(
         "Einfache Kleinreparaturen / Ausbesserungen",
@@ -1777,6 +1791,19 @@ private val KUEMMERO_STANDARD_LEISTUNGEN = listOf(
     Leistungsposition("Anfahrt"),
     Leistungsposition("Arbeitszeit", einheit = "Stunde", preis = 42.0),
     Leistungsposition("Material"),
+
+    // Büro-, Verwaltungs- und Abrechnungspositionen.
+    // Es werden bewusst keine Preise vorgegeben: Der konkrete Betrag kann je Vorgang
+    // im Preisdialog festgelegt werden.
+    Leistungsposition("Büroarbeit", einheit = "Vorgang"),
+    Leistungsposition("Rechnungserstellung / Abrechnung", einheit = "Vorgang"),
+    Leistungsposition("Kostenvoranschlag erstellen", einheit = "Vorgang"),
+    Leistungsposition("Angebot erstellen", einheit = "Vorgang"),
+    Leistungsposition("Porto / Briefversand", einheit = "Stück"),
+    Leistungsposition("Schriftverkehr / Kundenverwaltung", einheit = "Vorgang"),
+    Leistungsposition("Mahnwesen / Zahlungserinnerung", einheit = "Vorgang"),
+    Leistungsposition("Dokumentenablage / Dokumentation", einheit = "Vorgang"),
+
     Leistungsposition("Eigene Position", "Nur für Tätigkeiten verwenden, die im eigenen Gewerbe tatsächlich zulässig sind.")
 )
 
@@ -1823,6 +1850,15 @@ private fun ladeLeistungspositionen(context: Context): List<Leistungsposition> {
                         beschreibung = position.beschreibung.ifBlank { "Nur für Tätigkeiten verwenden, die im eigenen Gewerbe tatsächlich zulässig sind." }
                     )
                     else -> position
+                }
+            }
+            .let { vorhandene ->
+                // Neue Standardpositionen werden auch bei bereits vorhandenen
+                // Leistungseinstellungen einmalig ergänzt. Eigene Preise/Änderungen
+                // vorhandener Positionen bleiben erhalten.
+                val namen = vorhandene.map { it.name.trim().lowercase(Locale.GERMANY) }.toSet()
+                vorhandene + KUEMMERO_STANDARD_LEISTUNGEN.filter {
+                    it.name.trim().lowercase(Locale.GERMANY) !in namen
                 }
             }
             .also { speichereLeistungspositionen(context, it) }
@@ -7517,7 +7553,7 @@ fun KuemmeroApp() {
                                     val neuerText = neueAuswahl.joinToString("\n")
                                     if (leistungsAuswahlZiel == "auftrag") leistung = neuerText
                                     if (leistungsAuswahlZiel == "kv") kvLeistung = neuerText
-                                } else if (leistungs.preis > 0.0) {
+                                } else if (leistungs.preis > 0.0 || leistungs.name in KUEMMERO_PREIS_AUF_ANFRAGE) {
                                     leistungsPreisName = leistungs.name
                                     leistungsPreisEinheit = leistungs.einheit
                                     leistungsPreisVorschlag = String.format(Locale.GERMANY, "%.2f", leistungs.preis)
