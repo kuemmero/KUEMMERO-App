@@ -7143,7 +7143,7 @@ fun KuemmeroApp() {
                             ) {
                                 Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                                     Text(
-                                        "▣  Büro & Verwaltung",
+                                        "🏢  Büro & Verwaltung",
                                         style = MaterialTheme.typography.titleMedium,
                                         color = KuemmeroGreen,
                                         fontWeight = FontWeight.Bold
