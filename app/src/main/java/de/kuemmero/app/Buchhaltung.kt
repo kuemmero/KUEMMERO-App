@@ -237,7 +237,6 @@ private fun BuchActionTile(
 fun BuchhaltungScreen(
     context: Context,
     auftraege: List<Auftrag>,
-    contentPadding: PaddingValues = PaddingValues(),
     onBack: () -> Unit,
     onRechnungClick: (Auftrag) -> Unit,
     onOffenerAuftragClick: (Auftrag) -> Unit
@@ -253,9 +252,9 @@ fun BuchhaltungScreen(
     var auswertungOffen by remember { mutableStateOf(false) }
     var rechnungenOffen by remember { mutableStateOf(false) }
     var offeneAuftraegeOffen by remember { mutableStateOf(false) }
+    var bueroAufschluesselungOffen by remember { mutableStateOf(false) }
     var belege by remember { mutableStateOf(ladeBelege(context)) }
     var belegeOffen by remember { mutableStateOf(false) }
-    var bueroAufschluesselungOffen by remember { mutableStateOf(false) }
     var belegEingabeOffen by remember { mutableStateOf(false) }
     var belegDatum by remember { mutableStateOf("") }
     var belegNummer by remember { mutableStateOf("") }
@@ -356,35 +355,6 @@ fun BuchhaltungScreen(
     fun buchungPasstZu(datumText: String, muster: String): Boolean =
         datumText.trim().contains(muster)
 
-    // Büro & Verwaltung: eigene, schnell auffindbare Übersicht für typische
-    // Verwaltungs-/Bürokosten. Eine Buchung wird anhand der Kategorie,
-    // Beschreibung bzw. des Partners erkannt.
-    val bueroSuchbegriffe = listOf(
-        "büro", "buero", "porto", "brief", "versand", "rechnungserstellung",
-        "abrechnung", "kostenvoranschlag", "angebot", "schriftverkehr",
-        "kundenverwaltung", "mahnwesen", "zahlungserinnerung", "dokumentenablage",
-        "dokumentation", "büromaterial", "buero material"
-    )
-
-    fun istBueroBuchung(buchung: Buchung): Boolean {
-        val text = listOf(buchung.kategorie, buchung.partner, buchung.beleg)
-            .joinToString(" ")
-            .lowercase(Locale.GERMANY)
-        return bueroSuchbegriffe.any { text.contains(it) }
-    }
-
-    fun istBueroBeleg(beleg: BuchBeleg): Boolean {
-        val text = listOf(beleg.kategorie, beleg.beschreibung, beleg.nummer)
-            .joinToString(" ")
-            .lowercase(Locale.GERMANY)
-        return bueroSuchbegriffe.any { text.contains(it) }
-    }
-
-    val bueroBuchungen = buchungen.filter(::istBueroBuchung)
-    val bueroBelege = belege.filter(::istBueroBeleg)
-    val bueroAusgaben = bueroBuchungen.filter { it.typ == "Ausgabe" }.sumOf { it.betrag }
-    val bueroBelegAusgaben = bueroBelege.filter { it.buchungTyp == "Ausgabe" }.sumOf { it.betrag }
-
     val manuelleEinnahmenBuchungen = buchungen.filter { buchung ->
         buchung.typ == "Einnahme" &&
                 rechnungen.none { rechnung ->
@@ -421,11 +391,9 @@ fun BuchhaltungScreen(
         modifier = Modifier
             .fillMaxSize()
             .background(BuchBackground)
-            .padding(contentPadding)
             .padding(horizontal = 16.dp),
         verticalArrangement = Arrangement.spacedBy(14.dp),
-        contentPadding = PaddingValues(top = 10.dp, bottom = 120.dp),
-        userScrollEnabled = true
+        contentPadding = PaddingValues(top = 10.dp, bottom = 18.dp)
     ) {
         item {
             Row(
@@ -752,15 +720,8 @@ fun BuchhaltungScreen(
         }
 
         item {
-            BuchActionTile(
-                "▣",
-                "Büro & Verwaltung",
-                if (bueroBuchungen.isEmpty() && bueroBelege.isEmpty())
-                    "Einzelaufstellung"
-                else
-                    "${euro(bueroAusgaben + bueroBelegAusgaben)} • Einzelaufstellung",
-                BuchRose
-            ) { bueroAufschluesselungOffen = true }
+            val bueroGesamt = auftraege.sumOf { a -> a.bueroKosten.sumOf { it.betrag } }
+            BuchActionTile("▣", "Büro & Verwaltung", "${euro(bueroGesamt)} · je Auftrag", BuchRose) { bueroAufschluesselungOffen = true }
         }
 
         item {
@@ -844,6 +805,29 @@ fun BuchhaltungScreen(
                 }
             }
         }
+    }
+
+    if (bueroAufschluesselungOffen) {
+        val positionen = auftraege.flatMap { a -> a.bueroKosten.map { k -> Triple(a, k.bezeichnung, k.betrag) } }
+        AlertDialog(
+            onDismissRequest = { bueroAufschluesselungOffen = false },
+            title = { Text("Büro & Verwaltung – Einzelaufstellung", fontWeight = FontWeight.Bold, color = BuchGreenDark) },
+            text = {
+                if (positionen.isEmpty()) Text("Noch keine Büro-Kosten bei Aufträgen hinterlegt.")
+                else LazyColumn(modifier = Modifier.heightIn(max = 480.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    items(positionen) { (a, bezeichnung, betrag) ->
+                        Card(Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = BuchCard), shape = RoundedCornerShape(14.dp)) {
+                            Column(Modifier.padding(10.dp)) {
+                                Text(bezeichnung.ifBlank { "Büro-Kosten" }, fontWeight = FontWeight.Bold)
+                                Text("Auftrag ${a.nummer.ifBlank { "ohne Nummer" }} · ${a.kunde}", fontSize = 12.sp, color = Color(0xFF60716A))
+                                Text(euro(betrag), color = BuchGreenDark, fontWeight = FontWeight.Bold)
+                            }
+                        }
+                    }
+                }
+            },
+            confirmButton = { TextButton(onClick = { bueroAufschluesselungOffen = false }) { Text("Schließen") } }
+        )
     }
 
     if (rechnungenOffen) {
@@ -936,68 +920,6 @@ fun BuchhaltungScreen(
             },
             confirmButton = {
                 TextButton(onClick = { offeneAuftraegeOffen = false }) {
-                    Text("Schließen", color = BuchGreen, fontWeight = FontWeight.Bold)
-                }
-            }
-        )
-    }
-
-    if (bueroAufschluesselungOffen) {
-        AlertDialog(
-            onDismissRequest = { bueroAufschluesselungOffen = false },
-            title = { Text("Büro & Verwaltung", fontWeight = FontWeight.Bold, color = BuchGreenDark) },
-            text = {
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text("Büro-/Verwaltungskosten", fontWeight = FontWeight.Bold)
-                    Text("Aus Buchungen: ${euro(bueroAusgaben)}")
-                    Text("Aus Belegen: ${euro(bueroBelegAusgaben)}")
-                    HorizontalDivider()
-                    if (bueroBuchungen.isEmpty() && bueroBelege.isEmpty()) {
-                        Text("Noch keine Büro-/Verwaltungskosten gefunden.")
-                        Text(
-                            "Erfasst werden z. B. Büro, Porto, Versand, Rechnungserstellung, Angebote, Mahnwesen, Dokumentation und Büromaterial.",
-                            fontSize = 12.sp,
-                            color = Color(0xFF60716A)
-                        )
-                    } else {
-                        LazyColumn(
-                            modifier = Modifier.heightIn(max = 380.dp),
-                            verticalArrangement = Arrangement.spacedBy(7.dp)
-                        ) {
-                            items(bueroBuchungen.asReversed()) { buchung ->
-                                Card(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    colors = CardDefaults.cardColors(containerColor = BuchRose),
-                                    shape = RoundedCornerShape(14.dp)
-                                ) {
-                                    Column(Modifier.padding(10.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                                        Text("${buchung.typ}: ${euro(buchung.betrag)}", fontWeight = FontWeight.Bold, color = BuchGreenDark)
-                                        Text("${buchung.datum} • ${buchung.partner.ifBlank { "ohne Partner" }}")
-                                        Text("Kategorie: ${buchung.kategorie}", fontSize = 12.sp, color = Color(0xFF60716A))
-                                        if (buchung.beleg.isNotBlank()) Text("Beleg: ${buchung.beleg}", fontSize = 12.sp)
-                                    }
-                                }
-                            }
-                            items(bueroBelege.asReversed()) { beleg ->
-                                Card(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    colors = CardDefaults.cardColors(containerColor = Color.White),
-                                    shape = RoundedCornerShape(14.dp)
-                                ) {
-                                    Column(Modifier.padding(10.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                                        Text("Beleg: ${euro(beleg.betrag)}", fontWeight = FontWeight.Bold, color = BuchGreenDark)
-                                        Text("${beleg.datum} • ${beleg.beschreibung}")
-                                        Text("Kategorie: ${beleg.kategorie}", fontSize = 12.sp, color = Color(0xFF60716A))
-                                        if (beleg.nummer.isNotBlank()) Text("Nr.: ${beleg.nummer}", fontSize = 12.sp)
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-            },
-            confirmButton = {
-                TextButton(onClick = { bueroAufschluesselungOffen = false }) {
                     Text("Schließen", color = BuchGreen, fontWeight = FontWeight.Bold)
                 }
             }

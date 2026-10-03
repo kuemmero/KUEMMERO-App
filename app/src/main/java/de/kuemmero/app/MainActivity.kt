@@ -152,6 +152,11 @@ data class Kunde(
     val email: String = ""
 )
 
+data class BueroKosten(
+    val bezeichnung: String = "",
+    val betrag: Double = 0.0
+)
+
 data class Auftrag(
     val nummer: String = "",
     val datum: String = "",
@@ -207,7 +212,9 @@ data class Auftrag(
     val zuschlagBezeichnung: String = "",
     val zuschlagBetrag: Double = 0.0,
     // Endbetrag der tatsächlich erzeugten Rechnung, inklusive USt falls Regelbesteuerung.
-    val rechnungsbetragGespeichert: Double = 0.0
+    val rechnungsbetragGespeichert: Double = 0.0,
+    // Individuelle Büro-/Verwaltungskosten, die diesem Auftrag zugeordnet sind.
+    val bueroKosten: List<BueroKosten> = emptyList()
 )
 
 private const val PREFS_NAME = "kuemmero_speicher"
@@ -483,7 +490,13 @@ private fun ladeAuftraege(context: Context): List<Auftrag> {
             protokoll = o.optString("protokoll", ""),
             zuschlagBezeichnung = o.optString("zuschlagBezeichnung", ""),
             zuschlagBetrag = o.optDouble("zuschlagBetrag", 0.0),
-            rechnungsbetragGespeichert = o.optDouble("rechnungsbetragGespeichert", 0.0)
+            rechnungsbetragGespeichert = o.optDouble("rechnungsbetragGespeichert", 0.0),
+            bueroKosten = o.optJSONArray("bueroKosten")?.let { arr ->
+                List(arr.length()) { j ->
+                    val b = arr.optJSONObject(j) ?: JSONObject()
+                    BueroKosten(b.optString("bezeichnung", ""), b.optDouble("betrag", 0.0))
+                }
+            } ?: emptyList()
         )
     }
 }
@@ -582,6 +595,7 @@ private fun speichereAuftraege(context: Context, liste: List<Auftrag>) {
             put("leistungsdatum", a.leistungsdatum)
             put("zuschlagBezeichnung", a.zuschlagBezeichnung)
             put("zuschlagBetrag", a.zuschlagBetrag)
+            put("bueroKosten", JSONArray(a.bueroKosten.map { JSONObject().apply { put("bezeichnung", it.bezeichnung); put("betrag", it.betrag) } }))
         })
     }
     context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
@@ -603,6 +617,7 @@ private fun auftragAlsJson(a: Auftrag): JSONObject = JSONObject().apply {
     put("mahnung2Datum", a.mahnung2Datum); put("mahnung2Frist", a.mahnung2Frist); put("mahnung2Gebuehr", a.mahnung2Gebuehr); put("mahnung2Text", a.mahnung2Text); put("mahnung2Erstellt", a.mahnung2Erstellt)
     put("arbeitsStart", a.arbeitsStart); put("arbeitsEnde", a.arbeitsEnde); put("arbeitsSekunden", a.arbeitsSekunden); put("arbeitszeitUebernommen", a.arbeitszeitUebernommen)
     put("erstellungskosten", a.erstellungskosten); put("leistungsdatum", a.leistungsdatum); put("zuschlagBezeichnung", a.zuschlagBezeichnung); put("zuschlagBetrag", a.zuschlagBetrag)
+    put("bueroKosten", JSONArray(a.bueroKosten.map { JSONObject().apply { put("bezeichnung", it.bezeichnung); put("betrag", it.betrag) } }))
 }
 
 private fun ladePapierkorb(context: Context): List<String> {
@@ -1963,6 +1978,10 @@ fun KuemmeroApp() {
     var fotosNachher by remember { mutableStateOf<List<String>>(emptyList()) }
     var unterschriftPfad by remember { mutableStateOf("") }
     var unterschriftDatum by remember { mutableStateOf("") }
+    var bueroKosten by remember { mutableStateOf<List<BueroKosten>>(emptyList()) }
+    var bueroKostenDialog by remember { mutableStateOf(false) }
+    var bueroKostenBezeichnung by remember { mutableStateOf("") }
+    var bueroKostenBetrag by remember { mutableStateOf("") }
     var fotoTyp by remember { mutableStateOf("Vorher") }
     var unterschriftDialog by remember { mutableStateOf(false) }
     var fotoVorschauUri by remember { mutableStateOf<String?>(null) }
@@ -3733,6 +3752,41 @@ fun KuemmeroApp() {
         )
     }
 
+    if (bueroKostenDialog) {
+        AlertDialog(
+            onDismissRequest = { bueroKostenDialog = false },
+            title = { Text("Büro-Kosten hinzufügen", fontWeight = FontWeight.Bold, color = KuemmeroGreen) },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    OutlinedTextField(
+                        value = bueroKostenBezeichnung,
+                        onValueChange = { bueroKostenBezeichnung = it },
+                        label = { Text("Bezeichnung") },
+                        placeholder = { Text("z. B. Porto, Brief, Büromaterial") },
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    OutlinedTextField(
+                        value = bueroKostenBetrag,
+                        onValueChange = { bueroKostenBetrag = euroEingabeMax2(it) },
+                        label = { Text("Preis / Kosten €") },
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    val wert = bueroKostenBetrag.replace(",", ".").toDoubleOrNull()
+                    if (bueroKostenBezeichnung.isNotBlank() && wert != null && wert >= 0.0) {
+                        bueroKosten = bueroKosten + BueroKosten(bueroKostenBezeichnung.trim(), runde2(wert))
+                        bueroKostenDialog = false
+                    }
+                }) { Text("Speichern", color = KuemmeroGreen, fontWeight = FontWeight.Bold) }
+            },
+            dismissButton = { TextButton(onClick = { bueroKostenDialog = false }) { Text("Abbrechen") } }
+        )
+    }
+
     if (fotoVorschauUri != null) {
         val uri = fotoVorschauUri!!
         val bitmap = remember(uri) { ladeFotoBitmap(context, uri) }
@@ -4154,10 +4208,7 @@ fun KuemmeroApp() {
     }
 
     Scaffold(
-            modifier = if (hauptseite == "Buchhaltung") {
-                Modifier
-            } else {
-                Modifier.pointerInput(hauptseite) {
+            modifier = Modifier.pointerInput(hauptseite) {
                 var gesamtWisch = 0f
                 var wischAusgeloest = false
                 detectHorizontalDragGestures(
@@ -4178,7 +4229,6 @@ fun KuemmeroApp() {
                         wischAusgeloest = false
                     }
                 )
-                }
             },
             topBar = {
                 TopAppBar(
@@ -4513,6 +4563,7 @@ fun KuemmeroApp() {
                                 fotosNachher = a.fotosNachher
                                 unterschriftPfad = a.unterschriftPfad
                                 unterschriftDatum = a.unterschriftDatum
+                                bueroKosten = a.bueroKosten
                             },
                             modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp),
                             shape = RoundedCornerShape(26.dp),
@@ -5002,6 +5053,39 @@ fun KuemmeroApp() {
                 }
 
                 item {
+                    Card(
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = CardDefaults.cardColors(containerColor = Color.White),
+                        shape = RoundedCornerShape(18.dp)
+                    ) {
+                        Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Column(Modifier.weight(1f)) {
+                                    Text("Büro & Verwaltung", fontWeight = FontWeight.Bold, color = KuemmeroGreen)
+                                    Text(
+                                        if (bueroKosten.isEmpty()) "Noch keine Büro-Kosten für diesen Auftrag"
+                                        else "${bueroKosten.size} Position${if (bueroKosten.size == 1) "" else "en"} · ${euro(bueroKosten.sumOf { it.betrag })}",
+                                        fontSize = 12.sp, color = KuemmeroText
+                                    )
+                                }
+                                OutlinedButton(
+                                    onClick = { bueroKostenBezeichnung = ""; bueroKostenBetrag = ""; bueroKostenDialog = true },
+                                    border = BorderStroke(1.5.dp, KuemmeroGreen),
+                                    colors = ButtonDefaults.outlinedButtonColors(contentColor = KuemmeroGreen)
+                                ) { Text("+ Büro") }
+                            }
+                            bueroKosten.forEachIndexed { index, kosten ->
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Text(kosten.bezeichnung.ifBlank { "Büro-Kosten" }, Modifier.weight(1f), color = KuemmeroText)
+                                    Text(euro(kosten.betrag), fontWeight = FontWeight.Bold)
+                                    IconButton(onClick = { bueroKosten = bueroKosten.filterIndexed { i, _ -> i != index } }) { Text("✕", color = KuemmeroError) }
+                                }
+                            }
+                        }
+                    }
+                }
+
+                item {
                     Text("Aktueller Gesamtbetrag: ${euro(gesamt)}", style = MaterialTheme.typography.headlineSmall)
                 }
 
@@ -5052,7 +5136,8 @@ fun KuemmeroApp() {
                                     protokoll = protokoll.trim(),
                                     rechnungsbetragGespeichert = bearbeiteIndex?.let { auftraege.getOrNull(it)?.rechnungsbetragGespeichert } ?: 0.0,
                                     zuschlagBezeichnung = bearbeiteIndex?.let { old -> val alt = auftraege.getOrNull(old); if (alt != null && alt.leistungsdatum == leistungsdatum.trim().ifBlank { datum.trim() }) alt.zuschlagBezeichnung else leistungsZuschlag(context, leistungsdatum.trim().ifBlank { terminDatum.trim().ifBlank { datum.trim() } }).first } ?: leistungsZuschlag(context, leistungsdatum.trim().ifBlank { terminDatum.trim().ifBlank { datum.trim() } }).first,
-                                    zuschlagBetrag = bearbeiteIndex?.let { old -> val alt = auftraege.getOrNull(old); if (alt != null && alt.leistungsdatum == leistungsdatum.trim().ifBlank { datum.trim() }) alt.zuschlagBetrag else leistungsZuschlag(context, leistungsdatum.trim().ifBlank { terminDatum.trim().ifBlank { datum.trim() } }).second } ?: leistungsZuschlag(context, leistungsdatum.trim().ifBlank { terminDatum.trim().ifBlank { datum.trim() } }).second
+                                    zuschlagBetrag = bearbeiteIndex?.let { old -> val alt = auftraege.getOrNull(old); if (alt != null && alt.leistungsdatum == leistungsdatum.trim().ifBlank { datum.trim() }) alt.zuschlagBetrag else leistungsZuschlag(context, leistungsdatum.trim().ifBlank { terminDatum.trim().ifBlank { datum.trim() } }).second } ?: leistungsZuschlag(context, leistungsdatum.trim().ifBlank { terminDatum.trim().ifBlank { datum.trim() } }).second,
+                                    bueroKosten = bueroKosten
                                 )
                                 val index = bearbeiteIndex
                                 if (index != null) {
@@ -5079,6 +5164,7 @@ fun KuemmeroApp() {
                                 stundensatz = gespeicherterStundensatz(context)
                                 status = "Offen"
                                 zahlungsstatus = "Offen"
+                                bueroKosten = emptyList()
                                 bezahltAm = ""
                                 terminDatum = ""
                                 terminUhrzeit = ""
@@ -5088,6 +5174,7 @@ fun KuemmeroApp() {
                                 fotosNachher = emptyList()
                                 unterschriftPfad = ""
                                 unterschriftDatum = ""
+                                bueroKosten = emptyList()
                             }
                         },
                         modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp),
@@ -5867,7 +5954,6 @@ fun KuemmeroApp() {
             BuchhaltungScreen(
                 context = context,
                 auftraege = auftraege,
-                contentPadding = padding,
                 onBack = { hauptseite = "Mehr" },
                 onRechnungClick = { rechnung ->
                     val index = auftraege.indexOfFirst { it.nummer == rechnung.nummer }
