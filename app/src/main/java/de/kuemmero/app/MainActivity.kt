@@ -3802,6 +3802,7 @@ fun KuemmeroApp() {
     if (bueroStammDialog) {
         AlertDialog(
             onDismissRequest = { bueroStammDialog = false },
+            containerColor = Color.White,
             title = {
                 Text(
                     if (bueroStammBearbeitenIndex == null) "Büro-Position anlegen" else "Büro-Position ändern",
@@ -3863,6 +3864,7 @@ fun KuemmeroApp() {
     if (bueroKostenDialog) {
         AlertDialog(
             onDismissRequest = { bueroKostenDialog = false },
+            containerColor = Color.White,
             title = { Text("Büro-Kosten hinzufügen", fontWeight = FontWeight.Bold, color = KuemmeroGreen) },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -7139,15 +7141,17 @@ fun KuemmeroApp() {
                                 colors = CardDefaults.cardColors(containerColor = KuemmeroSurface),
                                 shape = RoundedCornerShape(18.dp)
                             ) {
-                                Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                                     Text(
                                         "▣  Büro & Verwaltung",
                                         style = MaterialTheme.typography.titleMedium,
                                         color = KuemmeroGreen,
                                         fontWeight = FontWeight.Bold
                                     )
+
                                     val anzahlBueroPositionen = auftraege.sumOf { it.bueroKosten.size }
                                     val summeBuero = auftraege.sumOf { a -> a.bueroKosten.sumOf { it.betrag } }
+
                                     Text(
                                         if (anzahlBueroPositionen == 0)
                                             "Noch keine Büro-Kosten hinterlegt."
@@ -7156,6 +7160,7 @@ fun KuemmeroApp() {
                                         color = KuemmeroText,
                                         fontSize = 13.sp
                                     )
+
                                     Button(
                                         onClick = { bueroVerwaltungOffen = true },
                                         modifier = Modifier.fillMaxWidth(),
@@ -7163,23 +7168,16 @@ fun KuemmeroApp() {
                                     ) {
                                         Text("Büro & Verwaltung öffnen", fontWeight = FontWeight.Bold)
                                     }
-                                }
-                            }
-                        }
 
-                        item {
-                            Card(
-                                Modifier.fillMaxWidth(),
-                                colors = CardDefaults.cardColors(containerColor = KuemmeroSurface),
-                                shape = RoundedCornerShape(18.dp)
-                            ) {
-                                Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                                    HorizontalDivider()
+
                                     Text(
-                                        "▣  Büro-Positionen",
-                                        style = MaterialTheme.typography.titleMedium,
+                                        "Gespeicherte Büro-Positionen",
+                                        style = MaterialTheme.typography.titleSmall,
                                         color = KuemmeroGreen,
                                         fontWeight = FontWeight.Bold
                                     )
+
                                     Text(
                                         if (bueroStamm.isEmpty())
                                             "Noch keine Standardpositionen hinterlegt."
@@ -7188,6 +7186,7 @@ fun KuemmeroApp() {
                                         color = KuemmeroText,
                                         fontSize = 13.sp
                                     )
+
                                     if (bueroStamm.isNotEmpty()) {
                                         bueroStamm.forEachIndexed { index, position ->
                                             Row(
@@ -7196,22 +7195,35 @@ fun KuemmeroApp() {
                                                 horizontalArrangement = Arrangement.spacedBy(8.dp)
                                             ) {
                                                 Column(Modifier.weight(1f)) {
-                                                    Text(position.bezeichnung, fontWeight = FontWeight.SemiBold, color = KuemmeroText)
-                                                    Text(euro(position.betrag), color = KuemmeroGreen, fontSize = 13.sp)
+                                                    Text(
+                                                        position.bezeichnung,
+                                                        fontWeight = FontWeight.SemiBold,
+                                                        color = KuemmeroText
+                                                    )
+                                                    Text(
+                                                        euro(position.betrag),
+                                                        color = KuemmeroGreen,
+                                                        fontSize = 13.sp
+                                                    )
                                                 }
                                                 TextButton(onClick = {
                                                     bueroStammBezeichnung = position.bezeichnung
                                                     bueroStammBetrag = String.format(Locale.GERMANY, "%.2f", position.betrag)
                                                     bueroStammBearbeitenIndex = index
                                                     bueroStammDialog = true
-                                                }) { Text("Ändern") }
+                                                }) {
+                                                    Text("Ändern", color = KuemmeroGreen)
+                                                }
                                                 TextButton(onClick = {
                                                     bueroStamm = bueroStamm.toMutableList().apply { removeAt(index) }
                                                     speichereBueroStamm(context, bueroStamm)
-                                                }) { Text("Löschen", color = KuemmeroError) }
+                                                }) {
+                                                    Text("Löschen", color = KuemmeroError)
+                                                }
                                             }
                                         }
                                     }
+
                                     Button(
                                         onClick = {
                                             bueroStammBezeichnung = ""
@@ -7224,6 +7236,7 @@ fun KuemmeroApp() {
                                     ) {
                                         Text("＋ Büro-Position anlegen", fontWeight = FontWeight.Bold)
                                     }
+
                                     Text(
                                         "Diese Positionen bleiben gespeichert und können bei jedem Auftrag über „+ Büro“ ausgewählt werden.",
                                         color = KuemmeroText,
