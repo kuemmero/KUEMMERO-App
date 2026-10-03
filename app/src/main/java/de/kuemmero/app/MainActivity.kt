@@ -1981,6 +1981,7 @@ fun KuemmeroApp() {
     var unterschriftDatum by remember { mutableStateOf("") }
     var bueroKosten by remember { mutableStateOf<List<BueroKosten>>(emptyList()) }
     var bueroKostenDialog by remember { mutableStateOf(false) }
+    var bueroKostenDirektImAuftrag by remember { mutableStateOf(false) }
     var bueroVerwaltungOffen by remember { mutableStateOf(false) }
     var bueroKostenBezeichnung by remember { mutableStateOf("") }
     var bueroKostenBetrag by remember { mutableStateOf("") }
@@ -3780,12 +3781,27 @@ fun KuemmeroApp() {
                 TextButton(onClick = {
                     val wert = bueroKostenBetrag.replace(",", ".").toDoubleOrNull()
                     if (bueroKostenBezeichnung.isNotBlank() && wert != null && wert >= 0.0) {
-                        bueroKosten = bueroKosten + BueroKosten(bueroKostenBezeichnung.trim(), runde2(wert))
+                        val neueKosten = BueroKosten(bueroKostenBezeichnung.trim(), runde2(wert))
+                        if (bueroKostenDirektImAuftrag && auftragDetailIndex != null) {
+                            val index = auftragDetailIndex!!
+                            val aktuellerAuftrag = auftraege.getOrNull(index)
+                            if (aktuellerAuftrag != null) {
+                                auftraege = auftraege.toMutableList().apply {
+                                    set(index, aktuellerAuftrag.copy(
+                                        bueroKosten = aktuellerAuftrag.bueroKosten + neueKosten
+                                    ))
+                                }
+                                speichereAuftraege(context, auftraege)
+                            }
+                        } else {
+                            bueroKosten = bueroKosten + neueKosten
+                        }
+                        bueroKostenDirektImAuftrag = false
                         bueroKostenDialog = false
                     }
                 }) { Text("Speichern", color = KuemmeroGreen, fontWeight = FontWeight.Bold) }
             },
-            dismissButton = { TextButton(onClick = { bueroKostenDialog = false }) { Text("Abbrechen") } }
+            dismissButton = { TextButton(onClick = { bueroKostenDirektImAuftrag = false; bueroKostenDialog = false }) { Text("Abbrechen") } }
         )
     }
 
@@ -4597,6 +4613,23 @@ fun KuemmeroApp() {
                     }
 
                     item {
+                        OutlinedButton(
+                            onClick = {
+                                bueroKostenBezeichnung = ""
+                                bueroKostenBetrag = ""
+                                bueroKostenDirektImAuftrag = true
+                                bueroKostenDialog = true
+                            },
+                            modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp),
+                            shape = RoundedCornerShape(26.dp),
+                            border = BorderStroke(2.dp, KuemmeroGreen),
+                            colors = ButtonDefaults.outlinedButtonColors(contentColor = KuemmeroGreen)
+                        ) {
+                            Text("➕ Büro-Kosten hinzufügen", fontWeight = FontWeight.Bold)
+                        }
+                    }
+
+                    item {
                         Button(
                             onClick = { druckeProtokollPdf(context, a) },
                             modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp),
@@ -5149,7 +5182,7 @@ fun KuemmeroApp() {
                                     )
                                 }
                                 OutlinedButton(
-                                    onClick = { bueroKostenBezeichnung = ""; bueroKostenBetrag = ""; bueroKostenDialog = true },
+                                    onClick = { bueroKostenBezeichnung = ""; bueroKostenBetrag = ""; bueroKostenDirektImAuftrag = false; bueroKostenDialog = true },
                                     border = BorderStroke(1.5.dp, KuemmeroGreen),
                                     colors = ButtonDefaults.outlinedButtonColors(contentColor = KuemmeroGreen)
                                 ) { Text("+ Büro") }
