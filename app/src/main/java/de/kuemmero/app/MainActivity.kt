@@ -3768,7 +3768,12 @@ fun KuemmeroApp() {
                         placeholder = { Text("z. B. Porto, Brief, Büromaterial") },
                         modifier = Modifier.fillMaxWidth()
                     )
-                    OutlinedTextField(
+                    Text(
+                        "Mehrere Positionen möglich – nach dem Speichern direkt die nächste eingeben.",
+                        color = KuemmeroText,
+                        fontSize = 12.sp
+                    )
+                                        OutlinedTextField(
                         value = bueroKostenBetrag,
                         onValueChange = { bueroKostenBetrag = euroEingabeMax2(it) },
                         label = { Text("Preis / Kosten €") },
@@ -3796,10 +3801,10 @@ fun KuemmeroApp() {
                         } else {
                             bueroKosten = bueroKosten + neueKosten
                         }
-                        bueroKostenDirektImAuftrag = false
-                        bueroKostenDialog = false
+                        bueroKostenBezeichnung = ""
+                        bueroKostenBetrag = ""
                     }
-                }) { Text("Speichern", color = KuemmeroGreen, fontWeight = FontWeight.Bold) }
+                }) { Text("Speichern & weitere", color = KuemmeroGreen, fontWeight = FontWeight.Bold) }
             },
             dismissButton = { TextButton(onClick = { bueroKostenDirektImAuftrag = false; bueroKostenDialog = false }) { Text("Abbrechen") } }
         )
