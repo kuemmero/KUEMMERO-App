@@ -3031,12 +3031,49 @@ fun KuemmeroApp() {
                 )
             },
             confirmButton = {
-                TextButton(onClick = {
-                    sicherungBestaetigung = false
-                    backupDateiAuswaehlen.launch(
-                        arrayOf("application/json", "text/plain", "application/octet-stream")
-                    )
-                }) { Text("Ja, sichern") }
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    TextButton(
+                        onClick = {
+                            val wert = bueroKostenBetrag.replace(",", ".").toDoubleOrNull()
+                            if (bueroKostenBezeichnung.isNotBlank() && wert != null && wert >= 0.0) {
+                                val neueKosten = BueroKosten(
+                                    bueroKostenBezeichnung.trim(),
+                                    runde2(wert)
+                                )
+                                if (bueroKostenDirektImAuftrag && auftragDetailIndex != null) {
+                                    val index = auftragDetailIndex!!
+                                    val aktuellerAuftrag = auftraege.getOrNull(index)
+                                    if (aktuellerAuftrag != null) {
+                                        auftraege = auftraege.toMutableList().apply {
+                                            set(index, aktuellerAuftrag.copy(
+                                                bueroKosten = aktuellerAuftrag.bueroKosten + neueKosten
+                                            ))
+                                        }
+                                        speichereAuftraege(context, auftraege)
+                                    }
+                                } else {
+                                    bueroKosten = bueroKosten + neueKosten
+                                }
+
+                                bueroKostenBezeichnung = ""
+                                bueroKostenBetrag = ""
+                            }
+                        },
+                        colors = ButtonDefaults.textButtonColors(contentColor = KuemmeroGreen)
+                    ) {
+                        Text("Speichern & weitere", fontWeight = FontWeight.Bold)
+                    }
+
+                    TextButton(
+                        onClick = {
+                            bueroKostenDirektImAuftrag = false
+                            bueroKostenDialog = false
+                        },
+                        colors = ButtonDefaults.textButtonColors(contentColor = KuemmeroGreen)
+                    ) {
+                        Text("Fertig", fontWeight = FontWeight.Bold)
+                    }
+                }
             },
             dismissButton = {
                 TextButton(onClick = { sicherungBestaetigung = false }) { Text("Abbrechen") }
@@ -3766,14 +3803,33 @@ fun KuemmeroApp() {
                         onValueChange = { bueroKostenBezeichnung = it },
                         label = { Text("Bezeichnung") },
                         placeholder = { Text("z. B. Porto, Brief, Büromaterial") },
-                        modifier = Modifier.fillMaxWidth()
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedBorderColor = KuemmeroGreen,
+                            unfocusedBorderColor = KuemmeroGreen,
+                            focusedLabelColor = KuemmeroGreen,
+                            unfocusedLabelColor = KuemmeroText,
+                            cursorColor = KuemmeroGreen
+                        )
+                    )
+                    Text(
+                        "Mehrere Positionen möglich – „Speichern & weitere“ für die nächste Position.",
+                        color = KuemmeroText,
+                        fontSize = 12.sp
                     )
                     OutlinedTextField(
                         value = bueroKostenBetrag,
                         onValueChange = { bueroKostenBetrag = euroEingabeMax2(it) },
                         label = { Text("Preis / Kosten €") },
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
-                        modifier = Modifier.fillMaxWidth()
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedBorderColor = KuemmeroGreen,
+                            unfocusedBorderColor = KuemmeroGreen,
+                            focusedLabelColor = KuemmeroGreen,
+                            unfocusedLabelColor = KuemmeroText,
+                            cursorColor = KuemmeroGreen
+                        )
                     )
                 }
             },
@@ -3801,7 +3857,17 @@ fun KuemmeroApp() {
                     }
                 }) { Text("Speichern", color = KuemmeroGreen, fontWeight = FontWeight.Bold) }
             },
-            dismissButton = { TextButton(onClick = { bueroKostenDirektImAuftrag = false; bueroKostenDialog = false }) { Text("Abbrechen") } }
+            dismissButton = {
+                TextButton(
+                    onClick = {
+                        bueroKostenDirektImAuftrag = false
+                        bueroKostenDialog = false
+                    },
+                    colors = ButtonDefaults.textButtonColors(contentColor = KuemmeroGreen)
+                ) {
+                    Text("Abbrechen")
+                }
+            }
         )
     }
 
