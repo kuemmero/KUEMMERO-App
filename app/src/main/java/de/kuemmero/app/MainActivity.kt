@@ -1980,6 +1980,7 @@ fun KuemmeroApp() {
     var unterschriftDatum by remember { mutableStateOf("") }
     var bueroKosten by remember { mutableStateOf<List<BueroKosten>>(emptyList()) }
     var bueroKostenDialog by remember { mutableStateOf(false) }
+    var bueroVerwaltungOffen by remember { mutableStateOf(false) }
     var bueroKostenBezeichnung by remember { mutableStateOf("") }
     var bueroKostenBetrag by remember { mutableStateOf("") }
     var fotoTyp by remember { mutableStateOf("Vorher") }
@@ -3787,6 +3788,80 @@ fun KuemmeroApp() {
         )
     }
 
+    if (bueroVerwaltungOffen) {
+        AlertDialog(
+            onDismissRequest = { bueroVerwaltungOffen = false },
+            containerColor = Color.White,
+            title = {
+                Text("Büro & Verwaltung", fontWeight = FontWeight.Bold, color = KuemmeroGreen)
+            },
+            text = {
+                val auftraegeMitBuero = auftraege.mapIndexedNotNull { index, a ->
+                    if (a.bueroKosten.isNotEmpty()) index to a else null
+                }
+
+                if (auftraegeMitBuero.isEmpty()) {
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Text("Noch keine Büro-Kosten bei Aufträgen hinterlegt.", color = KuemmeroText)
+                        Text(
+                            "Öffne einen Auftrag und tippe dort auf „+ Büro“, um eine Position mit Preis zu speichern.",
+                            color = KuemmeroText,
+                            fontSize = 13.sp
+                        )
+                    }
+                } else {
+                    LazyColumn(
+                        modifier = Modifier.heightIn(max = 480.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        items(auftraegeMitBuero) { (index, a) ->
+                            Card(
+                                Modifier.fillMaxWidth(),
+                                colors = CardDefaults.cardColors(containerColor = KuemmeroSurface),
+                                shape = RoundedCornerShape(14.dp)
+                            ) {
+                                Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(5.dp)) {
+                                    Text(
+                                        "Auftrag ${a.nummer.ifBlank { "ohne Nummer" }}",
+                                        fontWeight = FontWeight.Bold,
+                                        color = KuemmeroGreen
+                                    )
+                                    Text(a.kunde.ifBlank { "Kunde" }, fontWeight = FontWeight.SemiBold, color = KuemmeroText)
+                                    a.bueroKosten.forEach { kosten ->
+                                        Text("• ${kosten.bezeichnung}: ${euro(kosten.betrag)}", color = KuemmeroText, fontSize = 13.sp)
+                                    }
+                                    Text(
+                                        "Summe: ${euro(a.bueroKosten.sumOf { it.betrag })}",
+                                        fontWeight = FontWeight.Bold,
+                                        color = KuemmeroGreen
+                                    )
+                                    OutlinedButton(
+                                        onClick = {
+                                            bueroVerwaltungOffen = false
+                                            auftragDetailIndex = index
+                                            hauptseite = "Aufträge"
+                                        },
+                                        modifier = Modifier.fillMaxWidth(),
+                                        border = BorderStroke(1.dp, KuemmeroGreen),
+                                        colors = ButtonDefaults.outlinedButtonColors(contentColor = KuemmeroGreen)
+                                    ) {
+                                        Text("+ Büro bei diesem Auftrag")
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = { bueroVerwaltungOffen = false },
+                    colors = ButtonDefaults.textButtonColors(contentColor = KuemmeroGreen)
+                ) { Text("Schließen") }
+            }
+        )
+    }
+
     if (fotoVorschauUri != null) {
         val uri = fotoVorschauUri!!
         val bitmap = remember(uri) { ladeFotoBitmap(context, uri) }
@@ -4208,9 +4283,7 @@ fun KuemmeroApp() {
     }
 
     Scaffold(
-            modifier = if (hauptseite == "Buchhaltung") {
-                Modifier
-            } else Modifier.pointerInput(hauptseite) {
+            modifier = Modifier.pointerInput(hauptseite) {
                 var gesamtWisch = 0f
                 var wischAusgeloest = false
                 detectHorizontalDragGestures(
@@ -5956,7 +6029,6 @@ fun KuemmeroApp() {
             BuchhaltungScreen(
                 context = context,
                 auftraege = auftraege,
-                contentPadding = padding,
                 onBack = { hauptseite = "Mehr" },
                 onRechnungClick = { rechnung ->
                     val index = auftraege.indexOfFirst { it.nummer == rechnung.nummer }
@@ -6886,6 +6958,41 @@ fun KuemmeroApp() {
                     }
                     "Mehr" -> {
                         item { Text("Mehr", style = MaterialTheme.typography.headlineSmall, color = KuemmeroGreen, fontWeight = FontWeight.Bold) }
+
+                        item {
+                            Card(
+                                Modifier.fillMaxWidth(),
+                                colors = CardDefaults.cardColors(containerColor = KuemmeroSurface),
+                                shape = RoundedCornerShape(18.dp)
+                            ) {
+                                Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                    Text(
+                                        "▣  Büro & Verwaltung",
+                                        style = MaterialTheme.typography.titleMedium,
+                                        color = KuemmeroGreen,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                    val anzahlBueroPositionen = auftraege.sumOf { it.bueroKosten.size }
+                                    val summeBuero = auftraege.sumOf { a -> a.bueroKosten.sumOf { it.betrag } }
+                                    Text(
+                                        if (anzahlBueroPositionen == 0)
+                                            "Noch keine Büro-Kosten hinterlegt."
+                                        else
+                                            "$anzahlBueroPositionen Position${if (anzahlBueroPositionen == 1) "" else "en"} · ${euro(summeBuero)}",
+                                        color = KuemmeroText,
+                                        fontSize = 13.sp
+                                    )
+                                    Button(
+                                        onClick = { bueroVerwaltungOffen = true },
+                                        modifier = Modifier.fillMaxWidth(),
+                                        colors = ButtonDefaults.buttonColors(containerColor = KuemmeroGreen)
+                                    ) {
+                                        Text("Büro & Verwaltung öffnen", fontWeight = FontWeight.Bold)
+                                    }
+                                }
+                            }
+                        }
+
                         item {
                             Card(Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = KuemmeroSurface), shape = RoundedCornerShape(18.dp)) {
                                 Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {

@@ -253,7 +253,6 @@ fun BuchhaltungScreen(
     var auswertungOffen by remember { mutableStateOf(false) }
     var rechnungenOffen by remember { mutableStateOf(false) }
     var offeneAuftraegeOffen by remember { mutableStateOf(false) }
-    var bueroAufschluesselungOffen by remember { mutableStateOf(false) }
     var belege by remember { mutableStateOf(ladeBelege(context)) }
     var belegeOffen by remember { mutableStateOf(false) }
     var belegEingabeOffen by remember { mutableStateOf(false) }
@@ -723,11 +722,6 @@ fun BuchhaltungScreen(
         }
 
         item {
-            val bueroGesamt = auftraege.sumOf { a -> a.bueroKosten.sumOf { it.betrag } }
-            BuchActionTile("▣", "Büro & Verwaltung", "${euro(bueroGesamt)} · je Auftrag", BuchRose) { bueroAufschluesselungOffen = true }
-        }
-
-        item {
             Text("Letzte Buchungen", fontSize = 21.sp, fontWeight = FontWeight.Bold, color = Color(0xFF102A20))
         }
 
@@ -808,33 +802,6 @@ fun BuchhaltungScreen(
                 }
             }
         }
-    }
-
-    if (bueroAufschluesselungOffen) {
-        val positionen = auftraege.flatMap { a -> a.bueroKosten.map { k -> Triple(a, k.bezeichnung, k.betrag) } }
-        AlertDialog(
-            onDismissRequest = { bueroAufschluesselungOffen = false },
-            containerColor = Color.White,
-            titleContentColor = BuchGreenDark,
-            textContentColor = Color(0xFF45554F),
-            iconContentColor = BuchGreen,
-            title = { Text("Büro & Verwaltung – Einzelaufstellung", fontWeight = FontWeight.Bold, color = BuchGreenDark) },
-            text = {
-                if (positionen.isEmpty()) Text("Noch keine Büro-Kosten bei Aufträgen hinterlegt.")
-                else LazyColumn(modifier = Modifier.heightIn(max = 480.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    items(positionen) { (a, bezeichnung, betrag) ->
-                        Card(Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = BuchCard), shape = RoundedCornerShape(14.dp)) {
-                            Column(Modifier.padding(10.dp)) {
-                                Text(bezeichnung.ifBlank { "Büro-Kosten" }, fontWeight = FontWeight.Bold)
-                                Text("Auftrag ${a.nummer.ifBlank { "ohne Nummer" }} · ${a.kunde}", fontSize = 12.sp, color = Color(0xFF60716A))
-                                Text(euro(betrag), color = BuchGreenDark, fontWeight = FontWeight.Bold)
-                            }
-                        }
-                    }
-                }
-            },
-            confirmButton = { TextButton(onClick = { bueroAufschluesselungOffen = false }) { Text("Schließen") } }
-        )
     }
 
     if (rechnungenOffen) {
