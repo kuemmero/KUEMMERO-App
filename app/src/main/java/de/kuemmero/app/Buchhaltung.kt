@@ -394,7 +394,7 @@ fun BuchhaltungScreen(
             .padding(contentPadding)
             .padding(horizontal = 16.dp),
         verticalArrangement = Arrangement.spacedBy(14.dp),
-        contentPadding = PaddingValues(top = 10.dp, bottom = 120.dp),
+        contentPadding = PaddingValues(top = 10.dp, bottom = 140.dp),
         userScrollEnabled = true
     ) {
         item {
