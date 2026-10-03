@@ -387,14 +387,19 @@ fun BuchhaltungScreen(
         .filter { it.typ == "Ausgabe" && buchungPasstZu(it.datum, jahr) }
         .sumOf { it.betrag }
 
+    val buchListState = rememberLazyListState()
+
     LazyColumn(
+        state = buchListState,
         modifier = Modifier
             .fillMaxSize()
             .background(BuchBackground)
-            .padding(contentPadding)
             .padding(horizontal = 16.dp),
         verticalArrangement = Arrangement.spacedBy(14.dp),
-        contentPadding = PaddingValues(top = 10.dp, bottom = 140.dp),
+        contentPadding = PaddingValues(
+            top = contentPadding.calculateTopPadding() + 10.dp,
+            bottom = contentPadding.calculateBottomPadding() + 140.dp
+        ),
         userScrollEnabled = true
     ) {
         item {
