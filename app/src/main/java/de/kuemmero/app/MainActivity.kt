@@ -6061,6 +6061,7 @@ fun KuemmeroApp() {
             BuchhaltungScreen(
                 context = context,
                 auftraege = auftraege,
+                contentPadding = padding,
                 onBack = { hauptseite = "Mehr" },
                 onRechnungClick = { rechnung ->
                     val index = auftraege.indexOfFirst { it.nummer == rechnung.nummer }
