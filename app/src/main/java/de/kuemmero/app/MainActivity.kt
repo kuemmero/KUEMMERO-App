@@ -158,6 +158,45 @@ data class BueroKosten(
     val betrag: Double = 0.0
 )
 
+private const val BUERO_STAMM_KEY = "buero_stammpositionen"
+
+private fun ladeBueroStamm(context: Context): List<BueroKosten> {
+    val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+    val vorhanden = prefs.getString(BUERO_STAMM_KEY, null)
+
+    // Nur beim ersten Einrichten drei Musterpositionen anlegen.
+    if (vorhanden == null) {
+        val muster = listOf(
+            BueroKosten("Porto", 1.00),
+            BueroKosten("Büromaterial", 5.00),
+            BueroKosten("Rechnungserstellung", 10.00)
+        )
+        speichereBueroStamm(context, muster)
+        return muster
+    }
+
+    val json = try { JSONArray(vorhanden) } catch (_: Exception) { JSONArray() }
+    return List(json.length()) { i ->
+        val o = json.optJSONObject(i) ?: JSONObject()
+        BueroKosten(
+            bezeichnung = o.optString("bezeichnung"),
+            betrag = o.optDouble("betrag", 0.0)
+        )
+    }.filter { it.bezeichnung.isNotBlank() }
+}
+
+private fun speichereBueroStamm(context: Context, liste: List<BueroKosten>) {
+    val json = JSONArray()
+    liste.forEach {
+        json.put(JSONObject().apply {
+            put("bezeichnung", it.bezeichnung)
+            put("betrag", it.betrag)
+        })
+    }
+    context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        .edit().putString(BUERO_STAMM_KEY, json.toString()).apply()
+}
+
 data class Auftrag(
     val nummer: String = "",
     val datum: String = "",
@@ -1985,6 +2024,11 @@ fun KuemmeroApp() {
     var bueroVerwaltungOffen by remember { mutableStateOf(false) }
     var bueroKostenBezeichnung by remember { mutableStateOf("") }
     var bueroKostenBetrag by remember { mutableStateOf("") }
+    var bueroStamm by remember { mutableStateOf(ladeBueroStamm(context)) }
+    var bueroStammDialog by remember { mutableStateOf(false) }
+    var bueroStammBezeichnung by remember { mutableStateOf("") }
+    var bueroStammBetrag by remember { mutableStateOf("") }
+    var bueroStammBearbeitenIndex by remember { mutableStateOf<Int?>(null) }
     var fotoTyp by remember { mutableStateOf("Vorher") }
     var unterschriftDialog by remember { mutableStateOf(false) }
     var fotoVorschauUri by remember { mutableStateOf<String?>(null) }
@@ -3755,12 +3799,98 @@ fun KuemmeroApp() {
         )
     }
 
+    if (bueroStammDialog) {
+        AlertDialog(
+            onDismissRequest = { bueroStammDialog = false },
+            title = {
+                Text(
+                    if (bueroStammBearbeitenIndex == null) "Büro-Position anlegen" else "Büro-Position ändern",
+                    fontWeight = FontWeight.Bold,
+                    color = KuemmeroGreen
+                )
+            },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    OutlinedTextField(
+                        value = bueroStammBezeichnung,
+                        onValueChange = { bueroStammBezeichnung = it },
+                        label = { Text("Bezeichnung") },
+                        placeholder = { Text("z. B. Porto, Büromaterial") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    OutlinedTextField(
+                        value = bueroStammBetrag,
+                        onValueChange = { bueroStammBetrag = euroEingabeMax2(it) },
+                        label = { Text("Standardpreis / Kosten €") },
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        val wert = bueroStammBetrag.replace(",", ".").toDoubleOrNull()
+                        if (bueroStammBezeichnung.isNotBlank() && wert != null && wert >= 0.0) {
+                            val neue = BueroKosten(bueroStammBezeichnung.trim(), runde2(wert))
+                            val neu = bueroStamm.toMutableList()
+                            val index = bueroStammBearbeitenIndex
+                            if (index != null && index in neu.indices) neu[index] = neue else neu.add(neue)
+                            bueroStamm = neu
+                            speichereBueroStamm(context, neu)
+                            bueroStammBezeichnung = ""
+                            bueroStammBetrag = ""
+                            bueroStammBearbeitenIndex = null
+                            bueroStammDialog = false
+                        } else {
+                            android.widget.Toast.makeText(context, "Bitte Bezeichnung und einen gültigen Preis eingeben.", 0).show()
+                        }
+                    },
+                    colors = ButtonDefaults.textButtonColors(contentColor = KuemmeroGreen)
+                ) { Text("Speichern", fontWeight = FontWeight.Bold) }
+            },
+            dismissButton = {
+                TextButton(onClick = {
+                    bueroStammDialog = false
+                    bueroStammBearbeitenIndex = null
+                }) { Text("Abbrechen") }
+            }
+        )
+    }
+
     if (bueroKostenDialog) {
         AlertDialog(
             onDismissRequest = { bueroKostenDialog = false },
             title = { Text("Büro-Kosten hinzufügen", fontWeight = FontWeight.Bold, color = KuemmeroGreen) },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    if (bueroStamm.isNotEmpty()) {
+                        Text(
+                            "Gespeicherte Büro-Positionen",
+                            fontWeight = FontWeight.Bold,
+                            color = KuemmeroGreen
+                        )
+                        LazyColumn(
+                            modifier = Modifier.heightIn(max = 150.dp),
+                            verticalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            items(bueroStamm) { position ->
+                                OutlinedButton(
+                                    onClick = {
+                                        bueroKostenBezeichnung = position.bezeichnung
+                                        bueroKostenBetrag = String.format(Locale.GERMANY, "%.2f", position.betrag)
+                                    },
+                                    modifier = Modifier.fillMaxWidth(),
+                                    border = BorderStroke(1.dp, KuemmeroGreen),
+                                    colors = ButtonDefaults.outlinedButtonColors(contentColor = KuemmeroGreen)
+                                ) {
+                                    Text("${position.bezeichnung} · ${euro(position.betrag)}")
+                                }
+                            }
+                        }
+                    }
                     OutlinedTextField(
                         value = bueroKostenBezeichnung,
                         onValueChange = { bueroKostenBezeichnung = it },
@@ -7033,6 +7163,72 @@ fun KuemmeroApp() {
                                     ) {
                                         Text("Büro & Verwaltung öffnen", fontWeight = FontWeight.Bold)
                                     }
+                                }
+                            }
+                        }
+
+                        item {
+                            Card(
+                                Modifier.fillMaxWidth(),
+                                colors = CardDefaults.cardColors(containerColor = KuemmeroSurface),
+                                shape = RoundedCornerShape(18.dp)
+                            ) {
+                                Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                                    Text(
+                                        "▣  Büro-Positionen",
+                                        style = MaterialTheme.typography.titleMedium,
+                                        color = KuemmeroGreen,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                    Text(
+                                        if (bueroStamm.isEmpty())
+                                            "Noch keine Standardpositionen hinterlegt."
+                                        else
+                                            "${bueroStamm.size} gespeicherte Position${if (bueroStamm.size == 1) "" else "en"}",
+                                        color = KuemmeroText,
+                                        fontSize = 13.sp
+                                    )
+                                    if (bueroStamm.isNotEmpty()) {
+                                        bueroStamm.forEachIndexed { index, position ->
+                                            Row(
+                                                Modifier.fillMaxWidth(),
+                                                verticalAlignment = Alignment.CenterVertically,
+                                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                            ) {
+                                                Column(Modifier.weight(1f)) {
+                                                    Text(position.bezeichnung, fontWeight = FontWeight.SemiBold, color = KuemmeroText)
+                                                    Text(euro(position.betrag), color = KuemmeroGreen, fontSize = 13.sp)
+                                                }
+                                                TextButton(onClick = {
+                                                    bueroStammBezeichnung = position.bezeichnung
+                                                    bueroStammBetrag = String.format(Locale.GERMANY, "%.2f", position.betrag)
+                                                    bueroStammBearbeitenIndex = index
+                                                    bueroStammDialog = true
+                                                }) { Text("Ändern") }
+                                                TextButton(onClick = {
+                                                    bueroStamm = bueroStamm.toMutableList().apply { removeAt(index) }
+                                                    speichereBueroStamm(context, bueroStamm)
+                                                }) { Text("Löschen", color = KuemmeroError) }
+                                            }
+                                        }
+                                    }
+                                    Button(
+                                        onClick = {
+                                            bueroStammBezeichnung = ""
+                                            bueroStammBetrag = ""
+                                            bueroStammBearbeitenIndex = null
+                                            bueroStammDialog = true
+                                        },
+                                        modifier = Modifier.fillMaxWidth(),
+                                        colors = ButtonDefaults.buttonColors(containerColor = KuemmeroGreen)
+                                    ) {
+                                        Text("＋ Büro-Position anlegen", fontWeight = FontWeight.Bold)
+                                    }
+                                    Text(
+                                        "Diese Positionen bleiben gespeichert und können bei jedem Auftrag über „+ Büro“ ausgewählt werden.",
+                                        color = KuemmeroText,
+                                        fontSize = 12.sp
+                                    )
                                 }
                             }
                         }
