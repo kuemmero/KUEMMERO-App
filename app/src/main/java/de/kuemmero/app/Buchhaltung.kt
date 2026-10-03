@@ -237,6 +237,7 @@ private fun BuchActionTile(
 fun BuchhaltungScreen(
     context: Context,
     auftraege: List<Auftrag>,
+    contentPadding: PaddingValues = PaddingValues(),
     onBack: () -> Unit,
     onRechnungClick: (Auftrag) -> Unit,
     onOffenerAuftragClick: (Auftrag) -> Unit
@@ -391,9 +392,11 @@ fun BuchhaltungScreen(
         modifier = Modifier
             .fillMaxSize()
             .background(BuchBackground)
+            .padding(contentPadding)
             .padding(horizontal = 16.dp),
         verticalArrangement = Arrangement.spacedBy(14.dp),
-        contentPadding = PaddingValues(top = 10.dp, bottom = 18.dp)
+        contentPadding = PaddingValues(top = 10.dp, bottom = 120.dp),
+        userScrollEnabled = true
     ) {
         item {
             Row(

@@ -4208,7 +4208,9 @@ fun KuemmeroApp() {
     }
 
     Scaffold(
-            modifier = Modifier.pointerInput(hauptseite) {
+            modifier = if (hauptseite == "Buchhaltung") {
+                Modifier
+            } else Modifier.pointerInput(hauptseite) {
                 var gesamtWisch = 0f
                 var wischAusgeloest = false
                 detectHorizontalDragGestures(
@@ -5954,6 +5956,7 @@ fun KuemmeroApp() {
             BuchhaltungScreen(
                 context = context,
                 auftraege = auftraege,
+                contentPadding = padding,
                 onBack = { hauptseite = "Mehr" },
                 onRechnungClick = { rechnung ->
                     val index = auftraege.indexOfFirst { it.nummer == rechnung.nummer }
