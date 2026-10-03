@@ -67,7 +67,6 @@ import java.text.SimpleDateFormat
 import java.util.Calendar
 import java.util.Date
 import java.util.Locale
-import java.util.UUID
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -150,9 +149,7 @@ data class Kunde(
     val adresse: String = "",
     val ort: String = "",
     val telefon: String = "",
-    val email: String = "",
-    // Eindeutige Kunden-ID. Dadurch bleibt die Historie eines gelöschten Kunden von einem später neu angelegten Kunden getrennt.
-    val id: String = UUID.randomUUID().toString()
+    val email: String = ""
 )
 
 data class Auftrag(
@@ -210,9 +207,7 @@ data class Auftrag(
     val zuschlagBezeichnung: String = "",
     val zuschlagBetrag: Double = 0.0,
     // Endbetrag der tatsächlich erzeugten Rechnung, inklusive USt falls Regelbesteuerung.
-    val rechnungsbetragGespeichert: Double = 0.0,
-    // Eindeutige Zuordnung zur Kundenakte.
-    val kundenId: String = ""
+    val rechnungsbetragGespeichert: Double = 0.0
 )
 
 private const val PREFS_NAME = "kuemmero_speicher"
@@ -329,16 +324,14 @@ data class Kostenvoranschlag(
     val fahrtKostenProKm: Double = 0.40,
     // Zum Zeitpunkt des Kostenvoranschlags festgehaltener Zuschlag.
     val zuschlagBezeichnung: String = "",
-    val zuschlagBetrag: Double = 0.0,
-    // Eindeutige Zuordnung zur Kundenakte.
-    val kundenId: String = ""
+    val zuschlagBetrag: Double = 0.0
 )
 
 private fun ladeKostenvoranschlaege(context: Context): List<Kostenvoranschlag> {
     val raw = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
         .getString(KOSTENVORANSCHLAEGE_KEY, "[]") ?: "[]"
     val json = try { JSONArray(raw) } catch (_: Exception) { JSONArray() }
-    val geladen = List(json.length()) { i ->
+    return List(json.length()) { i ->
         val o = json.optJSONObject(i) ?: JSONObject()
         Kostenvoranschlag(
             o.optString("nummer"), o.optString("datum"), o.optString("gueltigBis"),
@@ -350,25 +343,9 @@ private fun ladeKostenvoranschlaege(context: Context): List<Kostenvoranschlag> {
             fahrtKm = o.optDouble("fahrtKm", 0.0),
             fahrtKostenProKm = o.optDouble("fahrtKostenProKm", context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE).getString(FAHRTKOSTEN_PRO_KM_KEY, "0.40")?.replace(",", ".")?.toDoubleOrNull() ?: 0.40),
             zuschlagBezeichnung = o.optString("zuschlagBezeichnung", ""),
-            zuschlagBetrag = o.optDouble("zuschlagBetrag", 0.0),
-            kundenId = o.optString("kundenId", "")
+            zuschlagBetrag = o.optDouble("zuschlagBetrag", 0.0)
         )
     }
-    val kunden = ladeKunden(context)
-    val migriert = geladen.map { kv ->
-        if (kv.kundenId.isNotBlank()) kv else {
-            val k = kunden.firstOrNull {
-                it.name.equals(kv.kunde, ignoreCase = true) &&
-                it.adresse.equals(kv.kundenStrasse, ignoreCase = true) &&
-                it.ort.equals(kv.kundenOrt, ignoreCase = true)
-            }
-            if (k != null) kv.copy(kundenId = k.id) else kv
-        }
-    }
-    if (migriert.indices.any { index -> migriert[index].kundenId != geladen[index].kundenId }) {
-        speichereKostenvoranschlaege(context, migriert)
-    }
-    return migriert
 }
 
 private fun speichereKostenvoranschlaege(context: Context, liste: List<Kostenvoranschlag>) {
@@ -383,7 +360,6 @@ private fun speichereKostenvoranschlaege(context: Context, liste: List<Kostenvor
             put("erstellungskosten", k.erstellungskosten)
             put("zuschlagBezeichnung", k.zuschlagBezeichnung)
             put("zuschlagBetrag", k.zuschlagBetrag)
-            put("kundenId", k.kundenId)
         })
     }
     context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
@@ -455,7 +431,7 @@ private fun ladeAuftraege(context: Context): List<Auftrag> {
     val raw = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
         .getString(AUFTRAEGE_KEY, "[]") ?: "[]"
     val json = try { JSONArray(raw) } catch (_: Exception) { JSONArray() }
-    val geladen = List(json.length()) { i ->
+    return List(json.length()) { i ->
         val o = json.optJSONObject(i) ?: JSONObject()
         Auftrag(
             o.optString("nummer"),
@@ -507,45 +483,25 @@ private fun ladeAuftraege(context: Context): List<Auftrag> {
             protokoll = o.optString("protokoll", ""),
             zuschlagBezeichnung = o.optString("zuschlagBezeichnung", ""),
             zuschlagBetrag = o.optDouble("zuschlagBetrag", 0.0),
-            rechnungsbetragGespeichert = o.optDouble("rechnungsbetragGespeichert", 0.0),
-            kundenId = o.optString("kundenId", "")
+            rechnungsbetragGespeichert = o.optDouble("rechnungsbetragGespeichert", 0.0)
         )
     }
-    val kunden = ladeKunden(context)
-    val migriert = geladen.map { a ->
-        if (a.kundenId.isNotBlank()) a else {
-            val k = kunden.firstOrNull {
-                it.name.equals(a.kunde, ignoreCase = true) &&
-                it.adresse.equals(a.kundenStrasse, ignoreCase = true) &&
-                it.ort.equals(a.kundenOrt, ignoreCase = true)
-            }
-            if (k != null) a.copy(kundenId = k.id) else a
-        }
-    }
-    if (migriert.indices.any { index -> migriert[index].kundenId != geladen[index].kundenId }) {
-        speichereAuftraege(context, migriert)
-    }
-    return migriert
 }
 
 private fun ladeKunden(context: Context): List<Kunde> {
     val raw = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
         .getString(KUNDEN_KEY, "[]") ?: "[]"
     val json = try { JSONArray(raw) } catch (_: Exception) { JSONArray() }
-    val geladen = List(json.length()) { i ->
+    return List(json.length()) { i ->
         val o = json.optJSONObject(i) ?: JSONObject()
         Kunde(
             o.optString("name"),
             o.optString("adresse"),
             o.optString("ort"),
             o.optString("telefon"),
-            o.optString("email"),
-            o.optString("id").ifBlank { UUID.randomUUID().toString() }
+            o.optString("email")
         )
     }.filter { it.name.isNotBlank() }
-    val hatteFehlendeIds = geladen.isNotEmpty() && !raw.contains("\"id\"")
-    if (hatteFehlendeIds) speichereKunden(context, geladen)
-    return geladen
 }
 
 private fun speichereKunden(context: Context, liste: List<Kunde>) {
@@ -557,7 +513,6 @@ private fun speichereKunden(context: Context, liste: List<Kunde>) {
             put("ort", k.ort)
             put("telefon", k.telefon)
             put("email", k.email)
-            put("id", k.id)
         })
     }
     context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
@@ -567,14 +522,8 @@ private fun speichereKunden(context: Context, liste: List<Kunde>) {
 private fun speichereOderAktualisiereKunde(context: Context, kunde: Kunde) {
     if (kunde.name.isBlank()) return
     val liste = ladeKunden(context).toMutableList()
-    // Kunden dürfen denselben Namen haben (z. B. Familienmitglieder).
-    // Entscheidend für die Zuordnung ist die Kombination aus Name + Straße + Ort.
-    val index = liste.indexOfFirst {
-        it.name.equals(kunde.name, ignoreCase = true) &&
-        it.adresse.equals(kunde.adresse, ignoreCase = true) &&
-        it.ort.equals(kunde.ort, ignoreCase = true)
-    }
-    if (index >= 0) liste[index] = kunde.copy(id = liste[index].id) else liste.add(kunde)
+    val index = liste.indexOfFirst { it.name.equals(kunde.name, ignoreCase = true) }
+    if (index >= 0) liste[index] = kunde else liste.add(kunde)
     speichereKunden(context, liste)
 }
 
@@ -633,7 +582,6 @@ private fun speichereAuftraege(context: Context, liste: List<Auftrag>) {
             put("leistungsdatum", a.leistungsdatum)
             put("zuschlagBezeichnung", a.zuschlagBezeichnung)
             put("zuschlagBetrag", a.zuschlagBetrag)
-            put("kundenId", a.kundenId)
         })
     }
     context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
@@ -654,7 +602,7 @@ private fun auftragAlsJson(a: Auftrag): JSONObject = JSONObject().apply {
     put("faelligAm", a.faelligAm); put("mahnung1Datum", a.mahnung1Datum); put("mahnung1Frist", a.mahnung1Frist); put("mahnung1Gebuehr", a.mahnung1Gebuehr); put("mahnung1Text", a.mahnung1Text); put("mahnung1Erstellt", a.mahnung1Erstellt)
     put("mahnung2Datum", a.mahnung2Datum); put("mahnung2Frist", a.mahnung2Frist); put("mahnung2Gebuehr", a.mahnung2Gebuehr); put("mahnung2Text", a.mahnung2Text); put("mahnung2Erstellt", a.mahnung2Erstellt)
     put("arbeitsStart", a.arbeitsStart); put("arbeitsEnde", a.arbeitsEnde); put("arbeitsSekunden", a.arbeitsSekunden); put("arbeitszeitUebernommen", a.arbeitszeitUebernommen)
-    put("erstellungskosten", a.erstellungskosten); put("leistungsdatum", a.leistungsdatum); put("zuschlagBezeichnung", a.zuschlagBezeichnung); put("zuschlagBetrag", a.zuschlagBetrag); put("kundenId", a.kundenId)
+    put("erstellungskosten", a.erstellungskosten); put("leistungsdatum", a.leistungsdatum); put("zuschlagBezeichnung", a.zuschlagBezeichnung); put("zuschlagBetrag", a.zuschlagBetrag)
 }
 
 private fun ladePapierkorb(context: Context): List<String> {
@@ -1806,20 +1754,6 @@ data class Leistungsposition(
 
 private const val LEISTUNGSPOSITIONEN_KEY = "leistungspositionen"
 
-// Diese Positionen haben keinen voreingestellten Preis. Beim Auswählen wird
-// deshalb trotzdem der Preisdialog geöffnet, damit der Betrag je Vorgang
-// festgelegt werden kann.
-private val KUEMMERO_PREIS_AUF_ANFRAGE = setOf(
-    "Büroarbeit",
-    "Rechnungserstellung / Abrechnung",
-    "Kostenvoranschlag erstellen",
-    "Angebot erstellen",
-    "Porto / Briefversand",
-    "Schriftverkehr / Kundenverwaltung",
-    "Mahnwesen / Zahlungserinnerung",
-    "Dokumentenablage / Dokumentation"
-)
-
 private val KUEMMERO_STANDARD_LEISTUNGEN = listOf(
     Leistungsposition(
         "Einfache Kleinreparaturen / Ausbesserungen",
@@ -1843,19 +1777,6 @@ private val KUEMMERO_STANDARD_LEISTUNGEN = listOf(
     Leistungsposition("Anfahrt"),
     Leistungsposition("Arbeitszeit", einheit = "Stunde", preis = 42.0),
     Leistungsposition("Material"),
-
-    // Büro-, Verwaltungs- und Abrechnungspositionen.
-    // Es werden bewusst keine Preise vorgegeben: Der konkrete Betrag kann je Vorgang
-    // im Preisdialog festgelegt werden.
-    Leistungsposition("Büroarbeit", einheit = "Vorgang"),
-    Leistungsposition("Rechnungserstellung / Abrechnung", einheit = "Vorgang"),
-    Leistungsposition("Kostenvoranschlag erstellen", einheit = "Vorgang"),
-    Leistungsposition("Angebot erstellen", einheit = "Vorgang"),
-    Leistungsposition("Porto / Briefversand", einheit = "Stück"),
-    Leistungsposition("Schriftverkehr / Kundenverwaltung", einheit = "Vorgang"),
-    Leistungsposition("Mahnwesen / Zahlungserinnerung", einheit = "Vorgang"),
-    Leistungsposition("Dokumentenablage / Dokumentation", einheit = "Vorgang"),
-
     Leistungsposition("Eigene Position", "Nur für Tätigkeiten verwenden, die im eigenen Gewerbe tatsächlich zulässig sind.")
 )
 
@@ -1902,15 +1823,6 @@ private fun ladeLeistungspositionen(context: Context): List<Leistungsposition> {
                         beschreibung = position.beschreibung.ifBlank { "Nur für Tätigkeiten verwenden, die im eigenen Gewerbe tatsächlich zulässig sind." }
                     )
                     else -> position
-                }
-            }
-            .let { vorhandene ->
-                // Neue Standardpositionen werden auch bei bereits vorhandenen
-                // Leistungseinstellungen einmalig ergänzt. Eigene Preise/Änderungen
-                // vorhandener Positionen bleiben erhalten.
-                val namen = vorhandene.map { it.name.trim().lowercase(Locale.GERMANY) }.toSet()
-                vorhandene + KUEMMERO_STANDARD_LEISTUNGEN.filter {
-                    it.name.trim().lowercase(Locale.GERMANY) !in namen
                 }
             }
             .also { speichereLeistungspositionen(context, it) }
@@ -2058,14 +1970,8 @@ fun KuemmeroApp() {
     var statusFilter by remember { mutableStateOf("Alle") }
     var zahlungsFilterOffen by remember { mutableStateOf(false) }
     var kundenAkteName by remember { mutableStateOf<String?>(null) }
-    var kundenAkteAdresse by remember { mutableStateOf<String?>(null) }
-    var kundenAkteOrt by remember { mutableStateOf<String?>(null) }
     var kundeBearbeiteName by remember { mutableStateOf<String?>(null) }
-    var kundeBearbeiteAdresse by remember { mutableStateOf<String?>(null) }
-    var kundeBearbeiteOrt by remember { mutableStateOf<String?>(null) }
     var kundeLoeschName by remember { mutableStateOf<String?>(null) }
-    var kundeLoeschAdresse by remember { mutableStateOf<String?>(null) }
-    var kundeLoeschOrt by remember { mutableStateOf<String?>(null) }
     var kalenderOffen by remember { mutableStateOf(false) }
     var terminBereichOffen by remember { mutableStateOf(false) }
     var notizBereichOffen by remember { mutableStateOf(false) }
@@ -3676,8 +3582,6 @@ fun KuemmeroApp() {
                                         .clickable {
                                             kundenDialog = false
                                             kundenAkteName = k.name
-                                            kundenAkteAdresse = k.adresse
-                                            kundenAkteOrt = k.ort
                                             kunde = k.name
                                             strasse = k.adresse
                                             ort = k.ort
@@ -3775,61 +3679,38 @@ fun KuemmeroApp() {
                     if (fehlendeKundendaten.isNotBlank()) {
                         android.widget.Toast.makeText(context, fehlendeKundendaten, 0).show()
                     } else {
-                        val alterName = kundeBearbeiteName
-                        val alterAdresse = kundeBearbeiteAdresse.orEmpty()
-                        val alterOrt = kundeBearbeiteOrt.orEmpty()
-                        val kundenListeNeu = kunden.toMutableList()
-                        val alterIndex = if (alterName != null) kundenListeNeu.indexOfFirst {
-                            it.name.equals(alterName, ignoreCase = true) &&
-                            it.adresse.equals(alterAdresse, ignoreCase = true) &&
-                            it.ort.equals(alterOrt, ignoreCase = true)
-                        } else -1
                         val k = Kunde(
                             neuerKundenName.trim(),
                             neuerKundenAdresse.trim(),
                             neuerKundenOrt.trim(),
                             neuerKundenTelefon.trim(),
-                            neuerKundenEmail.trim(),
-                            id = kundenListeNeu.getOrNull(alterIndex)?.id ?: UUID.randomUUID().toString()
+                            neuerKundenEmail.trim()
                         )
+                        val alterName = kundeBearbeiteName
+                        val kundenListeNeu = kunden.toMutableList()
                         if (alterName != null) {
-                            val index = alterIndex
-                            val neuerKundeDoppelt = kundenListeNeu.withIndex().any {
-                                it.index != index &&
-                                it.value.name.equals(k.name, ignoreCase = true) &&
-                                it.value.adresse.equals(k.adresse, ignoreCase = true) &&
-                                it.value.ort.equals(k.ort, ignoreCase = true)
-                            }
-                            if (neuerKundeDoppelt) {
-                                android.widget.Toast.makeText(context, "Dieser Kunde mit gleicher Adresse ist bereits vorhanden.", 0).show()
+                            val index = kundenListeNeu.indexOfFirst { it.name.equals(alterName, ignoreCase = true) }
+                            val neuerNameDoppelt = kundenListeNeu.withIndex().any { it.index != index && it.value.name.equals(k.name, ignoreCase = true) }
+                            if (neuerNameDoppelt) {
+                                android.widget.Toast.makeText(context, "Dieser Kundenname ist bereits vorhanden.", 0).show()
                                 return@Button
                             }
                             if (index >= 0) {
                                 kundenListeNeu[index] = k
                                 // Bestehende Aufträge und Kostenvoranschläge auf die geänderten Kundendaten umstellen.
                                 auftraege = auftraege.map { a ->
-                                    if (a.kunde.equals(alterName, ignoreCase = true) &&
-                                        a.kundenStrasse.equals(alterAdresse, ignoreCase = true) &&
-                                        a.kundenOrt.equals(alterOrt, ignoreCase = true)
-                                    ) a.copy(kunde = k.name, kundenStrasse = k.adresse, kundenOrt = k.ort, kundenId = k.id) else a
+                                    if (a.kunde.equals(alterName, ignoreCase = true)) a.copy(kunde = k.name, kundenStrasse = k.adresse, kundenOrt = k.ort) else a
                                 }
                                 kostenvoranschlaege = kostenvoranschlaege.map { kv ->
-                                    if (kv.kunde.equals(alterName, ignoreCase = true) &&
-                                        kv.kundenStrasse.equals(alterAdresse, ignoreCase = true) &&
-                                        kv.kundenOrt.equals(alterOrt, ignoreCase = true)
-                                    ) kv.copy(kunde = k.name, kundenStrasse = k.adresse, kundenOrt = k.ort, kundenId = k.id) else kv
+                                    if (kv.kunde.equals(alterName, ignoreCase = true)) kv.copy(kunde = k.name, kundenStrasse = k.adresse, kundenOrt = k.ort) else kv
                                 }
                                 speichereAuftraege(context, auftraege)
                                 speichereKostenvoranschlaege(context, kostenvoranschlaege)
                             }
                         } else {
-                            val kundeVorhanden = kundenListeNeu.any {
-                                it.name.equals(k.name, ignoreCase = true) &&
-                                it.adresse.equals(k.adresse, ignoreCase = true) &&
-                                it.ort.equals(k.ort, ignoreCase = true)
-                            }
-                            if (kundeVorhanden) {
-                                android.widget.Toast.makeText(context, "Dieser Kunde mit gleicher Adresse ist bereits vorhanden.", 0).show()
+                            val nameVorhanden = kundenListeNeu.any { it.name.equals(k.name, ignoreCase = true) }
+                            if (nameVorhanden) {
+                                android.widget.Toast.makeText(context, "Dieser Kundenname ist bereits vorhanden.", 0).show()
                                 return@Button
                             }
                             kundenListeNeu.add(k)
@@ -3840,12 +3721,8 @@ fun KuemmeroApp() {
                         strasse = k.adresse
                         ort = k.ort
                         kundeBearbeiteName = null
-                        kundeBearbeiteAdresse = null
-                        kundeBearbeiteOrt = null
                         neuerKundeDialog = false
                         kundenAkteName = k.name
-                        kundenAkteAdresse = k.adresse
-                        kundenAkteOrt = k.ort
                         android.widget.Toast.makeText(context, if (alterName != null) "Kunde geändert." else "Kunde gespeichert.", 0).show()
                     }
                 }, colors = ButtonDefaults.buttonColors(containerColor = KuemmeroGreen)) { Text("Speichern", color = Color.White, fontWeight = FontWeight.Bold) }
@@ -3976,26 +3853,10 @@ fun KuemmeroApp() {
     }
 
     kundenAkteName?.let { name ->
-        val akteAdresse = kundenAkteAdresse.orEmpty().trim()
-        val akteOrt = kundenAkteOrt.orEmpty().trim()
-        val kundeAkte = kunden.firstOrNull {
-            it.name.equals(name, ignoreCase = true) &&
-            (akteAdresse.isBlank() || it.adresse.equals(akteAdresse, ignoreCase = true)) &&
-            (akteOrt.isBlank() || it.ort.equals(akteOrt, ignoreCase = true))
-        }
-        // Wichtig: Ein Name allein identifiziert keinen Kunden eindeutig.
-        // Alte Aufträge werden zusätzlich über die damals gespeicherte Straße und den Ort zugeordnet.
-        val kundenAuftraege = auftraege.filter { a ->
-            if (!kundeAkte?.id.isNullOrBlank()) {
-                a.kundenId == kundeAkte?.id
-            } else {
-                a.kunde.equals(name, ignoreCase = true) &&
-                (akteAdresse.isBlank() || a.kundenStrasse.equals(akteAdresse, ignoreCase = true)) &&
-                (akteOrt.isBlank() || a.kundenOrt.equals(akteOrt, ignoreCase = true))
-            }
-        }
+        val kundeAkte = kunden.firstOrNull { it.name.equals(name, ignoreCase = true) }
+        val kundenAuftraege = auftraege.filter { it.kunde.equals(name, ignoreCase = true) }
         AlertDialog(
-            onDismissRequest = { kundenAkteName = null; kundenAkteAdresse = null; kundenAkteOrt = null },
+            onDismissRequest = { kundenAkteName = null },
             containerColor = Color.White,
             title = { Text("Kundenakte") },
             text = {
@@ -4013,8 +3874,6 @@ fun KuemmeroApp() {
                             onClick = {
                                 kundeAkte?.let { k ->
                                     kundeBearbeiteName = k.name
-                                    kundeBearbeiteAdresse = k.adresse
-                                    kundeBearbeiteOrt = k.ort
                                     neuerKundenName = k.name
                                     neuerKundenAdresse = k.adresse
                                     neuerKundenOrt = k.ort
@@ -4028,7 +3887,7 @@ fun KuemmeroApp() {
                             colors = ButtonDefaults.outlinedButtonColors(contentColor = KuemmeroGreen)
                         ) { Text("✏️ Ändern") }
                         OutlinedButton(
-                            onClick = { kundeAkte?.let { kundeLoeschName = it.name; kundeLoeschAdresse = it.adresse; kundeLoeschOrt = it.ort } },
+                            onClick = { kundeAkte?.let { kundeLoeschName = it.name } },
                             modifier = Modifier.weight(1f),
                             colors = ButtonDefaults.outlinedButtonColors(contentColor = KuemmeroError)
                         ) { Text("🗑 Löschen") }
@@ -4038,15 +3897,7 @@ fun KuemmeroApp() {
                     Text("Umsatz: ${euro(kundenAuftraege.sumOf { runde2(gesamtbetrag(it.stunden, it.material, it.fahrt, it.stundensatz, it.erstellungskosten) + it.zuschlagBetrag) })}")
                     val offen = kundenAuftraege.filter { it.zahlungsstatus != "Bezahlt" }
                     Text("Offene Zahlungen: ${euro(offen.sumOf { runde2(gesamtbetrag(it.stunden, it.material, it.fahrt, it.stundensatz, it.erstellungskosten) + it.zuschlagBetrag) })}", color = if (offen.isEmpty()) KuemmeroGreen else KuemmeroError, fontWeight = FontWeight.Bold)
-                    val kundenKVs = kostenvoranschlaege.filter { kv ->
-                        if (!kundeAkte?.id.isNullOrBlank()) {
-                            kv.kundenId == kundeAkte?.id
-                        } else {
-                            kv.kunde.equals(name, ignoreCase = true) &&
-                            (akteAdresse.isBlank() || kv.kundenStrasse.equals(akteAdresse, ignoreCase = true)) &&
-                            (akteOrt.isBlank() || kv.kundenOrt.equals(akteOrt, ignoreCase = true))
-                        }
-                    }
+                    val kundenKVs = kostenvoranschlaege.filter { it.kunde.equals(name, ignoreCase = true) }
                     Text("Kostenvoranschläge: ${kundenKVs.size}", fontWeight = FontWeight.Bold)
                     val rechnungen = kundenAuftraege.filter { it.rechnungsnummer.isNotBlank() }
                     val mahnungen = rechnungen.filter { it.mahnung1Erstellt || it.mahnung2Erstellt }
@@ -4076,7 +3927,7 @@ fun KuemmeroApp() {
             },
             confirmButton = {
                 TextButton(
-                    onClick = { kundenAkteName = null; kundenAkteAdresse = null; kundenAkteOrt = null },
+                    onClick = { kundenAkteName = null },
                     colors = ButtonDefaults.textButtonColors(contentColor = KuemmeroGreen)
                 ) { Text("Schließen") }
             }
@@ -4085,13 +3936,7 @@ fun KuemmeroApp() {
 
     if (kundeLoeschName != null) {
         val loeschName = kundeLoeschName!!
-        val loeschAdresse = kundeLoeschAdresse.orEmpty()
-        val loeschOrt = kundeLoeschOrt.orEmpty()
-        val anzahlAuftraege = auftraege.count {
-            it.kunde.equals(loeschName, ignoreCase = true) &&
-            (loeschAdresse.isBlank() || it.kundenStrasse.equals(loeschAdresse, ignoreCase = true)) &&
-            (loeschOrt.isBlank() || it.kundenOrt.equals(loeschOrt, ignoreCase = true))
-        }
+        val anzahlAuftraege = auftraege.count { it.kunde.equals(loeschName, ignoreCase = true) }
         AlertDialog(
             onDismissRequest = { kundeLoeschName = null },
             containerColor = Color.White,
@@ -4108,35 +3953,7 @@ fun KuemmeroApp() {
             confirmButton = {
                 TextButton(
                     onClick = {
-                        val zuLoeschenderKunde = kunden.firstOrNull {
-                            it.name.equals(loeschName, ignoreCase = true) &&
-                            (loeschAdresse.isBlank() || it.adresse.equals(loeschAdresse, ignoreCase = true)) &&
-                            (loeschOrt.isBlank() || it.ort.equals(loeschOrt, ignoreCase = true))
-                        }
-                        val alteKundenId = zuLoeschenderKunde?.id.orEmpty()
-                        if (alteKundenId.isNotBlank()) {
-                            auftraege = auftraege.map { a ->
-                                if (a.kundenId.isBlank() &&
-                                    a.kunde.equals(loeschName, ignoreCase = true) &&
-                                    a.kundenStrasse.equals(loeschAdresse, ignoreCase = true) &&
-                                    a.kundenOrt.equals(loeschOrt, ignoreCase = true)
-                                ) a.copy(kundenId = alteKundenId) else a
-                            }
-                            kostenvoranschlaege = kostenvoranschlaege.map { kv ->
-                                if (kv.kundenId.isBlank() &&
-                                    kv.kunde.equals(loeschName, ignoreCase = true) &&
-                                    kv.kundenStrasse.equals(loeschAdresse, ignoreCase = true) &&
-                                    kv.kundenOrt.equals(loeschOrt, ignoreCase = true)
-                                ) kv.copy(kundenId = alteKundenId) else kv
-                            }
-                            speichereAuftraege(context, auftraege)
-                            speichereKostenvoranschlaege(context, kostenvoranschlaege)
-                        }
-                        val neueKunden = kunden.filterNot {
-                            it.name.equals(loeschName, ignoreCase = true) &&
-                            (loeschAdresse.isBlank() || it.adresse.equals(loeschAdresse, ignoreCase = true)) &&
-                            (loeschOrt.isBlank() || it.ort.equals(loeschOrt, ignoreCase = true))
-                        }
+                        val neueKunden = kunden.filterNot { it.name.equals(loeschName, ignoreCase = true) }
                         speichereKunden(context, neueKunden)
                         kunden = neueKunden
                         if (kunde.equals(loeschName, ignoreCase = true)) {
@@ -4145,11 +3962,7 @@ fun KuemmeroApp() {
                             ort = ""
                         }
                         kundeLoeschName = null
-                        kundeLoeschAdresse = null
-                        kundeLoeschOrt = null
                         kundenAkteName = null
-                        kundenAkteAdresse = null
-                        kundenAkteOrt = null
                         android.widget.Toast.makeText(context, "Kunde gelöscht. Aufträge bleiben erhalten.", 0).show()
                     },
                     colors = ButtonDefaults.textButtonColors(contentColor = KuemmeroError)
@@ -4884,12 +4697,9 @@ fun KuemmeroApp() {
                         }
                         OutlinedButton(
                             onClick = {
-                                kundeBearbeiteName = null
-                                kundeBearbeiteAdresse = null
-                                kundeBearbeiteOrt = null
-                                neuerKundenName = ""
-                                neuerKundenAdresse = ""
-                                neuerKundenOrt = ""
+                                neuerKundenName = kunde
+                                neuerKundenAdresse = strasse
+                                neuerKundenOrt = ort
                                 neuerKundenTelefon = ""
                                 neuerKundenEmail = ""
                                 neuerKundeDialog = true
@@ -5202,13 +5012,6 @@ fun KuemmeroApp() {
                                     Kunde(kunde.trim(), strasse.trim(), ort.trim())
                                 )
                                 kunden = ladeKunden(context)
-                                val kundeObjekt = kunden.firstOrNull {
-                                    it.name.equals(kunde.trim(), ignoreCase = true) &&
-                                    it.adresse.equals(strasse.trim(), ignoreCase = true) &&
-                                    it.ort.equals(ort.trim(), ignoreCase = true)
-                                }
-                                val kundenIdFuerAuftrag = bearbeiteIndex?.let { auftraege.getOrNull(it)?.kundenId }?.takeIf { it.isNotBlank() }
-                                    ?: kundeObjekt?.id.orEmpty()
                                 val sichereAuftragsnummer = nummer.trim().ifBlank {
                                     kuemmeroNaechsteDokumentNummer(
                                         "AUF",
@@ -5244,7 +5047,6 @@ fun KuemmeroApp() {
                                     fahrtKostenProKm = fahrtSatz,
                                     protokoll = protokoll.trim(),
                                     rechnungsbetragGespeichert = bearbeiteIndex?.let { auftraege.getOrNull(it)?.rechnungsbetragGespeichert } ?: 0.0,
-                                    kundenId = kundenIdFuerAuftrag,
                                     zuschlagBezeichnung = bearbeiteIndex?.let { old -> val alt = auftraege.getOrNull(old); if (alt != null && alt.leistungsdatum == leistungsdatum.trim().ifBlank { datum.trim() }) alt.zuschlagBezeichnung else leistungsZuschlag(context, leistungsdatum.trim().ifBlank { terminDatum.trim().ifBlank { datum.trim() } }).first } ?: leistungsZuschlag(context, leistungsdatum.trim().ifBlank { terminDatum.trim().ifBlank { datum.trim() } }).first,
                                     zuschlagBetrag = bearbeiteIndex?.let { old -> val alt = auftraege.getOrNull(old); if (alt != null && alt.leistungsdatum == leistungsdatum.trim().ifBlank { datum.trim() }) alt.zuschlagBetrag else leistungsZuschlag(context, leistungsdatum.trim().ifBlank { terminDatum.trim().ifBlank { datum.trim() } }).second } ?: leistungsZuschlag(context, leistungsdatum.trim().ifBlank { terminDatum.trim().ifBlank { datum.trim() } }).second
                                 )
@@ -6061,7 +5863,6 @@ fun KuemmeroApp() {
             BuchhaltungScreen(
                 context = context,
                 auftraege = auftraege,
-                contentPadding = padding,
                 onBack = { hauptseite = "Mehr" },
                 onRechnungClick = { rechnung ->
                     val index = auftraege.indexOfFirst { it.nummer == rechnung.nummer }
@@ -6229,17 +6030,7 @@ fun KuemmeroApp() {
                                     colors = ButtonDefaults.buttonColors(containerColor = KuemmeroGreen)
                                 ) { Text("➕ Neuer Auftrag", fontWeight = FontWeight.Bold) }
                                 Button(
-                                    onClick = {
-                                        kundeBearbeiteName = null
-                                        kundeBearbeiteAdresse = null
-                                        kundeBearbeiteOrt = null
-                                        neuerKundenName = ""
-                                        neuerKundenAdresse = ""
-                                        neuerKundenOrt = ""
-                                        neuerKundenTelefon = ""
-                                        neuerKundenEmail = ""
-                                        neuerKundeDialog = true
-                                    },
+                                    onClick = { neuerKundeDialog = true },
                                     modifier = Modifier.weight(1f).heightIn(min = 56.dp),
                                     shape = RoundedCornerShape(18.dp),
                                     colors = ButtonDefaults.buttonColors(containerColor = KuemmeroGreen)
@@ -6341,22 +6132,7 @@ fun KuemmeroApp() {
                     "Kunden" -> {
                         item { Text("Kunden", style = MaterialTheme.typography.headlineSmall, color = KuemmeroGreen, fontWeight = FontWeight.Bold) }
                         item {
-                            Button(
-                                onClick = {
-                                    kundeBearbeiteName = null
-                                    kundeBearbeiteAdresse = null
-                                    kundeBearbeiteOrt = null
-                                    neuerKundenName = ""
-                                    neuerKundenAdresse = ""
-                                    neuerKundenOrt = ""
-                                    neuerKundenTelefon = ""
-                                    neuerKundenEmail = ""
-                                    neuerKundeDialog = true
-                                },
-                                modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp),
-                                shape = RoundedCornerShape(26.dp),
-                                colors = ButtonDefaults.buttonColors(containerColor = KuemmeroGreen)
-                            ) {
+                            Button(onClick = { neuerKundeDialog = true }, modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp), shape = RoundedCornerShape(26.dp), colors = ButtonDefaults.buttonColors(containerColor = KuemmeroGreen)) {
                                 Text("+ Neuer Kunde", fontWeight = FontWeight.Bold)
                             }
                         }
@@ -6380,13 +6156,13 @@ fun KuemmeroApp() {
                             item { Text(if (kunden.isEmpty()) "Noch keine Kunden gespeichert." else "Kein Kunde gefunden.", color = KuemmeroText) }
                         } else {
                             itemsIndexed(kundenGefiltert) { _, k ->
-                                Card(Modifier.fillMaxWidth().clickable { kundenAkteName = k.name; kundenAkteAdresse = k.adresse; kundenAkteOrt = k.ort }, colors = CardDefaults.cardColors(containerColor = KuemmeroSurface), shape = RoundedCornerShape(18.dp), border = BorderStroke(1.5.dp, KuemmeroGreenLight)) {
+                                Card(Modifier.fillMaxWidth().clickable { kundenAkteName = k.name }, colors = CardDefaults.cardColors(containerColor = KuemmeroSurface), shape = RoundedCornerShape(18.dp), border = BorderStroke(1.5.dp, KuemmeroGreenLight)) {
                                     Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                                         Text(k.name, style = MaterialTheme.typography.titleMedium, color = KuemmeroGreen, fontWeight = FontWeight.Bold)
                                         if (k.adresse.isNotBlank() || k.ort.isNotBlank()) Text(listOf(k.adresse, k.ort).filter { it.isNotBlank() }.joinToString(", "), color = KuemmeroText)
                                         if (k.telefon.isNotBlank()) Text("☎ ${k.telefon}", color = KuemmeroText)
                                         if (k.email.isNotBlank()) Text("✉ ${k.email}", color = KuemmeroText)
-                                        Text("Aufträge: ${auftraege.count { it.kundenId == k.id || (it.kundenId.isBlank() && it.kunde.equals(k.name, ignoreCase = true) && it.kundenStrasse.equals(k.adresse, ignoreCase = true) && it.kundenOrt.equals(k.ort, ignoreCase = true)) }}", color = KuemmeroText)
+                                        Text("Aufträge: ${auftraege.count { it.kunde == k.name }}", color = KuemmeroText)
                                         Row(
                                             modifier = Modifier.fillMaxWidth(),
                                             horizontalArrangement = Arrangement.spacedBy(8.dp)
@@ -6394,8 +6170,6 @@ fun KuemmeroApp() {
                                             TextButton(
                                                 onClick = {
                                                     kundeBearbeiteName = k.name
-                                                    kundeBearbeiteAdresse = k.adresse
-                                                    kundeBearbeiteOrt = k.ort
                                                     neuerKundenName = k.name
                                                     neuerKundenAdresse = k.adresse
                                                     neuerKundenOrt = k.ort
@@ -6574,12 +6348,7 @@ fun KuemmeroApp() {
                                                         fahrtKm = k.fahrtKm,
                                                         fahrtKostenProKm = k.fahrtKostenProKm,
                                                         zuschlagBezeichnung = k.zuschlagBezeichnung,
-                                                        zuschlagBetrag = k.zuschlagBetrag,
-                                                        kundenId = kunden.firstOrNull {
-                                                            it.name.equals(k.kunde, ignoreCase = true) &&
-                                                            it.adresse.equals(k.kundenStrasse, ignoreCase = true) &&
-                                                            it.ort.equals(k.kundenOrt, ignoreCase = true)
-                                                        }?.id ?: k.kundenId
+                                                        zuschlagBetrag = k.zuschlagBetrag
                                                     )
                                                     auftraege = auftraege + a
                                                     speichereAuftraege(context, auftraege)
@@ -6765,9 +6534,7 @@ fun KuemmeroApp() {
                                                         fahrtKm = zahl(kvFahrtKm),
                                                         fahrtKostenProKm = fahrtSatz,
                                                         zuschlagBezeichnung = if (kvBearbeiteIndex != null) kvZuschlagBezeichnung else if (kvZuschlagBezeichnung.isNotBlank()) kvZuschlagBezeichnung else leistungsZuschlag(context, kvDatum).first,
-                                                        zuschlagBetrag = if (kvBearbeiteIndex != null) kvZuschlagBetrag else if (kvZuschlagBezeichnung.isNotBlank()) kvZuschlagBetrag else leistungsZuschlag(context, kvDatum).second,
-                                                        kundenId = kvBearbeiteIndex?.let { kostenvoranschlaege.getOrNull(it)?.kundenId }?.takeIf { it.isNotBlank() }
-                                                            ?: kunden.firstOrNull { it.name.equals(kvKunde.trim(), ignoreCase = true) && it.adresse.equals(kvStrasse.trim(), ignoreCase = true) && it.ort.equals(kvOrt.trim(), ignoreCase = true) }?.id.orEmpty()
+                                                        zuschlagBetrag = if (kvBearbeiteIndex != null) kvZuschlagBetrag else if (kvZuschlagBezeichnung.isNotBlank()) kvZuschlagBetrag else leistungsZuschlag(context, kvDatum).second
                                                     )
                                                     val list = kostenvoranschlaege.toMutableList()
                                                     if (kvBearbeiteIndex != null) list[kvBearbeiteIndex!!] = k else list.add(k)
@@ -6921,7 +6688,7 @@ fun KuemmeroApp() {
                                                 modifier = Modifier
                                                     .fillMaxWidth()
                                                     .clickable {
-                                                        if (a.kunde.isNotBlank()) { kundenAkteName = a.kunde; kundenAkteAdresse = a.kundenStrasse; kundenAkteOrt = a.kundenOrt }
+                                                        if (a.kunde.isNotBlank()) kundenAkteName = a.kunde
                                                     }
                                                     .padding(vertical = 4.dp)
                                             )
@@ -7579,7 +7346,7 @@ fun KuemmeroApp() {
                             val kvTreffer = kostenvoranschlaege.filter { listOf(it.nummer, it.kunde, it.leistung).any { v -> v.contains(q, true) } }
                             item { Text("Kunden (${kundenTreffer.size})", color = KuemmeroGreen, fontWeight = FontWeight.Bold) }
                             kundenTreffer.take(10).forEach { k ->
-                                item { Card(Modifier.fillMaxWidth().clickable { hauptseite = "Kunden"; kundenAkteName = k.name; kundenAkteAdresse = k.adresse; kundenAkteOrt = k.ort }, colors = CardDefaults.cardColors(containerColor = KuemmeroSurface), shape = RoundedCornerShape(16.dp)) { Column(Modifier.padding(14.dp)) { Text(k.name, fontWeight = FontWeight.Bold, color = KuemmeroText); Text("Kunde öffnen →", color = KuemmeroGreen) } } }
+                                item { Card(Modifier.fillMaxWidth().clickable { hauptseite = "Kunden"; kundenAkteName = k.name }, colors = CardDefaults.cardColors(containerColor = KuemmeroSurface), shape = RoundedCornerShape(16.dp)) { Column(Modifier.padding(14.dp)) { Text(k.name, fontWeight = FontWeight.Bold, color = KuemmeroText); Text("Kunde öffnen →", color = KuemmeroGreen) } } }
                             }
                             item { Text("Aufträge / Rechnungen (${auftragTreffer.size})", color = KuemmeroGreen, fontWeight = FontWeight.Bold) }
                             auftragTreffer.take(15).forEach { a ->
@@ -7750,7 +7517,7 @@ fun KuemmeroApp() {
                                     val neuerText = neueAuswahl.joinToString("\n")
                                     if (leistungsAuswahlZiel == "auftrag") leistung = neuerText
                                     if (leistungsAuswahlZiel == "kv") kvLeistung = neuerText
-                                } else if (leistungs.preis > 0.0 || leistungs.name in KUEMMERO_PREIS_AUF_ANFRAGE) {
+                                } else if (leistungs.preis > 0.0) {
                                     leistungsPreisName = leistungs.name
                                     leistungsPreisEinheit = leistungs.einheit
                                     leistungsPreisVorschlag = String.format(Locale.GERMANY, "%.2f", leistungs.preis)

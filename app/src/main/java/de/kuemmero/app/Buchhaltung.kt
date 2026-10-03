@@ -9,8 +9,6 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -256,7 +254,6 @@ fun BuchhaltungScreen(
     var offeneAuftraegeOffen by remember { mutableStateOf(false) }
     var belege by remember { mutableStateOf(ladeBelege(context)) }
     var belegeOffen by remember { mutableStateOf(false) }
-    var bueroAufschluesselungOffen by remember { mutableStateOf(false) }
     var belegEingabeOffen by remember { mutableStateOf(false) }
     var belegDatum by remember { mutableStateOf("") }
     var belegNummer by remember { mutableStateOf("") }
@@ -388,27 +385,6 @@ fun BuchhaltungScreen(
     val jaehrlicheAusgaben = buchungen
         .filter { it.typ == "Ausgabe" && buchungPasstZu(it.datum, jahr) }
         .sumOf { it.betrag }
-
-    // Büro-/Verwaltungsausgaben werden separat nachvollziehbar aufgeschlüsselt.
-    // Die Kategorien werden bewusst über den gespeicherten Text erkannt, damit auch
-    // ältere manuelle Buchungen weiterhin in der Auswertung erscheinen.
-    val bueroSchluesselwoerter = listOf(
-        "büro", "porto", "brief", "versand", "rechnungserstellung",
-        "abrechnung", "kostenvoranschlag", "angebot", "schriftverkehr",
-        "kundenverwaltung", "mahnwesen", "zahlungserinnerung",
-        "dokumentenablage", "dokumentation", "büromaterial"
-    )
-    fun istBueroKategorie(text: String): Boolean =
-        bueroSchluesselwoerter.any { text.contains(it, ignoreCase = true) }
-
-    val bueroAusgaben = buchungen.filter {
-        it.typ == "Ausgabe" && (istBueroKategorie(it.kategorie) || istBueroKategorie(it.partner))
-    }
-    val bueroBelege = belege.filter {
-        it.buchungTyp == "Ausgabe" && (istBueroKategorie(it.kategorie) || istBueroKategorie(it.beschreibung))
-    }
-    val bueroAusgabenSumme = bueroAusgaben.sumOf { it.betrag }
-    val bueroBelegeSumme = bueroBelege.sumOf { it.betrag }
 
     LazyColumn(
         modifier = Modifier
@@ -737,13 +713,9 @@ fun BuchhaltungScreen(
 
         item {
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                BuchActionTile("▥", "Büro & Verwaltung", "Einzelaufstellung", BuchRose) { bueroAufschluesselungOffen = true }
                 BuchActionTile("▤", "Belege", "Fotos & PDF", BuchOrange) { belegeOffen = true }
+                BuchActionTile("▥", "Auswertung", "Monat / Jahr", Color(0xFFF1EAFE)) { auswertungOffen = true }
             }
-        }
-
-        item {
-            BuchActionTile("▥", "Auswertung", "Monat / Jahr", Color(0xFFF1EAFE)) { auswertungOffen = true }
         }
 
         item {
@@ -827,79 +799,6 @@ fun BuchhaltungScreen(
                 }
             }
         }
-    }
-
-    if (bueroAufschluesselungOffen) {
-        AlertDialog(
-            onDismissRequest = { bueroAufschluesselungOffen = false },
-            title = {
-                Text("Büro & Verwaltung – Aufschlüsselung", fontWeight = FontWeight.Bold, color = BuchGreenDark)
-            },
-            text = {
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .heightIn(max = 520.dp)
-                        .verticalScroll(rememberScrollState()),
-                    verticalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    Text(
-                        "Für die Nachvollziehbarkeit werden die einzelnen Buchungen und Belege mit Datum, Beschreibung, Kategorie und Betrag angezeigt.",
-                        fontSize = 13.sp, color = Color(0xFF60716A)
-                    )
-                    Text("Buchungen: ${bueroAusgaben.size}", fontWeight = FontWeight.Bold)
-                    Text("Buchungen gesamt: ${euro(bueroAusgabenSumme)}", fontWeight = FontWeight.Bold)
-                    if (bueroBelege.isNotEmpty()) {
-                        Text("Gespeicherte Belege: ${bueroBelege.size}", fontWeight = FontWeight.Bold)
-                        Text("Belege gesamt: ${euro(bueroBelegeSumme)}", fontWeight = FontWeight.Bold)
-                    }
-                    HorizontalDivider()
-                    if (bueroAusgaben.isEmpty() && bueroBelege.isEmpty()) {
-                        Text("Noch keine Büro-/Verwaltungsausgaben erfasst.")
-                    } else {
-                        bueroAusgaben.asReversed().forEach { buchung ->
-                            Card(
-                                modifier = Modifier.fillMaxWidth(),
-                                colors = CardDefaults.cardColors(containerColor = BuchRose),
-                                shape = RoundedCornerShape(12.dp)
-                            ) {
-                                Column(Modifier.padding(10.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                                    Text(euro(buchung.betrag), fontWeight = FontWeight.Bold, color = BuchGreenDark)
-                                    Text("${buchung.datum} · ${buchung.kategorie}", fontWeight = FontWeight.SemiBold)
-                                    if (buchung.partner.isNotBlank()) Text("Partner: ${buchung.partner}", fontSize = 12.sp)
-                                    if (buchung.beleg.isNotBlank()) Text("Beleg: ${buchung.beleg}", fontSize = 12.sp)
-                                }
-                            }
-                        }
-                        bueroBelege.asReversed().forEach { beleg ->
-                            Card(
-                                modifier = Modifier.fillMaxWidth(),
-                                colors = CardDefaults.cardColors(containerColor = BuchOrange),
-                                shape = RoundedCornerShape(12.dp)
-                            ) {
-                                Column(Modifier.padding(10.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                                    Text("Beleg · ${euro(beleg.betrag)}", fontWeight = FontWeight.Bold, color = BuchGreenDark)
-                                    Text("${beleg.datum} · ${beleg.kategorie}", fontWeight = FontWeight.SemiBold)
-                                    if (beleg.beschreibung.isNotBlank()) Text(beleg.beschreibung, fontSize = 12.sp)
-                                    if (beleg.nummer.isNotBlank()) Text("Beleg-Nr.: ${beleg.nummer}", fontSize = 12.sp)
-                                    Text(if (beleg.dateiUri.isNotBlank()) "📎 Originalbeleg hinterlegt" else "⚠ Kein Dateibeleg hinterlegt", fontSize = 12.sp)
-                                }
-                            }
-                        }
-                    }
-                    HorizontalDivider()
-                    Text(
-                        "Hinweis: Eine Buchung und ihr zugehöriger Beleg können beide angezeigt werden. Sie sind nicht automatisch zu addieren; der Beleg dient als Nachweis zur Buchung.",
-                        fontSize = 12.sp, color = Color(0xFF60716A)
-                    )
-                }
-            },
-            confirmButton = {
-                TextButton(onClick = { bueroAufschluesselungOffen = false }) {
-                    Text("Schließen", color = BuchGreen, fontWeight = FontWeight.Bold)
-                }
-            }
-        )
     }
 
     if (rechnungenOffen) {
