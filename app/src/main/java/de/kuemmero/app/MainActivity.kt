@@ -2680,6 +2680,7 @@ fun KuemmeroApp() {
     }
 
     var sicherungBestaetigung by remember { mutableStateOf(false) }
+    var wiederherstellungBestaetigung by remember { mutableStateOf(false) }
     var dropboxBestaetigung by remember { mutableStateOf(false) }
     var abschlusspruefungIndex by remember { mutableStateOf<Int?>(null) }
     val backupScope = rememberCoroutineScope()
@@ -2832,6 +2833,15 @@ fun KuemmeroApp() {
                 val text = context.contentResolver.openInputStream(it)?.bufferedReader()?.use { r -> r.readText() }
                     ?: throw Exception("Datei konnte nicht gelesen werden")
                 val obj = JSONObject(text)
+                val istKuemmeroBackup =
+                    obj.has("backupVersion") ||
+                    obj.has("auftraege") ||
+                    obj.has("kunden") ||
+                    obj.has("kostenvoranschlaege") ||
+                    obj.has("leistungspositionen")
+                if (!istKuemmeroBackup) {
+                    throw IllegalArgumentException("Keine gültige KÜMMERO-Sicherung")
+                }
                 val einstellungenBackup = obj.optJSONObject("einstellungen")
                 if (einstellungenBackup != null) {
                     restoreBackupSettings(context, einstellungenBackup)
@@ -3088,6 +3098,28 @@ fun KuemmeroApp() {
         )
     }
 
+
+    if (wiederherstellungBestaetigung) {
+        AlertDialog(
+            onDismissRequest = { wiederherstellungBestaetigung = false },
+            containerColor = Color.White,
+            title = { Text("Daten wiederherstellen") },
+            text = {
+                Text(
+                    "Achtung: Die aktuellen Aufträge, Kunden, Kostenvoranschläge und Einstellungen werden durch die ausgewählte KÜMMERO-Sicherung ersetzt. Vorher wird automatisch eine Sicherheitskopie des aktuellen Datenstands erstellt."
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    wiederherstellungBestaetigung = false
+                    restoreBackup.launch(arrayOf("application/json", "text/plain", "application/octet-stream"))
+                }) { Text("Ja, wiederherstellen") }
+            },
+            dismissButton = {
+                TextButton(onClick = { wiederherstellungBestaetigung = false }) { Text("Abbrechen") }
+            }
+        )
+    }
 
     if (dropboxBestaetigung) {
         AlertDialog(
@@ -5491,8 +5523,7 @@ fun KuemmeroApp() {
                     ) {
                         OutlinedButton(onClick = { sicherungBestaetigung = true }, modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp), shape = RoundedCornerShape(28.dp), border = BorderStroke(2.dp, KuemmeroGreen), colors = ButtonDefaults.outlinedButtonColors(contentColor = KuemmeroGreen)) { Text("Sicherung speichern / aktualisieren", fontWeight = FontWeight.SemiBold) }
                         OutlinedButton(onClick = { dropboxBestaetigung = true }, modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp), shape = RoundedCornerShape(28.dp), border = BorderStroke(2.dp, KuemmeroGreen), colors = ButtonDefaults.outlinedButtonColors(contentColor = KuemmeroGreen)) { Text("☁️ Jetzt in Dropbox sichern", fontWeight = FontWeight.SemiBold) }
-                        Button(onClick = { restoreBackup.launch(arrayOf("application/json", "text/plain", "application/octet-stream")) }, modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp), shape = RoundedCornerShape(28.dp), colors = ButtonDefaults.buttonColors(containerColor = KuemmeroGreenLight)) { Text("Daten wiederherstellen", fontWeight = FontWeight.Bold) }
-                        OutlinedButton(onClick = { sicherungBestaetigung = true }, modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp), shape = RoundedCornerShape(26.dp), border = BorderStroke(2.dp, KuemmeroGreen), colors = ButtonDefaults.outlinedButtonColors(contentColor = KuemmeroGreen)) { Text("Sicherung jetzt aktualisieren", fontWeight = FontWeight.SemiBold) }
+                        Button(onClick = { wiederherstellungBestaetigung = true }, modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp), shape = RoundedCornerShape(28.dp), colors = ButtonDefaults.buttonColors(containerColor = KuemmeroGreenLight)) { Text("Daten wiederherstellen", fontWeight = FontWeight.Bold) }
                     }
                 }
 
@@ -7484,7 +7515,7 @@ fun KuemmeroApp() {
                                     )
                                     OutlinedButton(onClick = { sicherungBestaetigung = true }, modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp), shape = RoundedCornerShape(26.dp), border = BorderStroke(2.dp, KuemmeroGreen), colors = ButtonDefaults.outlinedButtonColors(contentColor = KuemmeroGreen)) { Text("Sicherung speichern / aktualisieren") }
                                     OutlinedButton(onClick = { dropboxBestaetigung = true }, modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp), shape = RoundedCornerShape(26.dp), border = BorderStroke(2.dp, KuemmeroGreen), colors = ButtonDefaults.outlinedButtonColors(contentColor = KuemmeroGreen)) { Text("☁️ Jetzt in Dropbox sichern") }
-                                    Button(onClick = { restoreBackup.launch(arrayOf("application/json", "text/plain", "application/octet-stream")) }, modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp), shape = RoundedCornerShape(26.dp), colors = ButtonDefaults.buttonColors(containerColor = KuemmeroGreenLight)) { Text("Daten wiederherstellen", fontWeight = FontWeight.Bold) }
+                                    Button(onClick = { wiederherstellungBestaetigung = true }, modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp), shape = RoundedCornerShape(26.dp), colors = ButtonDefaults.buttonColors(containerColor = KuemmeroGreenLight)) { Text("Daten wiederherstellen", fontWeight = FontWeight.Bold) }
                                 }
                             }
                         }
