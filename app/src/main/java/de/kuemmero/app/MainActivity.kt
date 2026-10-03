@@ -2821,24 +2821,6 @@ fun KuemmeroApp() {
     }
 
 
-    if (wiederherstellungBestaetigung) {
-        AlertDialog(
-            onDismissRequest = { wiederherstellungBestaetigung = false },
-            containerColor = Color.White,
-            title = { Text("Daten wiederherstellen?", color = KuemmeroGreen, fontWeight = FontWeight.Bold) },
-            text = { Text("Die aktuellen KÜMMERO-Daten werden durch den Stand der ausgewählten Sicherung ersetzt. Vorher wird automatisch eine Sicherheitskopie des aktuellen Datenstands erstellt.") },
-            confirmButton = {
-                TextButton(onClick = {
-                    wiederherstellungBestaetigung = false
-                    restoreBackup.launch(arrayOf("application/json", "text/plain", "application/octet-stream"))
-                }, colors = ButtonDefaults.textButtonColors(contentColor = KuemmeroGreen)) { Text("Ja, wiederherstellen") }
-            },
-            dismissButton = {
-                TextButton(onClick = { wiederherstellungBestaetigung = false }, colors = ButtonDefaults.textButtonColors(contentColor = KuemmeroGreen)) { Text("Abbrechen") }
-            }
-        )
-    }
-
     val restoreBackup = rememberLauncherForActivityResult(
         ActivityResultContracts.OpenDocument()
     ) { uri ->
@@ -2916,6 +2898,25 @@ fun KuemmeroApp() {
             }
         }
     }
+
+    if (wiederherstellungBestaetigung) {
+        AlertDialog(
+            onDismissRequest = { wiederherstellungBestaetigung = false },
+            containerColor = Color.White,
+            title = { Text("Daten wiederherstellen?", color = KuemmeroGreen, fontWeight = FontWeight.Bold) },
+            text = { Text("Die aktuellen KÜMMERO-Daten werden durch den Stand der ausgewählten Sicherung ersetzt. Vorher wird automatisch eine Sicherheitskopie des aktuellen Datenstands erstellt.") },
+            confirmButton = {
+                TextButton(onClick = {
+                    wiederherstellungBestaetigung = false
+                    restoreBackup.launch(arrayOf("application/json", "text/plain", "application/octet-stream"))
+                }, colors = ButtonDefaults.textButtonColors(contentColor = KuemmeroGreen)) { Text("Ja, wiederherstellen") }
+            },
+            dismissButton = {
+                TextButton(onClick = { wiederherstellungBestaetigung = false }, colors = ButtonDefaults.textButtonColors(contentColor = KuemmeroGreen)) { Text("Abbrechen") }
+            }
+        )
+    }
+
 
     val fotoLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.OpenMultipleDocuments()
